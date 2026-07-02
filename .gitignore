@@ -1,0 +1,75 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ===== Virtual environments =====
+venv/
+venv311/
+.env/
+.ENV/
+env/
+ENV/
+
+# ===== Node.js =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== 二进制 release 产物 =====
+*.exe
+*.zip
+*.tar.gz
+*.tgz
+
+# ===== PyInstaller 构建产物 =====
+# spec 文件保留（构建配置），中间目录与产物排除
+build/
+dist/
+
+# ===== 数据库与输出 =====
+*.db
+*.sqlite
+*.sqlite3
+output/
+
+# ===== Claude Code 本地配置 =====
+.claude/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ===== 日志与临时 =====
+*.log
+*.tmp
+*.bak
+
+# ===== 环境变量 / 本地凭据 =====
+.env
+.env.local
+*.pem
+*.key
+secrets.*
