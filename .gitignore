@@ -43,6 +43,8 @@ dist/
 *.db
 *.sqlite
 *.sqlite3
+*.duckdb
+*.duckdb.wal
 output/
 
 # ===== Claude Code 本地配置 =====
