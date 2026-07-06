@@ -1,0 +1,69 @@
+{
+  "page1": {
+    "total": 13,
+    "size": 10,
+    "current": 1,
+    "pages": 2,
+    "records_count": 10,
+    "first_username": "admin",
+    "fields_in_first_record": [
+      "additional",
+      "code",
+      "createTime",
+      "delFlag",
+      "description",
+      "email",
+      "gender",
+      "id",
+      "language",
+      "loginTime",
+      "nickName",
+      "phone",
+      "status",
+      "tenantId",
+      "type",
+      "updateTime",
+      "username"
+    ]
+  },
+  "page2": {
+    "total": 13,
+    "records_count": 3,
+    "usernames": [
+      "llm_filing_08",
+      "llm_filing_09",
+      "llm_filing_10"
+    ]
+  },
+  "igetall": {
+    "cached_count": 13,
+    "user_map_keys_count": 13,
+    "user_map_key_types": [
+      "int"
+    ],
+    "first_user_id": 1,
+    "first_user_username": "admin",
+    "usernames_all": [
+      "admin",
+      "tpt",
+      "16000000016",
+      "llm_filing_01",
+      "llm_filing_02",
+      "llm_filing_03",
+      "llm_filing_04",
+      "llm_filing_05",
+      "llm_filing_06",
+      "llm_filing_07",
+      "llm_filing_08",
+      "llm_filing_09",
+      "llm_filing_10"
+    ]
+  },
+  "kw_search_admin": {
+    "total": 1,
+    "records_count": 1,
+    "usernames": [
+      "admin"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "create_resp": {
+    "isSuccess": true,
+    "success": true,
+    "code": "00000",
+    "msg": "Request succeeded",
+    "has_content_key": false
+  },
+  "total_users_after": 16,
+  "verify_user_found": true,
+  "verify_user_fields": [
+    "code",
+    "createTime",
+    "delFlag",
+    "email",
+    "gender",
+    "icon",
+    "id",
+    "nickName",
+    "phone",
+    "status",
+    "tenantId",
+    "type",
+    "updateTime",
+    "username"
+  ],
+  "verify_user_values": {
+    "id": 474357,
+    "username": "__verify_i_create_user__",
+    "code": "__verify_i_create_user__",
+    "nickName": "__verify_i_create_user__",
+    "email": "verify_i_create_user@supcon.com",
+    "phone": "18888888881",
+    "gender": 1,
+    "status": 0,
+    "type": 2,
+    "tenantId": "A54Z32M2",
+    "delFlag": 0
+  },
+  "probe_user_found": true
+}

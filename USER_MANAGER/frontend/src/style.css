@@ -1,0 +1,182 @@
+/* Notion 风格浅色简约 Token */
+
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f7f7f5;
+  --bg-hover: #efefed;
+  --fg: #37352f;
+  --fg-soft: #787774;
+  --fg-faint: #9b9a97;
+  --border: #e8e8e6;
+  --border-strong: #d3d3d0;
+  --accent: #2383e2;
+  --accent-hover: #1f74c5;
+  --danger: #e03e3e;
+  --danger-soft: #fbe4e4;
+  --success: #0f7b0f;
+  --success-soft: #dbeddb;
+  --warn: #cb912f;
+  --warn-soft: #fbecd0;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(15, 15, 15, 0.06);
+  --shadow: 0 4px 16px rgba(15, 15, 15, 0.08);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+}
+
+button.primary {
+  background: var(--accent);
+  color: white;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-weight: 500;
+}
+button.primary:hover { background: var(--accent-hover); }
+button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.secondary {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+}
+button.secondary:hover { background: var(--bg-hover); }
+
+button.danger {
+  background: var(--danger);
+  color: white;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+}
+button.danger:hover { opacity: 0.9; }
+
+button.ghost {
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  color: var(--fg-soft);
+}
+button.ghost:hover { background: var(--bg-hover); color: var(--fg); }
+
+input, select, textarea {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.15);
+}
+
+label { font-size: 12px; color: var(--fg-soft); display: block; margin-bottom: 4px; }
+.field { margin-bottom: 12px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th, td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  background: var(--bg-soft);
+  font-weight: 600;
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+tbody tr:hover { background: var(--bg-hover); }
+
+.dialog-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15, 15, 15, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.dialog {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  min-width: 420px;
+  max-width: 80vw;
+  max-height: 85vh;
+  overflow: auto;
+}
+.dialog h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.toast-area {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: var(--bg);
+  border-left: 3px solid var(--accent);
+  max-width: 360px;
+}
+.toast.error { border-left-color: var(--danger); background: var(--danger-soft); }
+.toast.success { border-left-color: var(--success); background: var(--success-soft); }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: var(--bg-soft);
+  color: var(--fg-soft);
+}
+.tag.success { background: var(--success-soft); color: var(--success); }
+.tag.error { background: var(--danger-soft); color: var(--danger); }
+
+.error-text { color: var(--danger); font-size: 12px; }

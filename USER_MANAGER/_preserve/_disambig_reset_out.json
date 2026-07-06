@@ -1,0 +1,17 @@
+{
+  "results": {
+    "ResetPwd@2026": {
+      "ok": true,
+      "err": null
+    },
+    "Verify@2026": {
+      "ok": true,
+      "err": null
+    },
+    "NewPwd@2026": {
+      "ok": true,
+      "err": null
+    }
+  },
+  "reset_resp_code": "00000"
+}

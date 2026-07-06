@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Notion 风浅色设计 Token（HSL）。换强调色只改 --primary/--ring/--accent。 */
+@layer base {
+  :root {
+    --background: 40 14% 98%;
+    --foreground: 30 9% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 30 9% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 9% 20%;
+    --primary: 16 64% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 14% 94%;
+    --secondary-foreground: 30 9% 20%;
+    --muted: 40 12% 93%;
+    --muted-foreground: 30 5% 45%;
+    --accent: 16 64% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 4 64% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 12% 90%;
+    --input: 40 12% 90%;
+    --ring: 16 64% 60%;
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    margin: 0;
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* 自定义滚动条，与 Notion 风一致：细、浅 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(40 12% 85%);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(40 12% 78%);
+  }
+}

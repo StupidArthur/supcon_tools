@@ -1,0 +1,5 @@
+=== startup diagnostic ===
+config loaded ok, platform=http://10.30.144.41:32549
+logx.Init ok, logPath=D:\cc_demos\ray_api\logs\ray_monitor.log
+storage.Open ok
+collector created
