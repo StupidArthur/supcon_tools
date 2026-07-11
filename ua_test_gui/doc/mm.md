@@ -159,6 +159,17 @@
 - `SubjectPage.tsx`：自动登录（打开即登录，改信息防抖重试，首次才弹toast）
 - `MockPage.tsx`：refresh() 改 Promise.all 并行加载
 
+### Go 端接口模块（已同步到 tpt_api）
+
+`ua_test_gui/internal/subject/` 的最新 Go 代码已同步到 `tpt_api/go/`，加 `_full.go` 后缀以区别于原版：
+- `datahub_full.go` / `datahub_extra_full.go`：所有新增 datahub 接口（test_ds_info、query_tags_with_quality、batch_*、export/import、tag-group 全套等）
+- `model_full.go`：TptClient + 数据模型
+- `helpers_full.go`：multipart + 文件下载辅助
+- `service_full.go` / `state_full.go`：LoginSubject + 状态管理
+- 冲突点已处理：`truncate`/`writeFile` 在新文件中重命名为 `truncateStr`/`writeFileBytes`
+- 原 tptapi 的 `Client` + `NewClient` + `Login(ctx, ...)` API 保持不变
+- 验证：`go build ./...` + `go test ./...` + examples 全部通过
+
 ### ua_mocker 代码改动（未提交）
 - `server_main.py`：批量节点创建优化（分容器+AddNodesItem 批量，万级节点从 O(n²) 降级）
 - `main.spec`/`ua_mocker.spec`：console=False
