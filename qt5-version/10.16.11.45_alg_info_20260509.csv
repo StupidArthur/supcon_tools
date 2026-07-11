@@ -1,0 +1,189 @@
+﻿id,zhName,version,categoryOne,categoryTwo,categoryThree,categoryName,sourcePath,fileType,isRelease,isLoad,resourceType,cores,numReplicas,author,disabled,description,extend,createBy,updateBy,createUser,updateUser,createTime,updateTime
+1003074,feature_selector,1.0,1,100000,0,Python 自定义算法  ,feature_selector.zip,2,1,0,1,1.0,1,xch,0,,0,1,1,admin,admin,2026-02-09 17:17:28,2026-05-07 11:14:25
+1003072,PreAleartModuleForProcesVariables,1.1.1,1,100000,0,Python 自定义算法  ,PreAleartModuleForProcesVariables.zip,2,1,0,1,1.0,1,wangyiao,0,,0,1,1,admin,admin,2026-02-05 10:03:10,2026-05-07 13:05:55
+1003071,spc_swiftcontrol_train_online_gui,v1,1,100000,0,Python 自定义算法  ,spc_swiftcontrol_train_online_gui.py,2,1,0,1,1.0,1,wyb,0,,0,1,1,admin,admin,2026-02-05 09:03:00,2026-05-07 14:39:33
+1003068,instrument_reliability_assessment_V3_train,1.2,1,10011,0,Python 智能预警  ,instrument_reliability_assessment_V3_train.zip,2,1,0,1,1.0,1,hl,0,,0,1,1,admin,admin,2026-02-04 16:39:30,2026-05-08 14:57:48
+1003067,instrument_reliability_assessment_V3,1.2,1,10011,0,Python 智能预警  ,instrument_reliability_assessment_V3.zip,2,1,0,1,1.0,1,hl,0,,0,1,1,admin,admin,2026-02-04 16:31:09,2026-05-08 14:56:28
+1003066,PreAlertModuleForProcessValuesInTraining,1.1.1,1,100000,0,Python 自定义算法  ,PreAlertModuleForProcessValuesInTraining.zip,2,1,0,1,3.0,2,wangyiao,0,,0,1,1,admin,admin,2026-02-04 16:11:55,2026-05-07 13:06:59
+1003063,auto_supervision_score_v1,1.0,1,100000,0,Python 自定义算法  ,auto_supervision_score_v1.py,2,1,0,1,1.0,1,HHF,0,,0,1,1,admin,admin,2026-02-04 15:30:49,2026-05-07 10:37:45
+1003061,control_performance_assessment_V3,3.0,1,100000,0,Python 自定义算法  ,control_performance_assessment_V3.zip,2,1,0,1,1.0,1,blue,0,,0,1,1,admin,admin,2026-02-04 13:31:19,2026-05-08 09:51:14
+1003060,control_performance_assessment_V3_train,3.0,1,100000,0,Python 自定义算法  ,control_performance_assessment_V3_train.zip,2,1,0,1,1.0,1,blue,0,,0,1,1,admin,admin,2026-02-04 13:30:25,2026-05-08 09:51:47
+1003059,spc_long_control_train_online_gui,V1.0,1,100000,0,Python 自定义算法  ,spc_long_control_train_online_gui.zip,2,1,0,1,2.0,1,mxh,0,,0,1,1,admin,admin,2026-02-04 11:13:10,2026-05-08 17:46:12
+1003058,spc_long_controll_train_gui,V1.0,1,100000,0,Python 自定义算法  ,spc_long_control_train_gui.zip,2,0,0,0,0.0,0,mxh,0,,0,1,1,admin,admin,2026-02-04 11:12:12,2026-05-07 11:10:36
+1003057,valve_anomaly_detection_infer,1,1,100000,0,Python 自定义算法  ,valve_anomaly_detection_infer.zip,2,1,0,1,1.0,1,zqd,0,,0,1,1,admin,admin,2026-02-04 09:27:10,2026-05-07 11:24:50
+1003056,valve_anomaly_detection_train,1,1,100000,0,Python 自定义算法  ,valve_anomaly_detection_train.zip,2,1,0,1,1.0,1,zqd,0,,0,1,1,admin,admin,2026-02-04 09:25:39,2026-05-07 11:25:36
+1003054,spc_swiftcontrol_train_gui,v1,1,100000,0,Python 自定义算法  ,spc_swiftcontrol_train_gui.py,2,1,0,1,1.0,1,wyb,0,,0,1,1,admin,admin,2026-02-03 13:17:59,2026-05-07 14:39:52
+1003053,spc_forecast_online_gui,v1,1,100000,0,Python 自定义算法  ,spc_forecast_online_gui.zip,2,1,0,1,1.0,1,zww,0,,0,1,1,admin,admin,2026-02-03 13:17:04,2026-05-07 19:36:05
+1003052,spc_forecast_train_gui,v1,1,100000,0,Python 自定义算法  ,spc_forecast_train_gui.zip,2,0,0,0,0.0,0,zww,0,,0,1,1,admin,admin,2026-02-03 13:15:45,2026-05-07 10:58:51
+1003051,spc_select_feature_train_gui,v1,1,100000,0,Python 自定义算法  ,spc_select_feature_train_gui.zip,2,0,0,0,0.0,0,zww,0,,0,1,1,admin,admin,2026-02-03 13:15:06,2026-05-07 10:57:25
+1003050,spc_adaptivecontrol_online_gui,v1.0,1,100000,0,Python 自定义算法  ,spc_adaptivecontrol_online_gui.py,2,1,0,1,1.0,1,yxy,0,,0,1,1,admin,admin,2026-02-03 13:14:56,2026-05-07 10:50:37
+1003049,spc_adaptivecontrol_offline_gui,v1.0,1,100000,0,Python 自定义算法  ,spc_adaptivecontrol_offline_gui.py,2,1,0,1,1.0,1,yxy,0,,0,1,1,admin,admin,2026-02-03 13:14:10,2026-05-07 10:51:32
+1003048,spc_identification_analysis_train_gui,v1.0,1,100000,0,Python 自定义算法  ,spc_identification_analysis_train_gui.py,2,1,0,1,1.0,1,yxy,0,,0,1,1,admin,admin,2026-02-03 13:13:14,2026-05-07 10:52:38
+1003047,spc_correlation_analysis_gui,v1.0,1,100000,0,Python 自定义算法  ,spc_correlation_analysis_gui.py,2,1,0,1,1.0,1,yxy,0,,0,1,1,admin,admin,2026-02-03 13:12:15,2026-05-07 10:53:07
+1003046,spc_classification_train_gui,1.0,1,100000,0,Python 自定义算法  ,spc_classification_train_gui.py,2,0,0,0,0.0,0,lw,0,,0,1,1,admin,admin,2026-02-03 13:10:59,2026-05-09 09:16:18
+1003045,spc_classification_train_online_gui,1.0,1,100000,0,Python 自定义算法  ,spc_classification_train_online_gui.py,2,1,0,1,1.0,1,lw,0,,0,1,1,admin,admin,2026-02-03 11:50:42,2026-05-09 09:16:38
+1003044,spc_dataprocess_train_online_gui,1.0,1,100000,0,Python 自定义算法  ,spc_dataprocess_train_online_gui.py,2,1,0,1,1.0,1,lw,0,,0,1,1,admin,admin,2026-02-03 11:30:51,2026-05-09 09:17:20
+1003043,spc_dataprocess_train_gui,1.0,1,100000,0,Python 自定义算法  ,spc_dataprocess_train_gui.py,2,1,0,1,1.0,1,lw,0,,0,1,1,admin,admin,2026-02-03 11:30:19,2026-05-09 09:15:10
+1003042,spc_classification_finetune_online_gui,1.0,1,100000,0,Python 自定义算法  ,spc_classification_finetune_online_gui.py,2,0,0,0,0.0,0,lw,0,,0,1,1,admin,admin,2026-02-03 11:29:34,2026-05-09 09:15:47
+1004002,spc_online_optimization_gui,v1,1,0,0,Python    ,spc_online_optimization_gui.zip,2,0,0,1,1.0,1,zww,0,,0,1,1,admin,admin,2026-01-13 10:37:23,2026-02-04 10:02:59
+1004001,spc_finetune_online_gui,v1,1,0,0,Python    ,spc_finetune_online_gui.zip,2,0,0,0,0.0,1,zww,0,,0,1,1,admin,admin,2026-01-13 10:37:23,2026-05-07 11:01:58
+1003013,AutoMLRegressionInferenceOnline,1.1.1,1,100000,0,Python 自定义算法  ,AutoMLRegressionInferenceOnline.zip,2,1,0,1,2.0,3,wangyiao,0,,0,1,1,admin,admin,2026-01-13 10:37:23,2026-04-09 19:22:04
+1003012,Derived_Tag_Calculation,V1,1,100000,0,Python 自定义算法  ,Derived_Tag_Calculation.py,2,1,0,1,1.0,1,wsh,0,,0,1,1,admin,admin,2026-01-13 10:15:46,2026-05-07 13:24:24
+1003007,AutoMLTransformerInference,1.0,1,100000,0,Python 自定义算法  ,AutoMLTransformerInference.zip,2,1,0,1,1.0,1,xch,0,,0,1,1,admin,admin,2026-01-12 19:44:09,2026-05-07 11:16:04
+1003006,AutoMLTransformerTrain,1.0,1,100000,0,Python 自定义算法  ,AutoMLTransformerTrain.zip,2,0,0,1,1.0,1,xch,0,,0,1,1,admin,admin,2026-01-12 19:42:41,2026-05-07 11:16:41
+1003004,data_preprocess_analyse_v1,1.0,1,100000,0,Python 自定义算法  ,data_preprocess_analyse_v1.zip,2,1,0,1,10.0,3,xch,0,,0,1,1,admin,admin,2026-01-12 19:34:24,2026-05-08 17:10:19
+1002029,extract_product_sites,v1,1,0,0,Python    ,extract_product_sites.py,2,1,0,1,1.0,1,xgy,0,,0,1,1,admin,admin,2025-10-22 09:28:16,2026-05-07 14:54:39
+1002028,key_variable_write,v1,1,0,0,Python    ,key_variable_write.py,2,1,0,1,1.0,1,cjn,0,,0,1,1,admin,admin,2025-10-22 09:27:38,2026-05-07 14:52:31
+1002027,reconstruct_redesign,v1,1,0,0,Python    ,reconstruct_redesign.py,2,1,0,1,1.0,1,cjn,0,,0,1,1,admin,admin,2025-10-22 09:26:57,2026-05-07 14:52:44
+1002026,restricted_judge,v1,1,0,0,Python    ,restricted_judge.py,2,1,0,1,1.0,1,cjn,0,,0,1,1,admin,admin,2025-10-22 09:24:38,2026-05-07 14:52:55
+1002025,restricted_new_build,v1,1,0,0,Python    ,restricted_new_build.py,2,1,0,1,1.0,1,cjn,0,,0,1,1,admin,admin,2025-10-22 09:23:32,2026-05-07 14:53:05
+1002024,model_update,1,1,0,0,Python    ,model_update.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:21:55,2026-05-07 14:55:08
+1002023,pinch_point,1.0,1,0,0,Python    ,pinch_point.py,2,1,0,1,1.0,1,zzx,0,,0,1,1,admin,admin,2025-10-22 09:20:51,2026-05-07 14:54:05
+1002022,input_deal,1,1,0,0,Python    ,input_deal_api.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:20:11,2026-05-07 14:55:27
+1002021,info_check,1,1,0,0,Python    ,info_check.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:19:50,2026-05-07 14:55:46
+1002020,file_exists,1,1,0,0,Python    ,file_exists.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:19:19,2026-05-07 14:56:04
+1002019,ex_fix_opt,1,1,0,0,Python    ,ex_fix_opt.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:18:19,2026-05-07 14:56:21
+1002018,ex_eval,1,1,0,0,Python    ,ex_eval_api.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:16:26,2026-05-07 14:56:40
+1002017,AT_opt,1,1,0,0,Python    ,AT_opt.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:14:57,2026-05-07 14:57:01
+1002016,AT_exergy_cal,1,1,0,0,Python    ,AT_exergy_cal.py,2,1,0,1,1.0,1,wq5,0,,0,1,1,admin,admin,2025-10-22 09:14:32,2026-05-07 14:57:18
+1002201,Membrane_2,Membrane_2,1,0,0,Python    ,Membrane_2.py,2,1,0,1,1.0,1,1,0,,0,1,1,admin,admin,2025-08-26 14:00:46,2025-09-03 19:57:27
+1002202,boiler_rt,20250826,1,0,0,Python    ,boiler_rt.py,2,1,0,1,1.0,1,K,0,,0,1,1,admin,admin,2025-08-26 11:37:21,2025-09-03 19:58:18
+1002203,bl3_steamflow_0816,20250826,1,0,0,Python    ,bl3_steamflow_0816.py,2,1,0,1,1.0,1,K,0,,0,1,1,admin,admin,2025-08-26 11:35:43,2025-09-03 19:57:52
+1002204,TPT_optimize_2,v1,1,0,0,Python    ,TPT_optimize_2.py,2,1,0,1,1.0,1,wsh,0,,0,1,1,admin,admin,2025-08-25 23:24:49,2026-05-07 13:23:52
+1002205,TPT-SSD2,V1,1,0,0,Python    ,TPT-SSD2.py,2,1,0,1,1.0,1,XYC,0,,0,1,1,admin,admin,2025-08-25 21:07:07,2026-05-07 13:23:19
+1002206,TPT-SSD1,V1,1,0,0,Python    ,TPT-SSD1.py,2,1,0,1,1.0,1,XYC,0,,0,1,1,admin,admin,2025-08-25 21:05:56,2026-05-07 13:22:44
+1002207,TPT_high_frequency,1.0,1,0,0,Python    ,TPT_high_frequency.py,2,1,0,1,1.0,1,cj,0,,0,1,1,admin,admin,2025-08-23 17:56:03,2025-09-03 19:57:03
+1002208,ts_data_process_v9,v1,1,0,0,Python    ,ts_data_process_v9.py,2,1,0,1,1.0,1,admin,0,,0,1,1,admin,admin,2025-08-23 15:20:55,2025-09-18 17:27:03
+1002209,ts_data_eval_v9,v1,1,0,0,Python    ,ts_data_eval_v9.py,2,1,0,1,1.0,1,admin,0,,0,1,1,admin,admin,2025-08-23 15:20:23,2025-09-18 17:26:40
+1002210,tpt_anomaly_pump_ops,v1.0,1,0,0,Python    ,tpt_anomaly_pump_ops.py,2,1,0,1,1.0,1,zqd,0,,0,1,1,admin,admin,2025-08-23 14:20:17,2025-09-03 19:56:38
+1002211,process_anomaly_warning_offline,2.0,1,0,0,Python    ,process_anomaly_warning_offline.zip,2,1,0,1,1.0,1,hhf,0,,0,1,1,admin,admin,2025-08-23 14:09:19,2026-05-07 13:45:09
+1002200,view_data,1.0.0,1,0,0,Python    ,view_data.py,2,1,0,1,1.0,1,TPT,0,,0,1,1,admin,admin,2025-08-21 14:13:52,2025-08-24 14:27:26
+1002100,spc_long_control_train_online,V1.0,1,0,0,Python    ,spc_long_control_train_online.zip,2,0,0,0,0.0,1,maxiaohua,0,,0,1,1,admin,admin,2025-08-20 16:22:47,2026-05-07 11:07:29
+1002101,spc_classification_train_online,1.0,1,0,0,Python    ,spc_classification_train_online.py,2,0,0,0,0.0,1,lw,0,,0,1,1,admin,admin,2025-08-20 16:01:39,2026-05-09 09:18:33
+1002102,spc_PID_auto_tune_train_online,20250820,1,0,0,Python    ,spc_PID_auto_tune_train_online.py,2,0,0,0,0.0,1,WYB,0,,0,1,1,admin,admin,2025-08-20 15:59:15,2026-05-07 14:40:16
+1002103,spc_forecast_train_online,v1.0,1,0,0,Python    ,spc_forecast_train_online.zip,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-08-20 15:52:03,2026-05-07 11:04:16
+1002212,tptmoe_inference,1.0.0,1,0,0,Python    ,tptmoe_inference.zip,2,1,0,2,0.5,1,TPT,0,,0,1,1,admin,admin,2025-08-19 16:27:58,2025-09-18 15:29:23
+1002213,tptmoe_create_data_sample,1.0.0,1,0,0,Python    ,tptmoe_create_data_sample.py,2,1,0,1,3.0,3,TPT,0,,0,1,1,admin,admin,2025-08-19 16:26:21,2026-05-07 11:12:27
+1002214,TPTMoE,v1.0,1,0,0,Python    ,tptmoe.zip,2,0,0,0,0.0,1,prb,0,,0,1,1,admin,admin,2025-08-08 11:25:51,2025-09-18 15:28:44
+1002215,DeepAGI,v1.0,1,0,0,Python    ,deepagi.zip,2,0,0,0,0.0,1,prb,0,,0,1,1,admin,admin,2025-08-08 11:25:20,2025-08-27 19:11:01
+1002216,dataOps,v0908,1,0,0,Python    ,dataOps.zip,2,1,0,1,5.0,1,lwx,0,,0,1,1,admin,admin,2025-08-08 11:23:59,2025-09-19 09:12:18
+1002217,deepSearch,v1.0,1,0,0,Python    ,deepSearch.zip,2,1,0,1,1.0,1,chenqing,0,,0,1,1,admin,admin,2025-08-08 11:23:15,2025-08-23 19:48:01
+1002218,dcsGraphify,v1.0,1,0,0,Python    ,dcsGraphify.zip,2,0,0,0,0.0,1,chenqing,0,,0,1,1,admin,admin,2025-08-08 11:22:42,2025-08-23 19:42:55
+1002219,TPT_Re,v1,1,0,0,Python    ,TPT_Regression.zip,2,0,0,0,0.0,1,JDH,0,,0,1,1,admin,admin,2025-07-11 19:56:21,2025-08-08 15:41:30
+1002220,AutoMLRegression,1.1,1,0,0,Python    ,AutoMLRegressionOnline.zip,2,0,0,0,0.0,1,wangyiao,0,,0,1,1,admin,admin,2025-07-11 18:26:45,2026-04-09 19:23:37
+1002221,AutoMLTimeSeriesPredictor,1.1,1,0,0,Python    ,AutoMLTimePredictor.zip,2,0,0,0,0.0,1,wangyiao,0,,0,1,1,admin,admin,2025-07-11 18:23:12,2025-08-07 10:32:50
+1002222,tpt1x_finetune,1.0.0,1,0,0,Python    ,tpt1x_finetune.zip,2,0,0,0,0.0,1,panrenbo,0,,0,1,1,admin,admin,2025-07-11 17:30:16,2025-08-08 19:07:41
+1002104,spc_long_control_train,V1.0,1,0,0,Python    ,spc_long_control_train.zip,2,0,0,0,0.0,1,maxiaohua,0,,0,1,1,admin,admin,2025-07-10 09:45:19,2026-05-07 11:07:06
+1002105,spc_pid_identification_analysis_train,v1.0,1,0,0,Python    ,spc_pid_identification_analysis_train.py,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-07-09 20:14:29,2026-05-08 09:07:44
+1002106,spc_quantation_train,v1.0.0,1,0,0,Python    ,spc_quantation_train.zip,2,0,0,0,0.0,1,hjh,0,,0,1,1,admin,admin,2025-07-09 20:12:26,2025-07-18 09:35:44
+1002107,spc_dataprocess_train,v1.0.1,1,0,0,Python    ,spc_dataprocess_train.py,2,0,0,0,0.0,1,hjh,0,,0,1,1,admin,admin,2025-07-09 20:11:45,2026-05-09 09:18:57
+1002108,spc_dataprocess_PID_train,v1.0.0,1,0,0,Python    ,spc_dataprocess_PID_train.py,2,0,0,0,0.0,1,hjh,0,,0,1,1,admin,admin,2025-07-09 20:09:17,2026-05-07 14:40:32
+1002109,spc_select_feature_train,v1.0,1,0,0,Python    ,spc_select_feature_train.zip,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-07-09 16:17:51,2026-05-07 11:03:42
+1002110,spc_para_check_train,0709,1,0,0,Python    ,spc_para_check_train.py,2,0,0,0,0.0,1,WYB,0,,0,1,1,admin,admin,2025-07-09 13:26:09,2025-07-25 10:48:33
+1002111,spc_PID_auto_tune_train,0709,1,0,0,Python    ,spc_PID_auto_tune_train.py,2,0,0,0,0.0,1,WYB,0,,0,1,1,admin,admin,2025-07-09 13:25:31,2026-05-07 14:40:49
+1002112,spc_classification_train,1.0.0,1,0,0,Python    ,spc_classification_train.py,2,0,0,0,0.0,1,lw,0,,0,1,1,admin,admin,2025-07-08 18:52:20,2026-05-09 09:18:22
+1002113,spc_identification_analysis_train,v1.0,1,0,0,Python    ,spc_identification_analysis_train.py,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-07-01 15:11:55,2026-05-07 10:54:47
+1002114,spc_forecast_train,v1.0.0,1,0,0,Python    ,spc_forecast_train.zip,2,0,0,0,0.0,1,hjh,0,,0,1,1,admin,admin,2025-07-01 11:06:38,2026-05-07 11:04:55
+1002115,spc_quantation,1.0.0,1,0,0,Python    ,spc_quantation.zip,2,0,0,0,0.0,1,hjh,0,,0,1,1,admin,admin,2025-06-13 16:14:35,2025-07-11 20:05:01
+1002116,spc_process_data_PID,1.0.6,1,0,0,Python    ,spc_process_data_PID.py,2,0,0,0,0.0,1,lw,0,,0,1,1,admin,admin,2025-06-13 15:10:22,2026-05-08 09:07:44
+1002117,spc_pid_identification_analysis,v1.0,1,0,0,Python    ,spc_pid_identification_analysis.py,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-06-13 15:09:30,2026-05-08 09:07:44
+1002118,spc_long_control,V1.0,1,0,0,Python    ,spc_long_control_api.zip,2,0,0,0,0.0,1,maxiaohua,0,,0,1,1,admin,admin,2025-06-13 10:02:46,2025-07-11 20:06:38
+1002119,spc_para_check,2.1,1,0,0,Python    ,spc_para_check.py,2,0,0,0,0.0,1,WYB,0,,0,1,1,admin,admin,2025-06-12 16:28:30,2025-07-11 20:06:58
+1002120,spc_classification,1.0.0,1,0,0,Python    ,spc_classification.py,2,0,0,0,0.0,1,lw,0,,0,1,1,admin,admin,2025-06-11 19:20:24,2025-07-11 20:07:17
+1002121,spc_PID_auto_tune,2.1,1,0,0,Python    ,spc_PID_auto_tune.py,2,0,0,0,0.0,1,WYB,0,,0,1,1,admin,admin,2025-06-11 16:24:33,2025-07-11 20:07:40
+1002122,spc_forecast,1.0.6,1,0,0,Python    ,spc_forecast.zip,2,0,0,0,0.0,1,hjh,0,,0,1,1,admin,admin,2025-06-11 15:30:50,2025-07-11 20:07:56
+1002123,spc_select_feature,v1.0,1,0,0,Python    ,spc_select_feature.zip,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-06-11 14:10:57,2025-07-11 20:08:14
+1002124,spc_identification_analysis,v1.0.0,1,0,0,Python    ,spc_identification_analysis.py,2,0,0,0,0.0,1,wzc,0,,0,1,1,admin,admin,2025-06-10 14:02:58,2025-07-11 20:08:30
+1002125,spc_data_process,1.0.11,1,0,0,Python    ,data_process_and_data_split_api_online.py,2,0,0,0,0.0,1,lw,0,,0,1,1,admin,admin,2025-06-10 09:54:41,2025-07-11 20:08:57
+1002002,tpt_saas_anomaly_controlvalve,1.0.1,1,0,0,Python    ,tpt_saas_anomaly_controlvalve.py,2,1,0,1,1.0,1,hl,0,,0,1,1,admin,admin,2025-03-12 15:16:11,2025-03-12 15:16:11
+1002001,TPT-SSD-saas,v1,1,0,0,Python    ,TPT-SSD-saas.py,2,0,0,1,1.0,1,xyc,0,,0,1,1,admin,admin,2025-03-12 09:57:30,2025-03-12 14:56:05
+1002000,tpt_saas_anomaly_pump,1.0.1,1,0,0,Python    ,tpt_saas_anomaly_pump.py,2,0,0,1,1.0,1,jdh,0,,0,1,1,admin,admin,2025-03-11 16:07:20,2025-03-12 15:32:19
+1001000,tpt_saas_predict_chat,1.0.1,1,0,0,Python    ,tpt_saas_predict_chat.py,2,0,0,1,1.0,1,prb,0,,0,1,1,admin,admin,2025-03-06 15:36:53,2025-03-11 12:40:43
+1000029,production_efficiency_evaluation_en,1.2,1,0,0,Python    ,production_efficiency_evaluation_en.py,2,0,0,0,0.0,1,admin,0,,0,1,1,admin,admin,2024-12-18 15:25:10,2024-12-18 15:25:10
+1000028,process_anomaly_warning_en,1.2,1,0,0,Python    ,process_anomaly_warning_en.py,2,0,0,0,0.0,1,admin,0,,0,1,1,admin,admin,2024-12-18 15:25:09,2024-12-18 15:25:09
+1000027,control_performance_assessment_en,1.2,1,0,0,Python    ,control_performance_assessment_en.py,2,0,0,0,0.0,1,admin,0,,0,1,1,admin,admin,2024-12-18 15:25:09,2024-12-18 15:25:09
+1000026,assets_reliability_assessment_en,1.2,1,0,0,Python    ,assets_reliability_assessment_en.py,2,0,0,0,0.0,1,admin,0,,0,1,1,admin,admin,2024-12-18 15:25:08,2024-12-18 15:25:08
+1000025,assets_reliability_assessment_modeling_monitor,1.2,1,0,0,Python    ,assets_reliability_assessment_modeling_monitor.py,2,0,0,0,0.0,1,admin,0,,0,1,1,admin,admin,2024-12-16 16:35:28,2024-12-16 16:35:28
+1000009,二分K均值聚类,v1,1,31,36,Python 机器学习 聚类,Bisecting-KMeans.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-12-03 10:55:04,2024-12-03 10:55:04
+1000008,层次聚类,v1,1,31,36,Python 机器学习 聚类,HierarchicalCluster.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-12-03 10:48:42,2024-12-03 10:48:42
+1000007,多层感知器分类,v1,1,31,34,Python 机器学习 分类,MultilayerPerceptron.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-12-03 09:50:55,2024-12-03 10:44:11
+1000006,朴素贝叶斯分类,v1,1,31,34,Python 机器学习 分类,NaiveBayes.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-12-02 18:48:18,2024-12-02 18:48:18
+1000005,线性回归(新),v2,1,31,35,Python 机器学习 回归,LinearRegression.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-12-02 18:23:33,2024-12-02 18:23:33
+1000004,决策树分类,v1,1,31,34,Python 机器学习 分类,DecisionTreeClassifier.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-11-28 15:27:50,2024-11-28 15:29:00
+1000003,决策树回归,v1,1,31,35,Python 机器学习 回归,DecisionTreeRegression.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-11-28 15:04:11,2024-11-28 15:04:11
+1000002,广义线性回归,v1,1,31,35,Python 机器学习 回归,GeneralizedLinearRegression.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-11-28 14:43:49,2024-11-28 14:43:49
+1000001,等距回归,v1,1,31,35,Python 机器学习 回归,IsotonicRegression.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-11-28 10:56:30,2024-11-28 14:31:20
+1000000,随机森林回归,v1,1,31,35,Python 机器学习 回归,RandomForestRegressor.py,2,0,0,0,0.0,1,ljr,0,,0,1,1,admin,admin,2024-11-28 10:41:42,2024-11-28 10:41:42
+1000019,TPT_PID,v1,1,0,0,Python    ,run_pid_tpt.py,2,0,0,0,0.0,1,HHF,0,,0,1,1,admin,admin,2024-08-16 10:58:02,2024-08-26 14:47:47
+1000018,TPT_APEX,v1,1,0,0,Python    ,Test_TPT_APEX.py,2,0,0,0,0.0,1,HHF,0,,0,1,1,admin,admin,2024-08-16 08:30:27,2024-11-20 20:15:29
+1000017,TPT_inference,v1,1,0,0,Python    ,TPT_inference.py,2,1,0,1,1.0,1,LSH,0,,0,1,1,admin,admin,2024-08-15 10:14:48,2024-12-18 14:47:01
+1000016,TPT_inference_chat,v1,1,0,0,Python    ,TPT_inference_chat.py,2,0,0,0,0.0,1,lsh,0,,0,1,1,admin,admin,2024-05-25 19:34:57,2024-12-13 10:00:28
+1000023,production_efficiency_evaluation,1.2,1,0,0,Python    ,production_efficiency_evaluation.py,2,0,0,0,0.0,1,hl,0,,0,1,1,admin,admin,2024-05-23 16:43:29,2024-09-06 13:03:51
+1000015,TPT_optimize,v1,1,0,0,Python    ,TPT_optimize.py,2,0,0,0,0.0,1,xyc,0,,0,1,1,admin,admin,2024-05-18 15:55:27,2024-12-04 11:32:47
+1000014,TPT_SSD,v1,1,0,0,Python    ,TPT_SSD.py,2,0,0,0,0.0,1,xyc,0,,0,1,1,admin,admin,2024-05-17 16:33:18,2024-11-28 19:26:57
+1000013,TPT_finetuning,v1,1,0,0,Python    ,fine_tuning.py,2,0,0,1,1.0,1,prb,0,,0,1,1,admin,admin,2024-05-16 14:04:44,2024-12-11 15:47:10
+1000022,process_anomaly_warning,1.2,1,0,0,Python    ,process_anomaly_warning.zip,2,1,0,1,1.0,1,hl,0,,0,1,1,admin,admin,2024-05-11 13:52:37,2024-12-18 08:44:56
+1000021,control_performance_assessment,1.2,1,0,0,Python    ,control_performance_assessment.zip,2,1,0,1,1.0,1,hl,0,,0,1,1,admin,admin,2024-05-11 13:49:41,2024-12-17 19:41:15
+1000020,assets_reliability_assessment,1.2,1,0,0,Python    ,assets_reliability_assessment.zip,2,1,0,1,1.0,1,hl,0,,0,1,1,admin,admin,2024-05-11 13:47:06,2024-12-05 09:14:53
+100004,管网动态算法,v1,1,10000,0,Python 管网模拟算法  ,pipenetwork_dynamic_simulation.py,2,0,0,0,0.0,1,CJN,0,,0,1,1,admin,admin,2023-10-19 17:15:40,2023-10-19 17:24:12
+100005,pdtospark,v1,1,28,10007,Python 数据预处理 数据类型转换,pd2spark.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2023-10-19 17:15:40,2023-10-19 17:24:12
+100000,深度学习(tf),v1,1,51,0,Python 深度学习  ,nn_test.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2023-10-19 00:00:00,2023-10-19 00:00:00
+100001,无关联建模,v1,1,468,469,Python SPD 建模,UnRelated_model.py,2,0,0,0,0.0,1,HWQ,0,,0,1,1,admin,admin,2023-09-25 16:25:02,2023-09-25 16:25:02
+100002,无关联工况计算,v1,1,468,470,Python SPD 工况计算,UnRelated_MaxMin.py,2,0,0,0,0.0,1,HWQ,0,,0,1,1,admin,admin,2023-09-25 16:23:54,2023-09-25 16:23:54
+10000,操作优化,v1,1,10001,10010,Python OPP 操作优化,OPP_OPT_V1.py,2,0,0,0,0.0,1,TT,0,,0,1,1,admin,admin,2023-08-16 15:55:07,2023-10-19 00:00:00
+10001,稳态检测,v1,1,10001,10009,Python OPP 稳态检测,OPP_SSDV1.py,2,0,0,0,0.0,1,XYC,0,,0,1,1,admin,admin,2023-08-16 13:14:00,2023-10-19 00:00:00
+100003,管网稳态算法,v1,1,10000,0,Python 管网模拟算法  ,pipenetwork_steady_simulation.py,2,0,0,0,0.0,1,CJN,0,,0,1,1,admin,admin,2023-05-18 13:47:18,2023-08-11 13:42:07
+744,调度算法,v1,1,468,471,Python SPD 其他算法,SPD.py,2,0,0,0,0.0,1,HWQ,0,,0,1,1,admin,admin,2022-08-24 15:16:47,2023-10-19 00:00:00
+742,工况计算（公式型）,v1,1,468,470,Python SPD 工况计算,MaxMin_cal.py,2,0,0,0,0.0,1,HWQ,0,,0,1,1,admin,admin,2022-08-18 15:01:51,2023-10-19 00:00:00
+740,拟合算法,v1,1,468,469,Python SPD 建模,curve_fit.py,2,0,0,0,0.0,1,HWQ,0,,0,1,1,admin,admin,2022-08-18 09:19:58,2023-10-19 00:00:00
+180,列选择(pd),v1,1,28,10008,Python 数据预处理 其它,pd-selected-columns.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-05-12 09:43:18,2023-10-19 00:00:00
+179,写出到关系数据库(pd),v1,1,27,0,Python 目标源  ,pd-writemysql.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-05-12 09:41:42,2023-10-19 00:00:00
+172,列名中的点处理,v1,1,28,10008,Python 数据预处理 其它,ReplaceDot.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-05-05 11:12:18,2023-10-19 00:00:00
+171,读取关系数据库(pd),v1,1,26,0,Python 数据源  ,pd-readmysql.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-29 10:56:25,2023-10-19 00:00:00
+170,pdtovalues,v1,1,28,10007,Python 数据预处理 数据类型转换,pdtovalue.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-29 08:45:25,2023-10-19 00:00:00
+169,读取csv(pd),v1,1,26,0,Python 数据源  ,pd-readcsv.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-28 13:20:28,2023-10-19 00:00:00
+162,S-G平滑,v1,1,28,45,Python 数据预处理 数据平滑,SGSmoothing.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 15:20:20,2023-10-19 00:00:00
+161,Lowess平滑,v1,1,28,45,Python 数据预处理 数据平滑,LowessSmoothing.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 15:18:59,2023-10-19 00:00:00
+160,窗口滑动平滑,v1,1,28,45,Python 数据预处理 数据平滑,windowgroupby.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 15:17:14,2023-10-19 00:00:00
+159,局部异常因子,v1,1,28,50,Python 数据预处理 异常值处理,LocalOutlierFactor.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 08:57:10,2023-10-19 00:00:00
+158,合并数据集,v1,1,28,10006,Python 数据预处理 数据合并,Joining.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 08:54:51,2023-10-19 00:00:00
+157,孤立森林,v1,1,28,50,Python 数据预处理 异常值处理,IsolationForest.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 08:53:15,2023-10-19 00:00:00
+156,特定阈值删除,v1,1,28,50,Python 数据预处理 异常值处理,FilterByValues.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 08:50:25,2023-10-19 00:00:00
+155,空值行删除,v1,1,28,10003,Python 数据预处理 缺失值处理,DeleteNaRows.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 08:47:59,2023-10-19 00:00:00
+154,写出到关系数据库(Spark),v1,1,27,0,Python 目标源  ,JDBCProducer.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-26 08:45:59,2023-10-19 00:00:00
+152,模型系数,v1,1,31,0,Python 机器学习  ,coefficient.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:26:49,2023-10-19 00:00:00
+151,评估,v1,1,31,37,Python 机器学习 评估,evaluation.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:25:27,2023-10-19 00:00:00
+149,预测,v1,1,31,0,Python 机器学习  ,prediction.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:16:14,2023-10-19 00:00:00
+148,高斯混合聚类,v1,1,31,36,Python 机器学习 聚类,gaussian_mixture.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:15:07,2023-10-19 00:00:00
+147,K均值聚类,v1,1,31,36,Python 机器学习 聚类,kmeans.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:14:41,2023-10-19 00:00:00
+146,线性回归,v1,1,31,35,Python 机器学习 回归,linear_regression.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:14:12,2023-10-19 00:00:00
+145,梯度提升决策树回归,v1,1,31,35,Python 机器学习 回归,GBT_regressor.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:13:48,2023-10-19 00:00:00
+144,随机森林分类,v1,1,31,34,Python 机器学习 分类,random_forest_classifier.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:13:13,2023-10-19 00:00:00
+143,朴素贝叶斯,v1,1,31,34,Python 机器学习 分类,naive_bayes.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:11:50,2023-10-19 00:00:00
+141,梯度提升决策树分类,v1,1,31,34,Python 机器学习 分类,GBDT_classifier.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:10:55,2023-10-19 00:00:00
+140,支持向量机分类,v1,1,31,34,Python 机器学习 分类,SVM.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:10:29,2023-10-19 00:00:00
+139,全表描述统计,v1,1,30,0,Python 统计分析  ,full_stats.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:09:58,2023-10-19 00:00:00
+138,假设检验,v1,1,30,0,Python 统计分析  ,hypothesis_test.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:09:39,2023-10-19 00:00:00
+137,相关性分析,v1,1,30,0,Python 统计分析  ,correlation_analysis.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:09:03,2023-10-19 00:00:00
+136,自定义离散,v1,1,29,0,Python 特征工程  ,custom_discrete.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:08:27,2023-10-19 00:00:00
+135,特征离散,v1,1,29,0,Python 特征工程  ,feature_discrete.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:08:06,2023-10-19 00:00:00
+134,PCA,v1,1,29,0,Python 特征工程  ,PCA.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:07:36,2023-10-19 00:00:00
+133,卡方特征选择,v1,1,29,0,Python 特征工程  ,chisq_selector.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:07:11,2023-10-19 00:00:00
+132,方差特征选择,v1,1,29,0,Python 特征工程  ,variance_threshold.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:06:04,2023-10-19 00:00:00
+131,合并特定列,v1,1,28,10006,Python 数据预处理 数据合并,feature_select.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:05:21,2023-10-19 00:00:00
+130,正态标准化,v1,1,28,10002,Python 数据预处理 标准化,standard_scale.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:04:59,2023-10-19 00:00:00
+129,正则标准化,v1,1,28,10002,Python 数据预处理 标准化,normalizer.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:04:34,2023-10-19 00:00:00
+128,最小最大值标准化,v1,1,28,10002,Python 数据预处理 标准化,minmax_scale.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:04:11,2023-10-19 00:00:00
+127,绝对值最大标准化,v1,1,28,10002,Python 数据预处理 标准化,maxabs_scale.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:03:49,2023-10-19 00:00:00
+125,增加序列号,v1,1,28,10008,Python 数据预处理 其它,serial.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:03:01,2023-10-19 00:00:00
+124,去除重复值,v1,1,28,10004,Python 数据预处理 重复值处理,duplicate_remove.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:02:03,2023-10-19 00:00:00
+121,空值处理,v1,1,28,10003,Python 数据预处理 缺失值处理,missing_data.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:00:48,2023-10-19 00:00:00
+120,列选择(Spark),v1,1,28,10008,Python 数据预处理 其它,col_select.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 09:00:23,2023-10-19 00:00:00
+119,分层采样,v1,1,28,33,Python 数据预处理 采样,startified_sampling.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 08:59:06,2023-10-19 00:00:00
+118,随机采样,v1,1,28,33,Python 数据预处理 采样,random_sampling.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-24 08:58:33,2023-10-19 00:00:00
+82,训练,v1,1,31,0,Python 机器学习  ,train.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-21 08:54:54,2023-10-19 00:00:00
+79,逻辑回归,v1,1,31,35,Python 机器学习 回归,logistic_regression.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-20 13:59:22,2023-10-19 00:00:00
+74,拆分(Array),v1,1,28,10005,Python 数据预处理 数据拆分,split_xy.py,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-20 13:07:26,2023-10-19 00:00:00
+52,读取关系数据库(Spark),v1,1,26,0,Python 数据源  ,jdbc_consumer.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-07 10:10:26,2023-10-19 00:00:00
+50,拆分(Spark),v1,1,28,10005,Python 数据预处理 数据拆分,data_split.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-06 11:39:05,2023-10-19 00:00:00
+49,行转列,v1,1,28,10008,Python 数据预处理 其它,row2_col.zip,2,0,0,0,0.0,1,PYM,0,,0,1,1,admin,admin,2022-04-06 11:35:32,2023-10-19 00:00:00

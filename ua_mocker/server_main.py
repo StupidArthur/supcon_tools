@@ -12,6 +12,7 @@ from typing import Any
 
 from asyncua import Server, ua
 from asyncua.common.callback import CallbackType
+from asyncua.common.node_factory import make_node
 
 from change_engines import next_value
 from config_loader import load_config
@@ -80,35 +81,83 @@ async def run_server(config_path: str) -> None:
     change_nodes: list[tuple[Any, ua.VariantType]] = []
     total_node_count = 0
 
-    print(CONSOLE_BUILD_START)
+    # 预解析每类节点的类型与默认值(避免在循环内重复查表)
+    node_specs = []
     for node_cfg in cfg["nodes"]:
-        name_prefix = node_cfg["name"]
-        type_name = node_cfg["type"]
-        count = int(node_cfg["count"])
-        change = node_cfg["change"] is True
+        variant_type, default_py = get_variant_type_and_default(node_cfg["type"])
+        node_specs.append((node_cfg, variant_type, default_py, int(node_cfg["count"])))
+
+    # 批量加节点:绕过 add_variable 的逐个往返,直接构造 AddNodesItem 列表走 session.add_nodes
+    # (OPC UA AddNodes 服务原生支持批量);writable 的 AccessLevel 在 attrs 内联,省 set_writable 往返。
+    session = mocker_root.session
+    read_mask = ua.AccessLevel.CurrentRead.mask
+    write_mask = ua.AccessLevel.CurrentWrite.mask
+
+    # 分容器:每 1000 节点挂一个子容器,避免单 parent 的 references 遍历 O(n²)
+    # (asyncua _add_node 对每个新节点遍历 parent.references 查 BrowseName 重名,单容器 1.1w 节点累计 ~1.2 亿次比较)。
+    # NodeId 仍为全局唯一字符串,客户端按 NodeId 直访,不依赖 browse path。
+    CONTAINER_BATCH = 1000
+    total_planned = sum(count for _, _, _, count in node_specs)
+    n_containers = max(1, (total_planned + CONTAINER_BATCH - 1) // CONTAINER_BATCH)
+    container_nodeids = []
+    for ci in range(n_containers):
+        c = await mocker_root.add_object(ns_idx, f"{CONTAINER_OBJECT_NAME}_{ci}", ua.ObjectIds.BaseObjectType)
+        container_nodeids.append(c.nodeid)
+
+    def _build_addnode(node_cfg, variant_type, default_py, i: int, global_idx: int):
+        node_id_str = _node_id_string(node_cfg["name"], i)
+        node_id = ua.NodeId(node_id_str, ns_idx)
+        qname = ua.QualifiedName(node_id_str, ns_idx)
+        initial = _initial_value(node_cfg, variant_type, default_py)
+        var = ua.Variant(initial, variant_type)
         writable = node_cfg["writable"] is True
 
-        variant_type, default_py = get_variant_type_and_default(type_name)
+        addnode = ua.AddNodesItem()
+        addnode.RequestedNewNodeId = node_id
+        addnode.BrowseName = qname
+        addnode.NodeClass = ua.NodeClass.Variable
+        addnode.ParentNodeId = container_nodeids[global_idx // CONTAINER_BATCH]
+        addnode.ReferenceTypeId = ua.NodeId(ua.ObjectIds.HasComponent)
+        addnode.TypeDefinition = ua.NodeId(ua.ObjectIds.BaseDataVariableType)
 
+        attrs = ua.VariableAttributes()
+        attrs.Description = ua.LocalizedText(node_id_str)
+        attrs.DisplayName = ua.LocalizedText(node_id_str)
+        attrs.DataType = ua.NodeId(getattr(ua.ObjectIds, variant_type.name))
+        attrs.Value = var
+        attrs.ValueRank = ua.ValueRank.Scalar
+        attrs.ArrayDimensions = None
+        attrs.WriteMask = 0
+        attrs.UserWriteMask = 0
+        attrs.Historizing = False
+        access = read_mask | (write_mask if writable else 0)
+        attrs.AccessLevel = access
+        attrs.UserAccessLevel = access
+        addnode.NodeAttributes = attrs
+        return addnode, (node_id, variant_type) if node_cfg["change"] is True else None
+
+    print(CONSOLE_BUILD_START)
+    addnodes: list = []
+    change_info: list = []
+    global_idx = 0
+    for node_cfg, variant_type, default_py, count in node_specs:
         for i in range(1, count + 1):
             total_node_count += 1
-            node_id_str = _node_id_string(name_prefix, i)
-            node_id = ua.NodeId(node_id_str, ns_idx)
-            qname = ua.QualifiedName(node_id_str, ns_idx)
-            initial = _initial_value(node_cfg, variant_type, default_py)
+            addnode, chg = _build_addnode(node_cfg, variant_type, default_py, i, global_idx)
+            addnodes.append(addnode)
+            if chg is not None:
+                change_info.append(chg)
+            global_idx += 1
 
-            try:
-                n = await mocker_root.add_variable(node_id, qname, initial)
-            except Exception as e:
-                logger.warning("添加变量 %s 失败: %s，尝试使用自动 NodeId", node_id_str, e)
-                n = await mocker_root.add_variable(ns_idx, node_id_str, initial)
+    # 分批 add_nodes(每批 1000),逐个 check StatusCode
+    BATCH = 1000
+    for i in range(0, len(addnodes), BATCH):
+        results = await session.add_nodes(addnodes[i:i + BATCH])
+        for r in results:
+            r.StatusCode.check()
 
-            if writable:
-                await n.set_writable()
-
-            if change:
-                change_nodes.append((n, variant_type))
-
+    # change 节点用 RequestedNewNodeId 构造 Node(成功时 AddedNodeId 与请求一致)
+    change_nodes = [(make_node(session, nid), vt) for nid, vt in change_info]
     print(CONSOLE_BUILD_DONE)
 
     async def _on_client_write(event: Any, _callback_svc: Any = None) -> None:
@@ -140,7 +189,7 @@ async def run_server(config_path: str) -> None:
                     try:
                         cur = await n.get_value()
                         nxt = next_value(vt, cur)
-                        await n.write_value(coerce_to_type(nxt, vt))
+                        await n.write_value(coerce_to_type(nxt, vt), varianttype=vt)
                     except Exception as e:
                         logger.debug("更新节点 %s 失败: %s", n, e)
 

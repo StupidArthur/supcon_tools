@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ua_tpt_loop"
+version = "0.1.0"
+description = "把 ua_mocker 节点 → tpt 数据源 → tpt 位号 → 历史值 这条路径走通的闭环检查工具"
+readme = "../README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "asyncua>=1.1",
+    "pyyaml>=6.0",
+    "tpt_api @ file://../../tpt_api/python",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+ua-tpt-loop = "ua_tpt_loop.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ua_tpt_loop*"]
