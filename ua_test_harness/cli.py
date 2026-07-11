@@ -1,22 +1,17 @@
-"""ua_test_harness CLI:UA 客户端(datahub)功能测试执行器后端入口。
+"""ua_test_harness CLI。
 
-子命令:
-  os          OS 环境检测(端口 18960~18969 / 本地 IP / 可选连通性)
-  mock        ua-server-mock 管理(list / start / stop / status)
-  provision   数据源组态(登录 -> 起 mock -> 加 ds/位号 -> smoke)
-  all         全链路(os -> mock -> provision)
-
-凭据:
-  base_url/user 从 --base-url/--user 或 env DATAHUB_BASE_URL/DATAHUB_USER;
-  密码只从 env DATAHUB_PASSWORD 读(不进命令行/日志)。
-
-跑法:PYTHONPATH=F:/github/supcon_tools python -m ua_test_harness.cli os
+旧子命令(保留,迁移期):os / mock / provision / all
+新子命令(plan.md 5.1):
+  catalog  export --output <path> [--package ua_test_harness.tests]
+  run      --config <run-config.json>
+            [--cases id1,id2] [--chapters ch1,ch2] [--dry-run]
 """
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+from pathlib import Path
 
 
 def _creds(args) -> tuple[str, str, str, str]:
@@ -28,7 +23,6 @@ def _creds(args) -> tuple[str, str, str, str]:
 
 
 def _pick_local_ip(ips: list[str]) -> str:
-    """自动选 TPT 可连的本地 IP:优先 10.x,其次 172.x,最后任意。"""
     for ip in ips:
         if ip.startswith("10."):
             return ip
@@ -150,7 +144,64 @@ def cmd_all(args) -> int:
     return 0
 
 
-def main() -> None:
+# ------- 新增子命令 --------------------------------------------------
+def cmd_catalog(args) -> int:
+    from ua_test_harness.catalog import export_catalog
+    pkg = args.package or "ua_test_harness.tests"
+    cat = export_catalog(args.output, package=pkg)
+    n_cases = sum(len(ch["cases"]) for ch in cat["chapters"])
+    print(f"catalog written: {args.output} chapters={len(cat['chapters'])} cases={n_cases}")
+    return 0
+
+
+def cmd_run(args) -> int:
+    from ua_test_harness.catalog import discover, all_defs
+    from ua_test_harness.config import RunConfig
+    from ua_test_harness.runner import Runner
+
+    discover(args.package)
+    defs = all_defs()
+
+    selected: list = []
+    if args.cases:
+        ids = {s.strip() for s in args.cases.split(",") if s.strip()}
+        selected = [d for d in defs if d.id in ids]
+    elif args.chapters:
+        chs = {s.strip() for s in args.chapters.split(",") if s.strip()}
+        selected = [d for d in defs if d.chapter in chs]
+
+    # 真实执行模式需要 --config + 至少一个选择(来自 config 或 CLI)
+    if args.dry_run:
+        if not selected:
+            selected = defs
+        for d in selected:
+            print(f"  planned: {d.id:18s} {d.title} [{d.kind}] file={d.file_path}:{d.lineno}")
+        print(f"dry-run: {len(selected)} cases")
+        return 0
+
+    if not args.config:
+        print("--config required for non dry-run mode", file=sys.stderr)
+        return 2
+    cfg_path = Path(args.config)
+    if not cfg_path.is_file():
+        print(f"run-config not found: {cfg_path}", file=sys.stderr)
+        return 2
+    cfg = RunConfig.load(cfg_path)
+
+    if not selected and cfg.selected_case_ids:
+        ids = set(cfg.selected_case_ids)
+        selected = [d for d in defs if d.id in ids]
+    if not selected:
+        selected = defs
+    if not selected:
+        print("no cases matched (run-config selectedCaseIds empty and no --cases/--chapters)", file=sys.stderr)
+        return 2
+
+    runner = Runner(cfg, cases=selected)
+    return runner.run()
+
+
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ua_test_harness")
     p.add_argument("--base-url", default=None)
     p.add_argument("--user", default=None)
@@ -186,7 +237,25 @@ def main() -> None:
     pa.add_argument("--frequency", type=int, default=10)
     pa.set_defaults(func=cmd_all)
 
-    args = p.parse_args()
+    pc = sub.add_parser("catalog", help="导出 catalog.json")
+    pc.add_argument("--output", required=True, help="输出文件路径")
+    pc.add_argument("--package", default="ua_test_harness.tests", help="扫描包(默认 ua_test_harness.tests)")
+    pc.set_defaults(func=cmd_catalog)
+
+    pr = sub.add_parser("run", help="执行已配置 run-config 的用例")
+    pr.add_argument("--config", default=None, help="run-config.json 路径(非 dry-run 必填)")
+    pr.add_argument("--cases", default=None, help="逗号分隔 caseId(覆盖 config)")
+    pr.add_argument("--chapters", default=None, help="逗号分隔 chapter(覆盖 config)")
+    pr.add_argument("--package", default="ua_test_harness.tests", help="扫描包")
+    pr.add_argument("--dry-run", action="store_true", help="只列出将执行的用例,不执行")
+    pr.set_defaults(func=cmd_run)
+
+    return p
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
     sys.exit(args.func(args) or 0)
 
 

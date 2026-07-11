@@ -62,7 +62,12 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.ensureAutomationSchema(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
 }
 
 // Close 关闭。

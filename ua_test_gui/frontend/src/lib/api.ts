@@ -11,10 +11,22 @@ import { ListMocks, StartMock, StopMock, StopAllMocks, StartAllMocks, GetPerform
 import { Provision, GetProvisionState, AddMissingTags, DeleteDuplicateTags, RebuildDataSource, AddDataSource, DeleteDataSource, ChangeDsState, DeleteAllTags, GetHeartbeatValue } from "../../wailsjs/go/bindings/ProvisionBinding";
 import { RunVerification } from "../../wailsjs/go/bindings/VerifyBinding";
 import { ListRuns, GetRunDetail } from "../../wailsjs/go/bindings/HistoryBinding";
-import { bindings, env, mock, provision, verify } from "../../wailsjs/go/models";
+import {
+  ListTestCases,
+  RefreshTestCatalog,
+  StartTestRun,
+  StopTestRun,
+  GetActiveTestRun,
+  ListTestRuns,
+  GetTestRunDetail,
+  GetRunEvents,
+  ReadRunLog,
+  OpenRunDirectory,
+} from "../../wailsjs/go/bindings/AutomationBinding";
+import { automation, bindings, env, mock, provision, verify } from "../../wailsjs/go/models";
 
 // re-export wails 生成的 DTO 命名空间,供页面按业务域引用类型(替代旧 main 命名空间)。
-export { bindings, env, mock, provision, verify };
+export { automation, bindings, env, mock, provision, verify };
 
 export const api = {
   login: (req: bindings.LoginRequest) => Login(req),
@@ -45,6 +57,18 @@ export const api = {
   getPerformanceParams: () => GetPerformanceParams().then((params) => ({ params })),
   getMockerConfig: () => GetMockerConfig(),
   setMockerConfig: (req: bindings.SetMockerConfigRequest) => SetMockerConfig(req),
+
+  // automation -----------------------------------------------------------
+  listTestCases: () => ListTestCases(),
+  refreshTestCatalog: () => RefreshTestCatalog(),
+  startTestRun: (req: automation.StartRunRequest) => StartTestRun(req),
+  stopTestRun: (runId: number) => StopTestRun(runId),
+  getActiveTestRun: () => GetActiveTestRun(),
+  listTestRuns: (req: automation.ListRunsRequest) => ListTestRuns(req).then((runs) => ({ runs })),
+  getTestRunDetail: (runId: number) => GetTestRunDetail(runId),
+  getRunEvents: (req: automation.GetEventsRequest) => GetRunEvents(req),
+  readRunLog: (req: automation.ReadLogRequest) => ReadRunLog(req),
+  openRunDirectory: (runId: number) => OpenRunDirectory(runId),
 };
 
 // 前端实时解析 URL(对齐后端 ParseSubjectURL):协议 + host:port + 租户。

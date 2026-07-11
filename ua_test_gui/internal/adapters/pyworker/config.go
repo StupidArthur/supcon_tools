@@ -49,6 +49,53 @@ func SaveMockerConfig(c mock.MockerConfig) error {
 	return os.WriteFile(configFilePath(), b, 0o644)
 }
 
+// loadFullConfig 读全部配置(含 perf)。
+func loadFullConfig() persistedConfig {
+	var p persistedConfig
+	if b, err := os.ReadFile(configFilePath()); err == nil {
+		_ = json.Unmarshal(b, &p)
+	}
+	if p.Repo == "" {
+		p.Repo = detectMockerDir()
+	}
+	if p.Python == "" {
+		p.Python = defaultPython()
+	}
+	if p.Exe == "" {
+		p.Exe = detectMockerExe(p.Repo)
+	}
+	return p
+}
+
+// saveFullConfig 写全部配置。
+func saveFullConfig(p persistedConfig) error {
+	if err := os.MkdirAll(filepath.Dir(configFilePath()), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configFilePath(), b, 0o644)
+}
+
+type persistedConfig struct {
+	mock.MockerConfig
+	Perf mock.PerfParams `json:"perf"`
+}
+
+// LoadPerf 读性能参数。
+func (m *MockManager) LoadPerf() mock.PerfParams {
+	return loadFullConfig().Perf
+}
+
+// SavePerf 写性能参数(同时保留已有 MockerConfig 字段)。
+func (m *MockManager) SavePerf(p mock.PerfParams) error {
+	cfg := loadFullConfig()
+	cfg.Perf = p
+	return saveFullConfig(cfg)
+}
+
 // detectMockerDir 自动探测 ua_mocker 目录(同时含 main.py + config_loader.py 才算)。
 // 优先级:UA_MOCKER_REPO 环境变量 > 可执行文件目录上溯 > cwd 上溯。
 func detectMockerDir() string {

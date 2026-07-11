@@ -1,6 +1,6 @@
 // App.tsx - 主壳:左侧分组导航 + 右侧单页内容(Notion 风格 Tailwind)。
-// 导航分组(用户 plan 模式设计):环境管理 / 测试执行 / 历史。
-// 共享状态:toast 反馈、登录态、本地 IP。交互不变,仅样式层换 Tailwind。
+// 导航分组(用户 plan 模式设计):环境管理 / 自动化测试 / 辅助工具。
+// 共享状态:toast 反馈、登录态、本地 IP、跨页选择的 caseIds。
 import { useState, useCallback } from "react";
 import { useToast } from "./components/ui/use-toast";
 import { Toaster, ToastKind } from "./components/Toast";
@@ -10,22 +10,34 @@ import { MockPage } from "./pages/MockPage";
 import { ProvisionPage } from "./pages/ProvisionPage";
 import { VerifyPage } from "./pages/VerifyPage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { TestCasesPage } from "./pages/TestCasesPage";
+import { TestRunsPage } from "./pages/TestRunsPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
-type Page = "subject" | "env" | "mock" | "provision" | "verify" | "history";
+type Page =
+  | "subject"
+  | "env"
+  | "mock"
+  | "provision"
+  | "verify"
+  | "history"
+  | "cases"
+  | "runs";
 
 const NAV: { group: string; items: { key: Page; label: string }[] }[] = [
   { group: "环境管理", items: [
     { key: "subject", label: "被测对象" },
     { key: "env", label: "操作系统环境检测" },
-  ] },
-  { group: "测试执行", items: [
     { key: "mock", label: "ua-server-mock 管理" },
-    { key: "provision", label: "数据源组态" },
-    { key: "verify", label: "验证" },
   ] },
-  { group: "历史", items: [
+  { group: "自动化测试", items: [
+    { key: "cases", label: "测试用例" },
+    { key: "runs", label: "测试任务" },
     { key: "history", label: "运行历史" },
+  ] },
+  { group: "辅助工具", items: [
+    { key: "provision", label: "数据源组态" },
+    { key: "verify", label: "旧验证" },
   ] },
 ];
 
@@ -33,6 +45,7 @@ function App() {
   const [page, setPage] = useState<Page>("subject");
   const [loggedIn, setLoggedIn] = useState(false);
   const [localIP, setLocalIP] = useState(localStorage.getItem("local_ip") || "");
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const { toasts, push, dismiss } = useToast();
 
   const pushToast = useCallback((kind: ToastKind, text: string) => {
@@ -71,7 +84,7 @@ function App() {
           </span>
         </header>
         <section className="flex-1 overflow-auto p-6">
-          <div className="max-w-4xl">
+          <div className="w-full">
             {page === "subject" && <SubjectPage pushToast={pushToast} onLoggedIn={() => setLoggedIn(true)} />}
             {page === "env" && <EnvPage pushToast={pushToast} localIP={localIP} setLocalIP={setLocalIP} />}
             {page === "mock" && <MockPage pushToast={pushToast} />}
@@ -82,6 +95,23 @@ function App() {
             )}
             {page === "verify" && <VerifyPage pushToast={pushToast} localIP={localIP} />}
             {page === "history" && <HistoryPage pushToast={pushToast} />}
+            {page === "cases" && (
+              <TestCasesPage
+                pushToast={pushToast}
+                selectedIds={selectedCaseIds}
+                setSelectedIds={setSelectedCaseIds}
+                goToRuns={() => setPage("runs")}
+              />
+            )}
+            {page === "runs" && (
+              <TestRunsPage
+                pushToast={pushToast}
+                selectedIds={selectedCaseIds}
+                setSelectedIds={setSelectedCaseIds}
+                loggedIn={loggedIn}
+                localIP={localIP}
+              />
+            )}
           </div>
         </section>
       </main>

@@ -8,8 +8,10 @@ import (
 	"log/slog"
 
 	"ua_test_gui/internal/adapters/opcua"
+	"ua_test_gui/internal/adapters/pytestrunner"
 	"ua_test_gui/internal/adapters/pyworker"
 	"ua_test_gui/internal/adapters/sqlite"
+	"ua_test_gui/internal/automation"
 	"ua_test_gui/internal/bindings"
 	"ua_test_gui/internal/env"
 	"ua_test_gui/internal/mock"
@@ -18,17 +20,20 @@ import (
 	"ua_test_gui/internal/verify"
 )
 
-// Container 组合根,持有 6 个 binding + 需要生命周期管理的内部组件。
+// Container 组合根,持有 7 个 binding + 需要生命周期管理的内部组件。
 type Container struct {
-	Subject   *bindings.SubjectBinding
-	Env       *bindings.EnvBinding
-	Mock      *bindings.MockBinding
-	Provision *bindings.ProvisionBinding
-	Verify    *bindings.VerifyBinding
-	History   *bindings.HistoryBinding
+	Subject    *bindings.SubjectBinding
+	Env        *bindings.EnvBinding
+	Mock       *bindings.MockBinding
+	Provision  *bindings.ProvisionBinding
+	Verify     *bindings.VerifyBinding
+	History    *bindings.HistoryBinding
+	Automation *bindings.AutomationBinding
 
-	store   *sqlite.Store
-	mockMgr *pyworker.MockManager
+	store        *sqlite.Store
+	mockMgr      *pyworker.MockManager
+	runnerMgr    *pytestrunner.Manager
+	automation   *automation.Service
 }
 
 // NewContainer 装配所有依赖。
@@ -43,11 +48,14 @@ func NewContainer() *Container {
 
 	// store==nil 时传 nil 接口(避免 Go 接口 nil 陷阱:typed nil != nil)
 	var resultStore verify.ResultStore
+	var autoStore automation.Store
 	if store != nil {
 		resultStore = store
+		autoStore = store
 	}
 
 	mockMgr := pyworker.NewMockManager(cfg.MockWorkDir, nil) // notifier 由 Startup 注入
+	runnerMgr := pytestrunner.NewManager()
 
 	subjSvc := subject.NewService()
 	envSvc := env.NewService(subjSvc)
@@ -55,14 +63,22 @@ func NewContainer() *Container {
 	provSvc := provision.NewService(subjSvc)
 	verSvc := verify.NewService(subjSvc, resultStore, opcua.Factory{})
 
+	paths := automation.DefaultPaths()
+	_ = paths.EnsureDirs()
+	catalog := automation.Catalog{Version: 1}
+	autoSvc := automation.NewService(autoStore, runnerMgr, paths, catalog, cfg.PythonExe, cfg.WorkDir, nil)
+
 	return &Container{
-		Subject:   bindings.NewSubjectBinding(subjSvc),
-		Env:       bindings.NewEnvBinding(envSvc, mockSvc),
-		Mock:      bindings.NewMockBinding(mockSvc),
-		Provision: bindings.NewProvisionBinding(provSvc),
-		Verify:    bindings.NewVerifyBinding(verSvc),
-		History:   bindings.NewHistoryBinding(verSvc),
-		store:     store,
-		mockMgr:   mockMgr,
+		Subject:    bindings.NewSubjectBinding(subjSvc),
+		Env:        bindings.NewEnvBinding(envSvc, mockSvc),
+		Mock:       bindings.NewMockBinding(mockSvc),
+		Provision:  bindings.NewProvisionBinding(provSvc),
+		Verify:     bindings.NewVerifyBinding(verSvc),
+		History:    bindings.NewHistoryBinding(verSvc),
+		Automation: bindings.NewAutomationBinding(autoSvc),
+		store:      store,
+		mockMgr:    mockMgr,
+		runnerMgr:  runnerMgr,
+		automation: autoSvc,
 	}
 }

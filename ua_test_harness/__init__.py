@@ -1,8 +1,17 @@
-"""ua_test_harness -- UA 客户端(datahub)功能测试执行器后端(无 GUI)。
+"""ua_test_harness:UA 自动化测试执行器。
 
-环境就绪链路:被测对象配置/登录 -> OS 检测 -> 起 ua-server-mock -> 数据源组态。
-GUI 以后再做、再接这个后端。
+提供:
+- 装饰器 + catalog 导出(catalog.py)
+- 结构化事件协议(events.py)
+- RunConfig 加载(config.py)
+- RunContext/CaseContext(context.py)
+- ResourceRegistry LIFO 清理(resources.py)
+- 轮询等待(polling.py)
+- 证据与指标(evidence.py / metrics.py)
+- 报告生成(report.py)
+- 客户端适配(tpt_client / opcua_client / mock_control)
+- CLI(cli.py)
 """
-from . import _paths  # noqa: F401  设置 sys.path 复用 tpt_api / ua_tpt_manager
+from __future__ import annotations
 
 __version__ = "0.1.0"
