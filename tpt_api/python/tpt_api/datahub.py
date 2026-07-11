@@ -18,7 +18,7 @@
 - /ibd-data-hub-web-v2.2/api/tag-group/batchDelete           删除位号分组节点（isForce 控制是否同时删位号）
 - /ibd-data-hub-web-v2.2/api/tag-group/groupTree             获取位号分组节点树
 - /ibd-data-hub-web-v2.2/api/tag-group/batchAddRelation      收藏位号（关联位号到分组）
-- /ibd-data-hub-web-v2.2/api/tag-group/batchDelRelation      取消收藏（移除位号与分组的关联）
+- /ibd-data-hub-web-v2.2/api/tag-group/batchDelRelation      从回收站恢复位号（移除位号与回收站的关联；同时用于取消收藏）
 - /ibd-data-hub-web-v2.2/api/tag-value/importTagValue         同步 JSON 历史值
 - /ibd-data-hub-web-v2.2/api/tag-value/importTagValueHistory  异步 Excel/ZIP 历史值
 - /ibd-data-hub-web-v2.2/api/tag-value/importCSVTagValueHistory  CSV（已废弃）
@@ -1404,13 +1404,19 @@ def remove_tag_group_relation(
     group_id: str,
     tag_ids: list[int],
 ) -> dict[str, Any]:
-    """取消收藏--移除位号与分组的关联（DELETE /ibd-data-hub-web-v2.2/api/tag-group/batchDelRelation）。
+    """从回收站恢复位号 / 取消收藏（DELETE /ibd-data-hub-web-v2.2/api/tag-group/batchDelRelation）。
+
+    同一个端点兼做两个用途：传入 group_id="1" + 回收站里的位号 ID 列表 = 恢复位号到 Root；
+    传入 group_id="2" + 收藏的位号 ID 列表 = 取消收藏。
 
     参数:
       group_id: 分组 ID
+        - "1" = 回收站（恢复位号）
+        - "2" = 收藏（取消收藏）
+        - 其他 = 自定义分组（移除关联）
       tag_ids:  位号 ID 列表
 
-    返回: bool（实测返回 false 但操作实际生效，以 list_favorite_tags 确认为准）
+    返回: bool（实测返回 false 但操作实际生效，以 list_recycle_tags / list_favorite_tags 确认为准）
     """
     body = {"data": {group_id: tag_ids}}
     return api._request("DELETE", DataHubTagGroupBatchDelRelation, body=body, wrap=False)

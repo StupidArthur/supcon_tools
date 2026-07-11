@@ -117,7 +117,7 @@
 | update_tag_group | PUT /tag-group/update | 编辑分组（改名/移动） |
 | delete_tag_group | DELETE /tag-group/batchDelete | 删除分组（isForce=true连带删位号） |
 | add_tag_group_relation | POST /tag-group/batchAddRelation | 收藏位号 |
-| remove_tag_group_relation | DELETE /tag-group/batchDelRelation | 取消收藏（返回false但实际生效） |
+| remove_tag_group_relation | DELETE /tag-group/batchDelRelation | **双用途**：groupId="1"+回收站位号ID=恢复位号；groupId="2"+收藏位号ID=取消收藏（返回false但实际生效） |
 | list_favorite_tags | POST /tag-group/get (groupId="2") | 查收藏列表 |
 | list_recycle_tags | POST /tag-group/get (groupId="1") | 查回收站 |
 

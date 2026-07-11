@@ -499,8 +499,11 @@ func (c *TptClient) AddTagGroupRelation(groupID string, tagIDs []int) (json.RawM
 	return c.request("POST", epTagGroupBatchAddRelation, body, false)
 }
 
-// RemoveTagGroupRelation 取消收藏(DELETE /tag-group/batchDelRelation)。
-// 实测返回 false 但操作实际生效,以 ListFavoriteTags 确认为准。
+// RemoveTagGroupRelation 从回收站恢复位号 / 取消收藏(DELETE /tag-group/batchDelRelation)。
+// 同一端点兼做两个用途:
+//   - groupID="1" + 回收站位号 ID 列表 = 恢复位号到 Root
+//   - groupID="2" + 收藏位号 ID 列表 = 取消收藏
+// 实测返回 false 但操作实际生效,以 ListRecycleTags / ListFavoriteTags 确认为准。
 func (c *TptClient) RemoveTagGroupRelation(groupID string, tagIDs []int) (json.RawMessage, error) {
 	body := map[string]any{
 		"data": map[string]any{

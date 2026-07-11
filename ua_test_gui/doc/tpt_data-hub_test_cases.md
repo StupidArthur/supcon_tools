@@ -58,7 +58,7 @@
 | UA-2-2 | 位号查询 | 三种查询入口：tag-info/page（基础列表）、tag-group/queryWithQuality（带实时值+质量码+dsName）、tag-info/getNotUsedBaseTagInfoContinue（从数据源浏览未导入位号+游标分页）；按 dsId/tagName/groupId/tagBaseName 过滤；分页 |
 | UA-2-3 | 位号导入导出 | Excel 导出（21 列结构，含实时值+限值）+ Excel 导入（conflictStrategy 0=跳过/1=覆盖）；从数据源批量添加位号（选未导入位号→批量提交） |
 | UA-2-4 | 位号删除 | 软删（进回收站 groupId="1"）+ 物理删；删后重建同名位号；删除对采集的影响 |
-| UA-2-5 | 位号节点管理 | 分组树 CRUD（创建/编辑/移动/删除，isForce 控制是否连带删位号）；收藏位号（groupId="2"）和取消收藏 |
+| UA-2-5 | 位号节点管理 | 分组树 CRUD（创建/编辑/移动/删除，isForce 控制是否连带删位号）；收藏位号（groupId="2"）和取消收藏；从回收站恢复位号（groupId="1" + DELETE batchDelRelation，**与取消收藏同端点**） |
 
 ### UA-3 数据采集
 

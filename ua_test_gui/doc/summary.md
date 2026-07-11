@@ -131,7 +131,7 @@ TPT 是一套工业数据采集与管理系统，核心能力：
 | `/tag-group/update` | PUT | 编辑（改名/移动） |
 | `/tag-group/batchDelete` | DELETE | 删除（isForce=true 连带删位号） |
 | `/tag-group/batchAddRelation` | POST | 收藏位号 |
-| `/tag-group/batchDelRelation` | POST | 取消收藏（**返回 false 但操作实际生效**） |
+| `/tag-group/batchDelRelation` | DELETE | **双用途**：groupId="1"+回收站位号ID=恢复位号；groupId="2"+收藏位号ID=取消收藏（**返回 false 但操作实际生效**） |
 | `/tag-group/get` | POST | 按 groupId 查位号（groupId="1"=回收站/"2"=收藏/"0"=Root） |
 | `/tag-group/queryWithQuality` | POST | 查位号带实时值+质量码+dsName（**注意：与 list_tags 的区别是有实时值**） |
 
