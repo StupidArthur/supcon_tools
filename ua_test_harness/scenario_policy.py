@@ -14,7 +14,7 @@ from ua_test_harness.ua1_runtime import execute_ua1_case
 
 _SUPPORTED = {
     "UA-1-1": {"UA-1-1-01", "UA-1-1-02", "UA-1-1-04", "UA-1-1-12"},
-    "UA-1-2": {f"UA-1-2-{index:02d}" for index in range(1, 9)},
+    "UA-1-2": {"UA-1-2-01", "UA-1-2-02", "UA-1-2-04", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"},
     "UA-1-5": {"UA-1-5-01", "UA-1-5-03", "UA-1-5-07"},
     "UA-2-1": {"UA-2-1-001", "UA-2-1-002"},
     "UA-2-2": {"UA-2-2-001", "UA-2-2-004", "UA-2-2-005", "UA-2-2-006"},
@@ -31,9 +31,7 @@ _SUPPORTED = {
 _SHARED_SCENARIOS = {
     "UA-1-2-01": "datasource_state",
     "UA-1-2-02": "datasource_state",
-    "UA-1-2-03": "history",
     "UA-1-2-04": "datasource_state",
-    "UA-1-2-05": "history",
     "UA-1-2-06": "datasource_state",
     "UA-1-2-07": "datasource_state",
     "UA-1-2-08": "datasource_state",
@@ -61,6 +59,7 @@ _SHARED_SCENARIOS = {
 
 _BLOCK_REASONS = {
     "UA-1-1": "需要鉴权 Mock、质量码扩展配置或不可达转可达控制夹具",
+    "UA-1-2": "历史增长/停增场景需要稳定历史落库夹具",
     "UA-1-3": "需要隔离的 Mock 停启控制、断线时间线和恢复证据执行器",
     "UA-1-4": "需要两个独立 Mock endpoint 和双源隔离夹具",
     "UA-1-5": "需要有位号删除矩阵、回收站关联和多数据源删除执行器",
