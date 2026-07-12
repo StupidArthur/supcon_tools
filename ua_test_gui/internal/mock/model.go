@@ -13,13 +13,23 @@ const (
 )
 
 // UaNodeSpec 一条 ua_mocker 节点定义(对齐 app_config.UaNodeSpec)。
+//
+// 兼容旧字段(Name/Type/Count/Change/Writable/Default);新增可选字段
+// (Mode/SequenceStart/SequenceStep/FailRead/StatusCode/TimestampOffsetMs)用于
+// plan.md 10.2 的扩展,旧 YAML 不带这些字段时使用零值即可。
 type UaNodeSpec struct {
-	Name     string
-	Type     string
-	Count    int
-	Change   bool
-	Writable bool
-	Default  any // Change=false 时必填
+	Name                string
+	Type                string
+	Count               int
+	Change              bool
+	Writable            bool
+	Default             any // Change=false 时必填
+	Mode                string  // static|increment|toggle|sequence(空=按 Change 推断)
+	SequenceStart       float64 // sequence/increment 起始值
+	SequenceStep        float64 // sequence/increment 步长
+	FailRead            bool    // 单节点异常(探索)
+	StatusCode          int     // asyncua 可选 status code
+	TimestampOffsetMs   int     // server/source timestamp 偏移
 }
 
 // MockSpec 一套 mock 方案(对齐 mock_manager.MockSpec)。

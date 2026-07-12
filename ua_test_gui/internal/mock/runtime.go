@@ -24,6 +24,9 @@ type ConfigProvider interface {
 	MainPathExists() bool    // 探测到的 main.py 是否存在
 	ExePathExists() bool     // 探测到的 exe 是否存在
 	SetPaths(repo, python, exe string)
+	// 性能参数持久化(plan.md 10.5 #5)
+	LoadPerf() PerfParams
+	SavePerf(PerfParams) error
 }
 
 // Notifier 状态事件通知接口(由 app 层实现,转 Wails EventsEmit)。

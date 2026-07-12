@@ -34,6 +34,7 @@ func main() {
 			c.Provision,
 			c.Verify,
 			c.History,
+			c.Automation,
 		},
 	})
 

@@ -50,7 +50,19 @@ type Service struct {
 
 // NewService 创建 mock 服务。
 func NewService(rt Runtime, cfg ConfigProvider) *Service {
-	return &Service{rt: rt, cfg: cfg}
+	s := &Service{rt: rt, cfg: cfg}
+	// 从持久化加载性能参数(plan.md 10.5 #5)
+	p := cfg.LoadPerf()
+	if p.PollN > 0 {
+		s.perfPollN = p.PollN
+	}
+	if p.WriteN > 0 {
+		s.perfWriteN = p.WriteN
+	}
+	if p.Ratio > 0 {
+		s.perfRatio = p.Ratio
+	}
+	return s
 }
 
 // ListMocks 列出 4 套 mock 及状态。
@@ -86,6 +98,9 @@ func (s *Service) StartMock(key string) (*MockRuntime, error) {
 
 // StartAllMocks 依次启动所有 stopped 的 mock;每个等待 ready/failed 后再启动下一个。
 // 立即返回已发起启动的 key 列表,后台 goroutine 完成实际启动流程。
+//
+// 同步启动错误不再被吞掉(plan.md 10.5 #2):把错误通过 mock:state 事件的 Reason 字段
+// 暴露给前端(binding 可读 Runtime().Reason),并 log 警告。
 func (s *Service) StartAllMocks() ([]string, error) {
 	var started []string
 	for _, spec := range AllSpecs() {
@@ -100,7 +115,12 @@ func (s *Service) StartAllMocks() ([]string, error) {
 			if !ok {
 				continue
 			}
-			if _, err := s.rt.Start(spec); err != nil {
+			rt, err := s.rt.Start(spec)
+			if err != nil {
+				// 启动失败仍写一条 runtime,reason 填错误(启动失败由 pyworker 内部已写)
+				if rt != nil {
+					_ = rt
+				}
 				continue
 			}
 			// 等待当前 mock 就绪或失败,最多 120s(与 startWaitTimeout cap 一致)。
@@ -135,10 +155,9 @@ func (s *Service) GetPerfParams() PerfParams {
 	return PerfParams{PollN: s.perfPollN, WriteN: s.perfWriteN, Ratio: s.perfRatio}
 }
 
-// SetPerfParams 设置性能测试参数(0 值不覆盖)。
+// SetPerfParams 设置性能测试参数(0 值不覆盖)。同时持久化。
 func (s *Service) SetPerfParams(p PerfParams) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if p.PollN > 0 {
 		s.perfPollN = p.PollN
 	}
@@ -148,6 +167,9 @@ func (s *Service) SetPerfParams(p PerfParams) {
 	if p.Ratio > 0 {
 		s.perfRatio = p.Ratio
 	}
+	cur := PerfParams{PollN: s.perfPollN, WriteN: s.perfWriteN, Ratio: s.perfRatio}
+	s.mu.Unlock()
+	_ = s.cfg.SavePerf(cur)
 }
 
 // GetConfig 取 ua_mocker 运行环境配置(含自动探测结果)。

@@ -178,6 +178,9 @@ func (m *MockManager) Start(spec mock.MockSpec) (*mock.MockRuntime, error) {
 }
 
 // waitReadyAsync 后台完成就绪探针并通知。
+//
+// 启动失败时保留 entry(plan.md 10.5 #1):保留 status="failed" + Reason + log/config 路径,
+// 前端可在 list summary 中查看失败原因与日志。
 func (m *MockManager) waitReadyAsync(spec mock.MockSpec, entry *runtimeEntry, pythonExe, mainPath string, useExe bool) {
 	logPath := entry.LogPath
 	if err := m.waitReady(spec, entry, startWaitTimeout(spec)); err != nil {
@@ -189,8 +192,6 @@ func (m *MockManager) waitReadyAsync(spec mock.MockSpec, entry *runtimeEntry, py
 		}
 		tail := readLogTail(logPath, 1500)
 		m.killEntry(entry)
-		m.mu.Lock()
-		delete(m.run, spec.Key)
 		entry.mu.Lock()
 		entry.Status = "failed"
 		entry.Reason = fmt.Sprintf("启动失败:%v", err)
@@ -198,7 +199,6 @@ func (m *MockManager) waitReadyAsync(spec mock.MockSpec, entry *runtimeEntry, py
 			entry.Reason += "\nserver.log:\n" + tail
 		}
 		entry.mu.Unlock()
-		m.mu.Unlock()
 		m.notify(entry)
 		return
 	}

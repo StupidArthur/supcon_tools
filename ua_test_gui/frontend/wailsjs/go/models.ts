@@ -870,17 +870,17 @@ export namespace verify {
 	        this.msg = source["msg"];
 	    }
 	}
-	export class VerifyRunResult {
+export class VerifyRunResult {
 	    runId: number;
 	    total: number;
 	    passed: number;
 	    failed: number;
 	    results: VerifyTagResult[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new VerifyRunResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.runId = source["runId"];
@@ -889,7 +889,7 @@ export namespace verify {
 	        this.failed = source["failed"];
 	        this.results = this.convertValues(source["results"], VerifyTagResult);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -907,6 +907,480 @@ export namespace verify {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace automation {
+
+	export class TestRun {
+	    id: number;
+	    runKey: string;
+	    status: string;
+	    createdAt: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    selectedCases: string[];
+	    total: number;
+	    progress: number;
+	    passed: number;
+	    failed: number;
+	    errors: number;
+	    skipped: number;
+	    blocked: number;
+	    observed: number;
+	    measured: number;
+	    cleanupFailed: number;
+	    currentCaseId: string;
+	    currentStep: string;
+	    pid: number;
+	    exitCode?: number;
+	    runDir: string;
+	    reportPath: string;
+	    logPath: string;
+	    errorMessage: string;
+	    note: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TestRun(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.runKey = source["runKey"];
+	        this.status = source["status"];
+	        this.createdAt = source["createdAt"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.selectedCases = source["selectedCases"];
+	        this.total = source["total"];
+	        this.progress = source["progress"];
+	        this.passed = source["passed"];
+	        this.failed = source["failed"];
+	        this.errors = source["errors"];
+	        this.skipped = source["skipped"];
+	        this.blocked = source["blocked"];
+	        this.observed = source["observed"];
+	        this.measured = source["measured"];
+	        this.cleanupFailed = source["cleanupFailed"];
+	        this.currentCaseId = source["currentCaseId"];
+	        this.currentStep = source["currentStep"];
+	        this.pid = source["pid"];
+	        this.exitCode = source["exitCode"];
+	        this.runDir = source["runDir"];
+	        this.reportPath = source["reportPath"];
+	        this.logPath = source["logPath"];
+	        this.errorMessage = source["errorMessage"];
+	        this.note = source["note"];
+	    }
+	}
+
+	export class CaseResult {
+	    id: number;
+	    runId: number;
+	    caseId: string;
+	    title: string;
+	    status: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    durationMs: number;
+	    summary: string;
+	    cleanupStatus: string;
+	    cleanupMessage: string;
+
+	    static createFrom(source: any = {}) {
+	        return new CaseResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.runId = source["runId"];
+	        this.caseId = source["caseId"];
+	        this.title = source["title"];
+	        this.status = source["status"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.durationMs = source["durationMs"];
+	        this.summary = source["summary"];
+	        this.cleanupStatus = source["cleanupStatus"];
+	        this.cleanupMessage = source["cleanupMessage"];
+	    }
+	}
+
+	export class StepResult {
+	    id: number;
+	    runId: number;
+	    caseId: string;
+	    stepId: string;
+	    title: string;
+	    status: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    durationMs: number;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new StepResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.runId = source["runId"];
+	        this.caseId = source["caseId"];
+	        this.stepId = source["stepId"];
+	        this.title = source["title"];
+	        this.status = source["status"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.durationMs = source["durationMs"];
+	        this.message = source["message"];
+	    }
+	}
+
+	export class Metric {
+	    id: number;
+	    runId: number;
+	    caseId: string;
+	    name: string;
+	    value?: number;
+	    textValue: string;
+	    unit: string;
+	    labels: {[key: string]: string};
+
+	    static createFrom(source: any = {}) {
+	        return new Metric(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.runId = source["runId"];
+	        this.caseId = source["caseId"];
+	        this.name = source["name"];
+	        this.value = source["value"];
+	        this.textValue = source["textValue"];
+	        this.unit = source["unit"];
+	        this.labels = source["labels"];
+	    }
+	}
+
+	export class Evidence {
+	    id: number;
+	    runId: number;
+	    caseId: string;
+	    kind: string;
+	    path: string;
+	    title: string;
+	    metadata: {[key: string]: any};
+
+	    static createFrom(source: any = {}) {
+	        return new Evidence(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.runId = source["runId"];
+	        this.caseId = source["caseId"];
+	        this.kind = source["kind"];
+	        this.path = source["path"];
+	        this.title = source["title"];
+	        this.metadata = source["metadata"];
+	    }
+	}
+
+	export class TestEvent {
+	    id: number;
+	    runId: number;
+	    eventType: string;
+	    caseId: string;
+	    payload: any;
+	    ts: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TestEvent(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.runId = source["runId"];
+	        this.eventType = source["eventType"];
+	        this.caseId = source["caseId"];
+	        this.payload = source["payload"];
+	        this.ts = source["ts"];
+	    }
+	}
+
+	export class CaseStep {
+	    stepId: string;
+	    title: string;
+
+	    static createFrom(source: any = {}) {
+	        return new CaseStep(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stepId = source["stepId"];
+	        this.title = source["title"];
+	    }
+	}
+
+	export class Case {
+	    id: string;
+	    title: string;
+	    kind: string;
+	    implemented: boolean;
+	    tags: string[];
+	    timeoutSec: number;
+	    destructive: boolean;
+	    exclusiveResources: string[];
+	    docPath: string;
+	    description: string;
+	    steps: CaseStep[];
+	    assertions: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Case(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.kind = source["kind"];
+	        this.implemented = source["implemented"];
+	        this.tags = source["tags"];
+	        this.timeoutSec = source["timeoutSec"];
+	        this.destructive = source["destructive"];
+	        this.exclusiveResources = source["exclusiveResources"];
+	        this.docPath = source["docPath"];
+	        this.description = source["description"];
+	        this.steps = this.convertValues(source["steps"], CaseStep);
+	        this.assertions = source["assertions"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class Chapter {
+	    id: string;
+	    title: string;
+	    cases: Case[];
+
+	    static createFrom(source: any = {}) {
+	        return new Chapter(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.cases = this.convertValues(source["cases"], Case);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class Catalog {
+	    version: number;
+	    generatedAt: string;
+	    chapters: Chapter[];
+
+	    static createFrom(source: any = {}) {
+	        return new Catalog(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.generatedAt = source["generatedAt"];
+	        this.chapters = this.convertValues(source["chapters"], Chapter);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class StartRunRequest {
+	    selectedCaseIds: string[];
+	    note: string;
+	    allowPerformance: boolean;
+	    runKey: string;
+
+	    static createFrom(source: any = {}) {
+	        return new StartRunRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.selectedCaseIds = source["selectedCaseIds"];
+	        this.note = source["note"];
+	        this.allowPerformance = source["allowPerformance"];
+	        this.runKey = source["runKey"];
+	    }
+	}
+
+	export class ListRunsRequest {
+	    limit: number;
+	    status: string;
+	    keyword: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ListRunsRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.limit = source["limit"];
+	        this.status = source["status"];
+	        this.keyword = source["keyword"];
+	    }
+	}
+
+	export class RunDetail {
+	    run: TestRun;
+	    cases: CaseResult[];
+	    events: TestEvent[];
+	    metrics: Metric[];
+	    evidence: Evidence[];
+
+	    static createFrom(source: any = {}) {
+	        return new RunDetail(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.run = this.convertValues(source["run"], TestRun);
+	        this.cases = this.convertValues(source["cases"], CaseResult);
+	        this.events = this.convertValues(source["events"], TestEvent);
+	        this.metrics = this.convertValues(source["metrics"], Metric);
+	        this.evidence = this.convertValues(source["evidence"], Evidence);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class GetEventsRequest {
+	    runId: number;
+	    afterId: number;
+	    limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new GetEventsRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.runId = source["runId"];
+	        this.afterId = source["afterId"];
+	        this.limit = source["limit"];
+	    }
+	}
+
+	export class ReadLogRequest {
+	    runId: number;
+	    offset: number;
+	    limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ReadLogRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.runId = source["runId"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	    }
+	}
+
+	export class LogChunk {
+	    runId: number;
+	    offset: number;
+	    next: number;
+	    eof: boolean;
+	    content: string;
+
+	    static createFrom(source: any = {}) {
+	        return new LogChunk(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.runId = source["runId"];
+	        this.offset = source["offset"];
+	        this.next = source["next"];
+	        this.eof = source["eof"];
+	        this.content = source["content"];
+	    }
 	}
 
 }
