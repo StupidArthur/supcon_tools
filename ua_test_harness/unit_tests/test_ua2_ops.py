@@ -141,8 +141,8 @@ def test_cleanup_case_tag_deletes_and_pops(monkeypatch):
         return {}
 
     monkeypatch.setattr(dh, "delete_tags_physical", fake_del_phys)
-    # find_tag_by_name -> list_tags empty -> wait_tag_absent returns True (no sleep)
-    monkeypatch.setattr(dh, "list_tags", lambda api, **kw: {"records": []})
+    # find_tag_by_name -> query_tags_with_quality empty -> wait_tag_absent returns True (no sleep)
+    monkeypatch.setattr(dh, "query_tags_with_quality", lambda api, **kw: {"tagInfoList": {"records": []}})
     _patch_get_api(monkeypatch)
 
     ctx = _ctx()
@@ -196,8 +196,8 @@ def test_create_case_tag_no_predelete(monkeypatch):
 
     monkeypatch.setattr(dh, "delete_tags_physical", fake_del_phys)
     # simulate a same-name tag already existing; create_case_tag must not consult/delete it
-    monkeypatch.setattr(dh, "list_tags", lambda api, **kw: {
-        "records": [{"id": 999, "tagName": "preexisting"}]
+    monkeypatch.setattr(dh, "query_tags_with_quality", lambda api, **kw: {
+        "tagInfoList": {"records": [{"id": 999, "tagName": "preexisting"}]}
     })
     _patch_get_api(monkeypatch)
 
@@ -214,15 +214,16 @@ def test_create_case_tag_no_predelete(monkeypatch):
 def test_all_active_rows_paginates(monkeypatch):
     pages: list[int] = []
 
-    def fake_list_tags(api, page=1, page_size=500, sort="-createTime", data=None):
+    def fake_qtq(api, ds_id=None, group_id="0", tag_name="", tag_base_name="",
+                 page=1, page_size=100, sort="-createTime"):
         pages.append(page)
         if page == 1:
-            return {"records": [{"id": i} for i in range(500)]}
+            return {"tagInfoList": {"records": [{"id": i} for i in range(500)]}}
         if page == 2:
-            return {"records": [{"id": i} for i in range(500, 1000)]}
-        return {"records": []}
+            return {"tagInfoList": {"records": [{"id": i} for i in range(500, 1000)]}}
+        return {"tagInfoList": {"records": []}}
 
-    monkeypatch.setattr(dh, "list_tags", fake_list_tags)
+    monkeypatch.setattr(dh, "query_tags_with_quality", fake_qtq)
     _patch_get_api(monkeypatch)
 
     ctx = _ctx()

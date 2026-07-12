@@ -40,7 +40,7 @@ def _install_fakes(monkeypatch, *, active_pages=None, recycle_pages=None, ds_row
     import tpt_api.datahub as dh
 
     calls = {
-        "list_tags": [],
+        "query_tags_with_quality": [],
         "list_recycle_tags": [],
         "list_ds_info": [],
         "delete_tags_physical": [],
@@ -53,10 +53,14 @@ def _install_fakes(monkeypatch, *, active_pages=None, recycle_pages=None, ds_row
     recycle_q = list(recycle_pages or [])
     ds_q = list(ds_rows_seq or [])
 
-    def fake_list_tags(api, page=1, page_size=500, sort="-createTime", data=None):
-        calls["list_tags"].append({"page": page, "page_size": page_size, "data": data})
+    def fake_qtq(api, ds_id=None, group_id="0", tag_name="", tag_base_name="",
+                 page=1, page_size=100, sort="-createTime"):
+        calls["query_tags_with_quality"].append({
+            "page": page, "page_size": page_size, "ds_id": ds_id,
+            "group_id": group_id, "tag_name": tag_name,
+        })
         recs = active_q.pop(0) if active_q else []
-        return {"records": recs, "total": len(recs)}
+        return {"tagInfoList": {"records": recs, "total": len(recs)}}
 
     def fake_list_recycle_tags(api, page=1, page_size=100, group_id="1", tag_type=1, sort="-createTime"):
         calls["list_recycle_tags"].append({"page": page, "page_size": page_size, "group_id": group_id})
@@ -80,7 +84,7 @@ def _install_fakes(monkeypatch, *, active_pages=None, recycle_pages=None, ds_row
         calls["delete_ds_info"].append(list(ids))
         return {}
 
-    monkeypatch.setattr(dh, "list_tags", fake_list_tags)
+    monkeypatch.setattr(dh, "query_tags_with_quality", fake_qtq)
     monkeypatch.setattr(dh, "list_recycle_tags", fake_list_recycle_tags)
     monkeypatch.setattr(dh, "list_ds_info", fake_list_ds_info)
     monkeypatch.setattr(dh, "delete_tags_physical", fake_delete_tags_physical)
@@ -147,7 +151,7 @@ def test_cleanup_refuses_shared_prefix(mod, monkeypatch, tmp_path):
     assert calls["delete_ds_info"] == []
     assert calls["change_ds_state"] == []
     # Refused before login / collect, so no API queries happened at all.
-    assert calls["list_tags"] == []
+    assert calls["query_tags_with_quality"] == []
     assert calls["list_ds_info"] == []
     assert calls["AlgAPI_init"] == []
 
@@ -193,7 +197,7 @@ def test_cleanup_paginates_active_tags(mod, monkeypatch, tmp_path):
     assert len(deleted) == 1001
     assert set(deleted) == set(range(1, 1002))
     # pagination used page_size 500
-    assert all(c["page_size"] == 500 for c in calls["list_tags"])
+    assert all(c["page_size"] == 500 for c in calls["query_tags_with_quality"])
     # recheck exhausted the queue -> clean
     assert rc == 0
     assert log["residualActive"] == 0

@@ -55,14 +55,19 @@ def _find_ds(api, *, ds_id=None, ds_name=None):
 
 
 def _active_tags_by_ds(api, ds_id: int) -> list[dict]:
-    """Server-side dsId filter (paginated)."""
-    from tpt_api.datahub import list_tags
+    """Active view by dsId (paginated). Uses query_tags_with_quality (groupId="0")
+    instead of list_tags so soft-deleted records are excluded (see bugs.md #1)."""
+    from tpt_api.datahub import query_tags_with_quality
 
     out: list[dict] = []
     page = 1
     while True:
-        res = list_tags(api, page=page, page_size=500, data={"dsId": ds_id})
-        recs = (res or {}).get("records") or []
+        res = query_tags_with_quality(
+            api, ds_id=ds_id, group_id="0",
+            tag_name="", tag_base_name="",
+            page=page, page_size=500,
+        )
+        recs = ((res or {}).get("tagInfoList") or {}).get("records") or []
         if not recs:
             break
         out.extend(recs)

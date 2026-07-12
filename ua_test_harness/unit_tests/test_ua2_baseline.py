@@ -66,11 +66,12 @@ def _patch_datahub(monkeypatch, *, ds_rows=None, add_raises=None, recycle_rows=N
         return {}
     monkeypatch.setattr(dh, "delete_ds_info", fake_delete)
 
-    def fake_list_tags(api, page=1, page_size=10, sort="-createTime", data=None):
-        if data and "dsId" in data and tag_rows_by_ds is not None:
-            return {"records": tag_rows_by_ds.get(int(data["dsId"]), []), "total": 0}
-        return {"records": [], "total": 0}
-    monkeypatch.setattr(dh, "list_tags", fake_list_tags)
+    def fake_qtq(api, ds_id=None, group_id="0", tag_name="", tag_base_name="",
+                 page=1, page_size=100, sort="-createTime"):
+        if ds_id is not None and tag_rows_by_ds is not None:
+            return {"tagInfoList": {"records": tag_rows_by_ds.get(int(ds_id), []), "total": 0}}
+        return {"tagInfoList": {"records": [], "total": 0}}
+    monkeypatch.setattr(dh, "query_tags_with_quality", fake_qtq)
 
     def fake_list_recycle(api, page=1, page_size=100, group_id="1", tag_type=1, sort="-createTime"):
         return {"tagInfoList": {"records": recycle_rows or [], "total": len(recycle_rows or [])}}

@@ -109,17 +109,28 @@ def _ensure_one(ctx, name: str, endpoint: str, *, must_be_empty: bool) -> dict[s
 
 
 def _assert_no_tags(ctx, ds_id: int, name: str) -> None:
-    from tpt_api.datahub import list_tags, list_recycle_tags
-    api = _api(ctx)
-    # active tags by dsId (server-side filter)
-    active = (list_tags(api, page=1, page_size=500, data={"dsId": ds_id}) or {}).get("records") or []
+    """Empty DS must have zero active + zero recycle tags (by dsId).
+
+    Uses `query_tags_with_quality (groupId="0")` for the active view so that
+    soft-deleted records (which list_tags still returns) are correctly excluded.
+    See bugs.md #1 for context.
+    """
+    from tpt_api.datahub import query_tags_with_quality, list_recycle_tags
+
+    # active view (groupId="0"): server-side filter by dsId, fuzzy by tagName (empty = all)
+    qtq = query_tags_with_quality(_api(ctx), ds_id=ds_id, group_id="0",
+                                tag_name="", tag_base_name="",
+                                page=1, page_size=500)
+    active = ((qtq or {}).get("tagInfoList") or {}).get("records") or []
     if active:
         raise BaselineError(f"shared empty datasource {name!r} has {len(active)} active tag(s); BLOCKED")
-    # recycle: paginate (no server dsId filter), then client-filter by dsId
+
+    # recycle view: paginate groupId="1" via list_recycle_tags, filter by dsId
+    # (list_recycle_tags has no server dsId filter; client-filter here).
     all_recycle: list[dict] = []
     page = 1
     while True:
-        raw = list_recycle_tags(api, page=page, page_size=200)
+        raw = list_recycle_tags(_api(ctx), page=page, page_size=200)
         info = (raw or {}).get("tagInfoList") or {}
         recs = info.get("records") or []
         if not recs:

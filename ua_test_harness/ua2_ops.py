@@ -111,10 +111,49 @@ def create_tag_raw(ctx, name: str, ds_id: int, *, data_type: str = "INT",
     return {"id": int(result.get("id") or 0), "name": name, "raw": result}
 
 
+def _qtq_records(ctx, *, name: str = "", base_name: str = "", ds_id: int | None = None,
+                group_id: str = "0", page: int = 1, page_size: int = 500) -> list[dict[str, Any]]:
+    """Single page of `query_tags_with_quality (groupId=0/1)` flattened to records.
+
+    groupId="0" → active view (excludes soft-deleted);
+    groupId="1" → recycle bin view.
+    See bugs.md Bug #1 for why we prefer this over `list_tags` for active queries.
+    """
+    from tpt_api.datahub import query_tags_with_quality
+    res = query_tags_with_quality(
+        _api(ctx),
+        ds_id=ds_id,
+        group_id=group_id,
+        tag_name=name,
+        tag_base_name=base_name,
+        page=page,
+        page_size=page_size,
+    )
+    return ((res or {}).get("tagInfoList") or {}).get("records") or []
+
+
+def _qtq_all_pages(ctx, *, name: str = "", base_name: str = "", ds_id: int | None = None,
+                  group_id: str = "0", page_size: int = 500) -> list[dict[str, Any]]:
+    """Paginate `query_tags_with_quality` until page returns < page_size records."""
+    out: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        recs = _qtq_records(
+            ctx, name=name, base_name=base_name, ds_id=ds_id,
+            group_id=group_id, page=page, page_size=page_size,
+        )
+        if not recs:
+            break
+        out.extend(recs)
+        if len(recs) < page_size:
+            break
+        page += 1
+    return out
+
+
 def find_tag_by_name(ctx, name: str) -> dict[str, Any] | None:
-    from tpt_api.datahub import list_tags
-    page = list_tags(_api(ctx), page=1, page_size=500, data={"tagName": name})
-    for r in (page or {}).get("records") or []:
+    """Active view lookup by exact tagName (post-filter for fuzzy match)."""
+    for r in _qtq_records(ctx, name=name):
         if str(r.get("tagName") or "") == name:
             return r
     return None
@@ -188,27 +227,31 @@ def cleanup_case_tag(ctx, cc, tag_id: int, tag_name: str) -> None:
 
 
 # ---------- query helpers ----------
+# These all use `query_tags_with_quality` (groupId="0") instead of `list_tags`,
+# because `list_tags` does NOT filter out soft-deleted records (see bugs.md #1).
 
 def active_rows(ctx, **filters) -> list[dict[str, Any]]:
-    from tpt_api.datahub import list_tags
-    return (list_tags(_api(ctx), page=1, page_size=500, data=filters or {}).get("records")) or []
+    """Active view rows (groupId="0"), post-filtered to honor arbitrary filters.
+
+    Supports the same **filters as before: tagName, dsId, tagBaseName, tagType.
+    For tagName we post-filter to keep exact-match behavior (QTQ does fuzzy).
+    """
+    name = filters.get("tagName") or ""
+    base = filters.get("tagBaseName") or ""
+    ds_id = filters.get("dsId")
+    recs = _qtq_records(ctx, name=name, base_name=base, ds_id=ds_id, group_id="0")
+    # For exact tagName match: when filter explicitly says tagName=X, keep only X.
+    if name:
+        recs = [r for r in recs if str(r.get("tagName") or "") == str(name)]
+    return recs
 
 
 def all_active_rows(ctx, **filters) -> list[dict[str, Any]]:
-    from tpt_api.datahub import list_tags
-    api = _api(ctx)
-    out: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        res = list_tags(api, page=page, page_size=500, data=filters or {})
-        recs = (res or {}).get("records") or []
-        if not recs:
-            break
-        out.extend(recs)
-        if len(recs) < 500:
-            break
-        page += 1
-    return out
+    """Paginated active view (groupId="0"). Used by 016 for tagBaseName scan."""
+    name = filters.get("tagName") or ""
+    base = filters.get("tagBaseName") or ""
+    ds_id = filters.get("dsId")
+    return _qtq_all_pages(ctx, name=name, base_name=base, ds_id=ds_id, group_id="0")
 
 
 def all_recycle_rows(ctx) -> list[dict[str, Any]]:

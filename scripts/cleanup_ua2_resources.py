@@ -31,13 +31,25 @@ def _login(ctx: dict[str, str]):
 
 
 def _collect_tag_ids(api, name_prefix: str) -> tuple[list[int], list[int]]:
-    from tpt_api.datahub import list_tags, list_recycle_tags
+    """Collect case-private tag ids in active + recycle groups via
+    `query_tags_with_quality` (groupId="0" for active, groupId="1" for recycle).
+
+    Previously used `list_tags` which incorrectly returned soft-deleted records
+    under "active" (see bugs.md #1). Switching to QTQ keeps the same end-result
+    for cleanup (physical-deletes every match in both groups) but avoids the
+    list_tags/active ambiguity.
+    """
+    from tpt_api.datahub import query_tags_with_quality, list_recycle_tags
 
     active_ids: list[int] = []
     page = 1
     while True:
-        res = list_tags(api, page=page, page_size=500, data={"tagName": name_prefix})
-        recs = (res or {}).get("records") or []
+        res = query_tags_with_quality(
+            api, ds_id=None, group_id="0",
+            tag_name=name_prefix, tag_base_name="",
+            page=page, page_size=500,
+        )
+        recs = ((res or {}).get("tagInfoList") or {}).get("records") or []
         if not recs:
             break
         active_ids.extend(

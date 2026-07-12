@@ -50,12 +50,14 @@ def _install_fakes(monkeypatch, *,
     `f(page) -> list[dict]` (stateful, allows multiple consumers to see same
     data — needed when the script queries the same endpoint twice, e.g.
     active tags for the initial report AND for the clean-delete check).
+    `list_tags_pages` here drives `query_tags_with_quality` (the script was
+    refactored to use QTQ groupId="0" instead of list_tags; see bugs.md #1).
     """
     import tpt_api.client as client
     import tpt_api.datahub as dh
 
     calls = {
-        "list_tags": [],
+        "query_tags_with_quality": [],
         "list_recycle_tags": [],
         "list_ds_info": [],
         "delete_tags_physical": [],
@@ -68,14 +70,18 @@ def _install_fakes(monkeypatch, *,
     lr_q = list_recycle_pages
     ds_q = list_ds_info_pages
 
-    def fake_list_tags(api, page=1, page_size=500, sort="-createTime", data=None):
-        calls["list_tags"].append({"page": page, "page_size": page_size, "data": data})
+    def fake_qtq(api, ds_id=None, group_id="0", tag_name="", tag_base_name="",
+                 page=1, page_size=100, sort="-createTime"):
+        calls["query_tags_with_quality"].append({
+            "page": page, "page_size": page_size, "ds_id": ds_id,
+            "group_id": group_id, "tag_name": tag_name,
+        })
         if callable(lt_q):
             recs = lt_q(page)
         else:
             lt_q_list = lt_q if isinstance(lt_q, list) else []
             recs = lt_q_list.pop(0) if lt_q_list else []
-        return {"records": recs, "total": len(recs)}
+        return {"tagInfoList": {"records": recs, "total": len(recs)}}
 
     def fake_list_recycle_tags(api, page=1, page_size=200, group_id="1", tag_type=1, sort="-createTime"):
         calls["list_recycle_tags"].append({"page": page, "page_size": page_size, "group_id": group_id})
@@ -95,7 +101,7 @@ def _install_fakes(monkeypatch, *,
             recs = ds_q_list.pop(0) if ds_q_list else []
         return {"records": recs, "total": len(recs)}
 
-    monkeypatch.setattr(dh, "list_tags", fake_list_tags)
+    monkeypatch.setattr(dh, "query_tags_with_quality", fake_qtq)
     monkeypatch.setattr(dh, "list_recycle_tags", fake_list_recycle_tags)
     monkeypatch.setattr(dh, "list_ds_info", fake_list_ds_info)
     monkeypatch.setattr(dh, "change_ds_state", lambda api, ds_id, enabled: calls["change_ds_state"].append((ds_id, enabled)) or {})
@@ -223,7 +229,7 @@ def test_diagnose_lists_active_by_ds_id(diagnose_mod, monkeypatch, tmp_path):
     assert log["activeTagCount"] == 2
     assert len(log["activeTags"]) == 2
     # dsId filter was pushed to API
-    assert any(c["data"] == {"dsId": 100} for c in calls["list_tags"])
+    assert any(c["ds_id"] == 100 and c["group_id"] == "0" for c in calls["query_tags_with_quality"])
 
 
 def test_diagnose_lists_recycle_filtered_by_ds_id(diagnose_mod, monkeypatch, tmp_path):
