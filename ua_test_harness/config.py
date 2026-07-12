@@ -6,6 +6,7 @@ Python runner 读取后驱动执行(plan.md 5.2)。
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -69,11 +70,11 @@ class RunConfig:
         d = json.loads(text)
         subj = d.get("subject") or {}
         subj_cfg = SubjectConfig(
-            base_url=subj.get("baseUrl", ""),
-            tenant_id=subj.get("tenantId", ""),
-            username=subj.get("username", ""),
-            password=subj.get("password", ""),
-            token=subj.get("token", ""),
+            base_url=subj.get("baseUrl") or os.getenv("DATAHUB_BASE_URL", ""),
+            tenant_id=subj.get("tenantId") or os.getenv("DATAHUB_TENANT_ID", ""),
+            username=subj.get("username") or os.getenv("DATAHUB_USER", ""),
+            password=subj.get("password") or os.getenv("DATAHUB_PASSWORD", ""),
+            token=subj.get("token") or os.getenv("DATAHUB_TOKEN", ""),
         )
         m = d.get("mock") or {}
         ep_raw = m.get("endpoints") or {}
