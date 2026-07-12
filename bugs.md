@@ -5,6 +5,14 @@
 
 ---
 
+## 决策(2026-07-12,用户确认)
+
+- **Bug #1 = A**:接受 QTQ 切换。`list_tags` 是"主表全量"端点(含软删记录),不是 active 视图;`query_tags_with_quality(groupId="0")` 是平台自己的 active 视图。测试原本用错端点,切换合理。commit `9e826e6` **已接受**。注:尚未在干净真实跑验证(第三/四轮 baseline 因 TPT-mock 网络不通 BLOCKED,环境问题不绕路),待网络恢复后复跑 UA-2-4-001 确认转 PASS。
+- **Bug #2 = A**:产品 bug。平台 `add_tag(tag_name="")` 接受空名并生成 `tagName="2_"` 位号,与 doc "空名必拒" 不符。**保留 UA-2-1-019 为 FAIL**,不改断言,作为产品缺陷上报。
+- **019 handler 泄漏(测试代码缺陷,已修)**:`empty_name_rejected` 原 `check_true` 抛 AssertFail 后清理跑不到 -> 泄漏平台偷偷创建的位号。已加 `try/finally` 兜底清理(不改 FAIL 结局,仅止泄漏)。
+
+---
+
 ## Bug #1: `tpt_api.datahub.list_tags` 不区分 active/recycle group,会把软删记录也返回
 
 **发现时间**: Part 2 K 跑第二轮(2026-07-12 22:23, 输出 `automation_ua2_20260712_222308`)
@@ -78,7 +86,7 @@
 - 顺手记一个 handler 设计缺陷(非阻塞):`empty_name_rejected` 缺 `finally` 块导致 FAIL 路径泄漏位号;017/021/022 都有 `finally cleanup_case_tag(...)` 兜底。019 也可加 `finally: if err_id is not None: physical_delete_tag(ctx, err_id)` 兜底(但只能止泄漏,不会改 FAIL 结局)。
 
 ### 状态
-**未落盘**(等主 Agent / 用户决策;若属产品 bug,handler 修复要等平台同步)
+**决策 A(产品 bug)**:保留 UA-2-1-019 为 FAIL,不改断言,作为产品缺陷上报。019 handler 泄漏已修(见上方"决策")。
 
 ---
 

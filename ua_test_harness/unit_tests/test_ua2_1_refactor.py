@@ -307,3 +307,21 @@ def test_no_prepare_datasource(monkeypatch):
     rt.name_length_128(_ctx(), _cc("UA-2-1-022"))
 
     assert prep_calls == [], f"prepare_datasource was called: {prep_calls}"
+
+
+# --- 7. 019 leak fix: platform accepts empty name -> FAIL, but no tag leaks ---
+
+def test_019_leak_cleaned_up_when_platform_accepts_empty_name(monkeypatch):
+    """Bug #2 decision A: platform accepts empty name -> case FAIL (AssertFail),
+    but the silently-created tag MUST be cleaned up by the finally block (no leak)."""
+    ctx = _ctx()
+    cc = _cc("UA-2-1-019")
+    calls = _Calls()
+    # platform ACCEPTS empty name (add_tag_raises_for=None -> returns id 999, no raise)
+    _patch_env(monkeypatch, calls)
+
+    with pytest.raises(AssertFail):
+        rt.empty_name_rejected(ctx, cc)
+
+    # The leaked tag (id 999) was physically deleted by the finally cleanup.
+    assert 999 in calls.physical_delete_tag, calls.physical_delete_tag

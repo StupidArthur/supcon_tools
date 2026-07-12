@@ -111,25 +111,26 @@ def empty_name_rejected(ctx, cc):
     err_id = None
     failed = False
     try:
-        result = _add_tag_by_name(ctx, ds_id, "")
-        maybe = result.get("id") or result.get("tagId")
-        if maybe:
-            err_id = int(maybe)
-    except Exception:
-        failed = True
-
-    check_true("empty_name_rejected", failed)
-    check_eq("no_empty_record", 0, len(exact(active_rows(ctx, tagName=""), "tagName", "")))
-
-    if err_id is not None:
-        # Defensive: a server that silently accepted the empty name leaked an id.
-        # Clean it up and return FAIL so the product misbehaviour is visible.
         try:
-            physical_delete_tag(ctx, err_id)
+            result = _add_tag_by_name(ctx, ds_id, "")
+            maybe = result.get("id") or result.get("tagId")
+            if maybe:
+                err_id = int(maybe)
         except Exception:
-            pass
-        return CaseStatus.FAIL
-    return CaseStatus.PASS
+            failed = True
+
+        check_true("empty_name_rejected", failed)
+        check_eq("no_empty_record", 0, len(exact(active_rows(ctx, tagName=""), "tagName", "")))
+        return CaseStatus.PASS
+    finally:
+        # Even when check_true raises AssertFail (product accepted empty name ->
+        # FAIL; Bug #2 product defect, kept as FAIL per decision), clean up any
+        # tag the server silently created so nothing leaks. Does not change FAIL.
+        if err_id is not None:
+            try:
+                physical_delete_tag(ctx, err_id)
+            except Exception:
+                pass
 
 
 def _verify_length(ctx, cc, target_len: int):
