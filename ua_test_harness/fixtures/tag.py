@@ -17,6 +17,9 @@ from ua_test_harness.context import RunContext
 from ua_test_harness.resources import ResourceRegistry
 
 
+_TRANSIENT_RT_ERRORS = ("Tag Dose Not Exist", "Tag Does Not Exist")
+
+
 def create_tag(
     ctx: RunContext,
     name: str,
@@ -66,7 +69,6 @@ def create_tag(
         try:
             delete_tags_physical(api, [int(tag_id)])
         except Exception as exc:
-            # 已被 Case 主体物理删除时视为幂等成功；仍可查询到时才报清理失败。
             remaining = list_tags(api, page=1, page_size=100, data={"tagName": name}).get("records") or []
             if any(r.get("tagName") == name for r in remaining):
                 raise RuntimeError(f"delete tag {name} failed: {exc}") from exc
@@ -127,7 +129,13 @@ def write_tag(ctx: RunContext, name: str, value) -> None:
 
 def read_rt(ctx: RunContext, name: str, from_db: bool = False) -> dict:
     from ua_test_harness.clients.tpt_client import get_api
-    data = get_rt_value(get_api(ctx), [name], is_from_db=from_db)
+    try:
+        data = get_rt_value(get_api(ctx), [name], is_from_db=from_db)
+    except Exception as exc:
+        message = str(exc)
+        if any(token in message for token in _TRANSIENT_RT_ERRORS):
+            return {}
+        raise
     if isinstance(data, list):
         for point in data:
             if point.get("tagName") == name:
