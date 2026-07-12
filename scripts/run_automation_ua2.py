@@ -1,4 +1,4 @@
-"""UA-2 自动化 runner (Python 版)。
+"""UA-2 automation runner (Python 版).
 
 不走 PowerShell pipeline;每条 Case 用独立进程 + 超时 + 强制 cleanup。
 
@@ -9,16 +9,21 @@
   4. catalog export (180s)
   5. inventory strict (180s)
   6. 启动 ua_mocker/ua2_types.yaml (端口 18965)
-  7. 16 条 Case 各跑独立子进程(普通 180s / 删除恢复 240s)
-  8. 强制残留清理(每条之后 + 全部跑完后)
-  9. 汇总 ua2-result.json
-  10. pass/fail/所有 PASS + 无 cleanup-failed 才 exit 0
+  7. 启动 ua_mocker/ua2_empty.yaml (端口 18967)
+  8. ensure_ua2_baseline 在 TPT 服务器上 provision/校验两个共享 DS
+     (失败 -> BLOCKED,停 mock,exit 1)
+  9. 16 条 Case 各跑独立子进程(普通 180s / 删除恢复 240s)
+ 10. 每条 Case 跑完后只清 ua_case_ua2_ 私有位号(调 cleanup_ua2_resources 默认前缀)
+ 11. 批次结束**不删共享 DS** -- 不调 teardown_ua2_baseline
+ 12. 停两个 mock,汇总 ua2-result.json
+ 13. pass/fail/所有 PASS + 无 cleanup-failed 才 exit 0
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -42,6 +47,11 @@ CASES_UA2 = [
     "UA-2-2-015", "UA-2-2-016", "UA-2-2-019", "UA-2-2-033",
     "UA-2-4-001", "UA-2-4-013", "UA-2-4-020", "UA-2-4-024",
 ]
+
+SHARED_TYPES_DS_NAME = "ua_shared_ua2_types_ds"
+SHARED_EMPTY_DS_NAME = "ua_shared_ua2_empty_ds"
+TYPES_PORT = 18965
+EMPTY_PORT = 18967
 
 
 def _run_capture(cmd: list[str], timeout: float) -> tuple[int, str, str]:
@@ -120,10 +130,14 @@ def _phase(name: str, cmd: list[str], timeout: float, deadline_ts: float) -> dic
         }
 
 
-def _start_mock(out_dir: Path, deadline_ts: float) -> dict[str, Any]:
-    yaml_path = REPO_ROOT / "ua_mocker" / "ua2_types.yaml"
-    stdout_path = out_dir / "mock.stdout.log"
-    stderr_path = out_dir / "mock.stderr.log"
+def _start_mock_at(yaml_name: str, port: int, out_dir: Path, deadline_ts: float,
+                   ip: str = "127.0.0.1") -> dict[str, Any]:
+    """Generic mock starter: spawns ua_mocker/main.py with the given YAML, waits
+    for the listening port to accept a TCP connection.
+    """
+    yaml_path = REPO_ROOT / "ua_mocker" / yaml_name
+    stdout_path = out_dir / f"mock-{yaml_name}.stdout.log"
+    stderr_path = out_dir / f"mock-{yaml_name}.stderr.log"
     started = time.monotonic()
     proc = subprocess.Popen(
         [sys.executable, "main.py", str(yaml_path)],
@@ -136,15 +150,16 @@ def _start_mock(out_dir: Path, deadline_ts: float) -> dict[str, Any]:
         if proc.poll() is not None:
             break
         try:
-            import socket
             sock = socket.socket()
             sock.settimeout(0.5)
-            sock.connect(("127.0.0.1", 18965))
+            sock.connect((ip, port))
             sock.close()
             return {
                 "started": True,
                 "readyInSec": round(time.monotonic() - started, 2),
                 "pid": proc.pid,
+                "port": port,
+                "yaml": yaml_name,
                 "stdoutPath": str(stdout_path),
                 "stderrPath": str(stderr_path),
                 "_proc": proc,
@@ -152,7 +167,13 @@ def _start_mock(out_dir: Path, deadline_ts: float) -> dict[str, Any]:
         except Exception:
             time.sleep(0.5)
     proc.kill()
-    return {"started": False, "readyInSec": round(time.monotonic() - started, 2), "error": "mock did not become ready"}
+    return {
+        "started": False,
+        "readyInSec": round(time.monotonic() - started, 2),
+        "port": port,
+        "yaml": yaml_name,
+        "error": "mock did not become ready",
+    }
 
 
 def _stop_mock(handle: dict[str, Any]) -> None:
@@ -162,7 +183,70 @@ def _stop_mock(handle: dict[str, Any]) -> None:
             proc.terminate()
             proc.wait(timeout=5)
         except Exception:
-            proc.kill()
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
+def _mock_summary(handle: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "started": bool(handle.get("started")),
+        "readyInSec": handle.get("readyInSec"),
+        "port": handle.get("port"),
+        "yaml": handle.get("yaml"),
+        "error": handle.get("error"),
+    }
+
+
+def _provision_shared_baseline(local_ip: str, deadline_ts: float) -> tuple[dict[str, Any], Any | None]:
+    """Provision the shared baseline DS (ua_shared_ua2_types_ds + empty_ds).
+
+    Returns (summary_entry, baseline_or_None). On BaselineError, summary_entry
+    has status=BLOCKED and baseline_or_None is None.
+    """
+    from unittest.mock import MagicMock
+    from ua_test_harness.config import RunConfig
+    from ua_test_harness.context import RunContext
+    from ua_test_harness.provisioning import ensure_ua2_baseline
+
+    pcfg = RunConfig()
+    pcfg.run_id = f"ua2_baseline_{int(time.time())}"
+    pcfg.local_ip = local_ip
+    pcfg.mock.endpoints.functional = f"opc.tcp://{local_ip}:{TYPES_PORT}/ua_mocker/"
+    pcfg.subject.base_url = os.environ.get("DATAHUB_BASE_URL", "")
+    pcfg.subject.username = os.environ.get("DATAHUB_USER", "admin")
+    pcfg.subject.password = os.environ.get("DATAHUB_PASSWORD", "")
+    pcfg.subject.tenant_id = os.environ.get("DATAHUB_TENANT_ID", "")
+
+    pctx = RunContext(config=pcfg, emitter=MagicMock())
+    # Make empty endpoint discoverable for require_shared_datasource(ctx, "empty")
+    os.environ["UA2_EMPTY_ENDPOINT"] = f"opc.tcp://{local_ip}:{EMPTY_PORT}/ua_mocker/"
+
+    if time.monotonic() >= deadline_ts:
+        return {"status": "BLOCKED", "error": "chapter deadline already elapsed"}, None
+    try:
+        baseline = ensure_ua2_baseline(pctx)
+        return (
+            {
+                "status": "OK",
+                "typesDatasourceName": baseline.types_ds_name,
+                "typesDatasourceId": baseline.types_ds_id,
+                "typesEndpoint": baseline.types_endpoint,
+                "emptyDatasourceName": baseline.empty_ds_name,
+                "emptyDatasourceId": baseline.empty_ds_id,
+                "emptyEndpoint": baseline.empty_endpoint,
+            },
+            baseline,
+        )
+    except Exception as exc:
+        return (
+            {
+                "status": "BLOCKED",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+            None,
+        )
 
 
 def _case_timeout(case_id: str) -> float:
@@ -171,17 +255,14 @@ def _case_timeout(case_id: str) -> float:
     return CASE_TIMEOUTS["default"]
 
 
-def _run_single_case(out_dir: Path, case_id: str) -> dict[str, Any]:
-    case_dir = out_dir / "cases" / case_id
-    case_dir.mkdir(parents=True, exist_ok=True)
-    cfg_path = case_dir / "run-config.json"
-    local_ip = os.environ.get("UA_LOCAL_IP", "10.30.70.77")
+def _build_case_run_config(case_dir: Path, case_id: str, baseline,
+                           local_ip: str) -> dict[str, Any]:
     payload = {
         "runId": f"ua2_{case_id}",
         "selectedCaseIds": [case_id],
         "subject": {
-            "baseUrl": os.environ.get("DATAHUB_BASE_URL", "http://10.10.58.153:31501/"),
-            "tenantId": "",
+            "baseUrl": os.environ.get("DATAHUB_BASE_URL", ""),
+            "tenantId": os.environ.get("DATAHUB_TENANT_ID", ""),
             "username": os.environ.get("DATAHUB_USER", "admin"),
             "password": "",
             "token": "",
@@ -190,7 +271,7 @@ def _run_single_case(out_dir: Path, case_id: str) -> dict[str, Any]:
         "mock": {
             "controlMode": "external-script",
             "endpoints": {
-                "functional": f"opc.tcp://{local_ip}:18965/ua_mocker/",
+                "functional": f"opc.tcp://{local_ip}:{TYPES_PORT}/ua_mocker/",
                 "reconnect": "",
                 "performance": "",
                 "abnormal": "",
@@ -204,6 +285,21 @@ def _run_single_case(out_dir: Path, case_id: str) -> dict[str, Any]:
         },
         "note": f"UA-2 first batch case {case_id}",
     }
+    if baseline is not None:
+        payload["ua2Baseline"] = {
+            "typesDatasourceName": baseline.types_ds_name,
+            "typesEndpoint": baseline.types_endpoint,
+            "emptyDatasourceName": baseline.empty_ds_name,
+            "emptyEndpoint": baseline.empty_endpoint,
+        }
+    return payload
+
+
+def _run_single_case(out_dir: Path, case_id: str, baseline, local_ip: str) -> dict[str, Any]:
+    case_dir = out_dir / "cases" / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = case_dir / "run-config.json"
+    payload = _build_case_run_config(case_dir, case_id, baseline, local_ip)
     cfg_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     stdout_path = case_dir / "stdout.log"
@@ -223,6 +319,8 @@ def _run_single_case(out_dir: Path, case_id: str) -> dict[str, Any]:
     ]
     env = os.environ.copy()
     env["PYTHONPATH"] = str(REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    # Subprocess should see the empty endpoint via env (used by provisioning module).
+    env["UA2_EMPTY_ENDPOINT"] = f"opc.tcp://{local_ip}:{EMPTY_PORT}/ua_mocker/"
     proc = subprocess.run(
         cmd,
         cwd=str(REPO_ROOT),
@@ -288,6 +386,7 @@ def _summarize_case(case_dir: Path) -> dict[str, Any]:
 
 
 def _cleanup(out_dir: Path) -> dict[str, Any]:
+    """Final cleanup: case-only (ua_case_ua2_ prefix by default). NEVER deletes shared DS."""
     runner = REPO_ROOT / "scripts" / "cleanup_ua2_resources.py"
     result_path = out_dir / "cleanup-after-all.json"
     cmd = [sys.executable, str(runner), "--result", str(result_path)]
@@ -308,6 +407,7 @@ def _cleanup(out_dir: Path) -> dict[str, Any]:
 
 
 def _cleanup_after_case(out_dir: Path, case_id: str) -> dict[str, Any]:
+    """Per-case cleanup: case-only (default prefix ua_case_ua2_). NEVER touches shared DS."""
     runner = REPO_ROOT / "scripts" / "cleanup_ua2_resources.py"
     result_path = out_dir / "cases" / case_id / "cleanup-result.json"
     cmd = [sys.executable, str(runner), "--result", str(result_path)]
@@ -345,6 +445,8 @@ def main() -> int:
         "timeoutCount": 0,
         "cleanupFailedCount": 0,
         "mockProcess": None,
+        "emptyMockProcess": None,
+        "baseline": None,
         "startedAt": "",
         "finishedAt": "",
         "status": "FAIL",
@@ -361,6 +463,8 @@ def main() -> int:
     deadline_ts = started + CHAPTER_TOTAL_TIMEOUT
     summary["startedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started))
 
+    local_ip = os.environ.get("UA_LOCAL_IP", "127.0.0.1")
+
     prereq_results = []
     prereq_results.append(phase_compile(deadline_ts))
     prereq_results.append(phase_unit_tests(deadline_ts))
@@ -371,15 +475,17 @@ def main() -> int:
 
     summary["prerequisites"] = prereq_results
 
-    mock_handle = _start_mock(out_dir, deadline_ts)
-    summary["mockProcess"] = {
-        "started": bool(mock_handle.get("started")),
-        "readyInSec": mock_handle.get("readyInSec"),
-        "error": mock_handle.get("error"),
-    }
+    # 6. start types mock
+    mock_types = _start_mock_at("ua2_types.yaml", TYPES_PORT, out_dir, deadline_ts, ip=local_ip)
+    summary["mockProcess"] = _mock_summary(mock_types)
 
-    if not mock_handle.get("started"):
-        _stop_mock(mock_handle)
+    # 7. start empty mock
+    mock_empty = _start_mock_at("ua2_empty.yaml", EMPTY_PORT, out_dir, deadline_ts, ip=local_ip)
+    summary["emptyMockProcess"] = _mock_summary(mock_empty)
+
+    if not (mock_types.get("started") and mock_empty.get("started")):
+        _stop_mock(mock_types)
+        _stop_mock(mock_empty)
         summary["finishedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         summary["status"] = "FAIL"
         (out_dir / "ua2-result.json").write_text(
@@ -388,6 +494,21 @@ def main() -> int:
         )
         return 1
 
+    # 9. provision shared baseline (BLOCKED -> stop mocks, exit 1)
+    baseline_summary, baseline = _provision_shared_baseline(local_ip, deadline_ts)
+    summary["baseline"] = baseline_summary
+    if baseline is None:
+        _stop_mock(mock_types)
+        _stop_mock(mock_empty)
+        summary["finishedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        summary["status"] = "FAIL"
+        (out_dir / "ua2-result.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return 1
+
+    # 10. run 16 cases (each in own subprocess)
     case_results: list[dict[str, Any]] = []
     allowed_retry = {"ERROR", "TIMEOUT"}
     for case_id in CASES_UA2:
@@ -397,10 +518,11 @@ def main() -> int:
         result: dict[str, Any] = {"caseId": case_id, "status": "UNKNOWN"}
         while attempts < 2:
             attempts += 1
-            result = _run_single_case(out_dir, case_id)
+            result = _run_single_case(out_dir, case_id, baseline, local_ip)
             status = result.get("status")
             if status not in allowed_retry or attempts == 2:
                 break
+        # 11. per-case cleanup (case-only default prefix ua_case_ua2_)
         cleanup_report = _cleanup_after_case(out_dir, case_id)
         result["cleanupAfter"] = cleanup_report
         case_results.append(result)
@@ -420,9 +542,12 @@ def main() -> int:
             summary["cleanupFailedCount"] += 1
 
     summary["caseResults"] = case_results
+    # 12. batch end: NO teardown_ua2_baseline call (shared DS persist).
     summary["finalCleanup"] = _cleanup(out_dir)
 
-    _stop_mock(mock_handle)
+    # 13. stop both mocks
+    _stop_mock(mock_types)
+    _stop_mock(mock_empty)
     summary["finishedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     summary["status"] = "PASS" if (
         summary["passCount"] == summary["selectedCount"]
