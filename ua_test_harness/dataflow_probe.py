@@ -34,7 +34,14 @@ def _wait(name: str, fn: Callable[[], Any], timeout: float, interval: float = 1.
     raise TimeoutError(f"{name} timeout after {timeout}s; last={last!r}")
 
 
-def probe(base_url: str, username: str, password: str, local_ip: str, timeout: float = 90.0) -> dict[str, Any]:
+def probe(
+    base_url: str,
+    username: str,
+    password: str,
+    local_ip: str,
+    mock_port: int = 18964,
+    timeout: float = 90.0,
+) -> dict[str, Any]:
     from tpt_api.client import AlgAPI
     from tpt_api.datahub import (
         add_ds_info,
@@ -51,7 +58,7 @@ def probe(base_url: str, username: str, password: str, local_ip: str, timeout: f
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     ds_name = f"ua_auto_flow_{stamp}"
     tag_name = f"ua_auto_flow_tag_{stamp}"
-    endpoint = f"opc.tcp://{local_ip}:18960/ua_mocker/"
+    endpoint = f"opc.tcp://{local_ip}:{mock_port}/ua_mocker/"
     started = time.monotonic()
     ds_id: int | None = None
     tag_id: int | None = None
@@ -64,6 +71,7 @@ def probe(base_url: str, username: str, password: str, local_ip: str, timeout: f
         "tenantId": "",
         "passwordPresent": bool(password),
         "localIp": local_ip,
+        "mockPort": mock_port,
         "datasource": {"name": ds_name, "endpoint": endpoint},
         "tag": {"name": tag_name, "baseName": "smoke_change_1"},
         "checks": [],
@@ -202,13 +210,14 @@ def main() -> int:
     parser.add_argument("--base-url", default=os.getenv("DATAHUB_BASE_URL", ""))
     parser.add_argument("--username", default=os.getenv("DATAHUB_USER", ""))
     parser.add_argument("--local-ip", default=os.getenv("UA_LOCAL_IP", ""))
+    parser.add_argument("--mock-port", type=int, default=18964)
     parser.add_argument("--timeout", type=float, default=90.0)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     password = os.getenv("DATAHUB_PASSWORD", "")
     if not password:
         raise SystemExit("DATAHUB_PASSWORD is required")
-    report = probe(args.base_url, args.username, password, args.local_ip, args.timeout)
+    report = probe(args.base_url, args.username, password, args.local_ip, args.mock_port, args.timeout)
     payload = json.dumps(report, ensure_ascii=False, indent=2)
     path = Path(args.output).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
