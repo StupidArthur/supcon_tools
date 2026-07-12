@@ -13,7 +13,7 @@ if ([string]::IsNullOrWhiteSpace($env:DATAHUB_PASSWORD)) { throw "DATAHUB_PASSWO
 $ids=@(
  "UA-1-1-01","UA-1-1-02","UA-1-1-04","UA-1-1-12",
  "UA-1-2-01","UA-1-2-02","UA-1-2-04","UA-1-2-06","UA-1-2-07","UA-1-2-08",
- "UA-1-5-01","UA-1-5-03","UA-1-5-07"
+ "UA-1-5-01","UA-1-5-07"
 )
 $stamp=Get-Date -Format "yyyyMMdd_HHmmss"
 $outDir=Join-Path $RepoRoot "output\automation_ua1_$stamp"
