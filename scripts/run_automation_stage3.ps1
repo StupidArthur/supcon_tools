@@ -103,7 +103,7 @@ try {
 
     Run-Step "tpt-dataflow-probe" {
         Run-PythonCaptured `
-            -Arguments @("-m", "ua_test_harness.dataflow_probe", "--base-url", $BaseUrl, "--username", $Username, "--local-ip", $LocalIp, "--mock-port", "$MockPort", "--timeout", "90", "--output", (Join-Path $outDir "dataflow-probe.json")) `
+            -Arguments @("-m", "ua_test_harness.dataflow_probe_entry", "--base-url", $BaseUrl, "--username", $Username, "--local-ip", $LocalIp, "--mock-port", "$MockPort", "--timeout", "90", "--output", (Join-Path $outDir "dataflow-probe.json")) `
             -StdoutPath (Join-Path $outDir "dataflow-probe.log") `
             -StderrPath (Join-Path $outDir "dataflow-probe.stderr.log")
     }
