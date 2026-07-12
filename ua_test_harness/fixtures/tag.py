@@ -31,7 +31,6 @@ def create_tag(
     from ua_test_harness.clients.tpt_client import get_api
 
     api = get_api(ctx)
-    # 重名先删后建:list_tags 看 active + list_recycle_tags 看回收站,都物理删
     page = list_tags(api, page=1, page_size=500, data={"tagName": name})
     active_ids = [int(r["id"]) for r in page.get("records") or [] if r.get("tagName") == name]
     if active_ids:
@@ -92,9 +91,17 @@ def wait_tag_present(ctx: RunContext, name: str, timeout: float = 30.0) -> dict:
     from ua_test_harness.polling import wait_until
 
     found: dict = {}
+
+    def fetch() -> bool:
+        tag = find_tag(ctx, name)
+        if not tag:
+            return False
+        found["v"] = tag
+        return True
+
     wait_until(
         f"tag_present:{name}",
-        lambda: (found.__setitem__("v", find_tag(ctx, name)) or bool(found.get("v"))) and False,
+        fetch,
         timeout=timeout,
         interval=1.0,
     )
@@ -116,7 +123,6 @@ def restore_from_recycle(ctx: RunContext, name: str) -> None:
     from ua_test_harness.clients.tpt_client import get_api
 
     api = get_api(ctx)
-    # 恢复 = 从回收站(1)分组移除关联
     from tpt_api.datahub import list_recycle_tags
 
     data = list_recycle_tags(api, page=1, page_size=500)
