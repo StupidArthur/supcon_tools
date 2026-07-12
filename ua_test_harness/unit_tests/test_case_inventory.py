@@ -5,14 +5,14 @@ from pathlib import Path
 from ua_test_harness.case_inventory import build_inventory, parse_case_doc, structural_failures
 
 
-def _write_doc(repo: Path, body: str) -> Path:
-    path = repo / "ua_test_gui" / "doc" / "test_cases" / "UA-1-1.md"
-    path.parent.mkdir(parents=True)
+def _write_doc(repo: Path, body: str, name: str = "UA-1-1.md") -> Path:
+    path = repo / "ua_test_gui" / "doc" / "test_cases" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
     return path
 
 
-def test_parse_case_doc_reads_fixed_six_columns(tmp_path: Path) -> None:
+def test_parse_case_doc_reads_six_columns(tmp_path: Path) -> None:
     path = _write_doc(
         tmp_path,
         """# UA-1-1 连接建立
@@ -39,6 +39,7 @@ def test_parse_case_doc_reads_eight_columns(tmp_path: Path) -> None:
 |---|---|---|---|---|---|---|---|
 | UA-2-1-001 | 一次位号 | 回归 | ds alive | add | saved | page | delete |
 """,
+        "UA-2-1.md",
     )
     cases, malformed = parse_case_doc(path, tmp_path)
     assert malformed == []
@@ -47,18 +48,39 @@ def test_parse_case_doc_reads_eight_columns(tmp_path: Path) -> None:
     assert cases[0]["cleanup"] == "delete"
 
 
-def test_parse_case_doc_accepts_missing_trailing_pipe(tmp_path: Path) -> None:
+def test_parse_case_doc_reads_seven_column_test_data_table(tmp_path: Path) -> None:
+    path = _write_doc(
+        tmp_path,
+        """# UA-2-1 位号新增
+| 编号 | 三级点 | 类型 | 前置条件 | 测试数据 | 验证手段 | 清理 |
+|---|---|---|---|---|---|---|
+| UA-2-1-026 | Boolean 默认读取 | 回归 | Boolean node | dataType=1 | 公共读取断言 | 删除位号 |
+""",
+        "UA-2-1.md",
+    )
+    cases, malformed = parse_case_doc(path, tmp_path)
+    assert malformed == []
+    assert cases[0]["testData"] == "dataType=1"
+    assert cases[0]["steps"] == "测试数据：dataType=1"
+    assert cases[0]["verification"] == "公共读取断言"
+
+
+def test_parse_case_doc_accepts_missing_trailing_cell_and_pipe(tmp_path: Path) -> None:
     path = _write_doc(
         tmp_path,
         """# UA-3-4 历史查询
 | 编号 | 三级点 | 类型 | 造数/步骤 | 断言 | 验证 |
 |---|---|---|---|---|---|
-| UA-3-4-008 | 非法时间 | 回归 | begin>end | 明确失败 | history
+| UA-3-4-008 | 非法时间 | 回归 | begin>end | 明确失败
 """,
+        "UA-3-4.md",
     )
     cases, malformed = parse_case_doc(path, tmp_path)
     assert malformed == []
     assert [case["id"] for case in cases] == ["UA-3-4-008"]
+    assert cases[0]["expected"] == "明确失败"
+    assert cases[0]["verification"] == ""
+    assert cases[0]["documentWarnings"]
 
 
 def test_build_inventory_marks_implemented_and_missing(tmp_path: Path) -> None:
