@@ -269,3 +269,40 @@ def test_teardown_requires_confirm(monkeypatch):
     assert [22] in calls["delete"]
     deleted_ids = sorted(d["id"] for d in result["deleted"])
     assert deleted_ids == [11, 22]
+
+
+# --- 11. Step 1 (Part 3): _ensure_one alive-wait decoupled from ds_connect_sec ---
+def test_ensure_one_uses_dedicated_alive_wait_not_ds_connect_sec(monkeypatch):
+    """Both alive-wait call sites in _ensure_one must pass BASELINE_ALIVE_WAIT_SEC,
+    not read ctx.config.timeouts.ds_connect_sec."""
+    import ua_test_harness.provisioning.ua2_baseline as bl
+    captured: list[float] = []
+
+    def fake_wait_alive(ctx, ds_id, timeout):
+        captured.append(timeout)
+        return True
+
+    monkeypatch.setattr(bl, "_wait_ds_alive", fake_wait_alive)
+    # alive=False so _ensure_one takes the re-enable branch and calls _wait_ds_alive.
+    _patch_datahub(
+        monkeypatch,
+        ds_rows=[_types_row(alive=False), _empty_row(alive=False)],
+        tag_rows_by_ds={},
+    )
+    _patch_get_api(monkeypatch)
+
+    # Use a config whose ds_connect_sec is intentionally different from BASELINE_ALIVE_WAIT_SEC.
+    # If _ensure_one were still reading ds_connect_sec, the captured timeout would be 5, not 120.
+    ctx = _ctx()
+    ctx.config.timeouts.ds_connect_sec = 5  # sentinel
+
+    from ua_test_harness.provisioning.ua2_baseline import ensure_ua2_baseline
+    ensure_ua2_baseline(ctx)
+
+    # Both alive-wait calls (types + empty, re-enable branch) must use the dedicated 120s.
+    assert captured, "expected _wait_ds_alive to be called"
+    for t in captured:
+        assert t == bl.BASELINE_ALIVE_WAIT_SEC == 120, (
+            f"alive-wait must use BASELINE_ALIVE_WAIT_SEC (120s), got {t!r}; "
+            "still reading ds_connect_sec?"
+        )

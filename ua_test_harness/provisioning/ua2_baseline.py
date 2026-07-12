@@ -17,6 +17,11 @@ from typing import Any
 SHARED_TYPES_DS_NAME = "ua_shared_ua2_types_ds"
 SHARED_EMPTY_DS_NAME = "ua_shared_ua2_empty_ds"
 
+# Baseline provisioning 业务级 alive 验证:共享 DS 停过又起后恢复较慢(~1-2 分钟)。
+# 专用轮询,与通用 ds_connect_sec 解耦 — 见 Step 1 (Part 3) 指令。
+BASELINE_ALIVE_WAIT_SEC = 120
+BASELINE_ALIVE_POLL_SEC = 1.0
+
 
 class BaselineError(Exception):
     """Baseline cannot be established; caller should map to BLOCKED."""
@@ -60,7 +65,7 @@ def _wait_ds_alive(ctx, ds_id: int, timeout: float) -> bool:
                 row = r
         if row and row.get("alive"):
             return True
-        time.sleep(1.0)
+        time.sleep(BASELINE_ALIVE_POLL_SEC)
     return False
 
 
@@ -86,7 +91,7 @@ def _ensure_one(ctx, name: str, endpoint: str, *, must_be_empty: bool) -> dict[s
         if not ds_id:
             raise BaselineError(f"created datasource {name!r} returned no id: {created!r}")
         change_ds_state(api, ds_id, True)
-        if not _wait_ds_alive(ctx, ds_id, timeout=getattr(ctx.config.timeouts, "ds_connect_sec", 60)):
+        if not _wait_ds_alive(ctx, ds_id, timeout=BASELINE_ALIVE_WAIT_SEC):
             raise BaselineError(f"datasource {name!r} did not become alive")
         row = {"id": ds_id, "dsName": name, "dsTarUrl": endpoint, "alive": True, "dsStatus": 1}
     else:
@@ -100,7 +105,7 @@ def _ensure_one(ctx, name: str, endpoint: str, *, must_be_empty: bool) -> dict[s
         if not row.get("alive"):
             from tpt_api.datahub import change_ds_state
             change_ds_state(api, ds_id, True)
-            if not _wait_ds_alive(ctx, ds_id, timeout=getattr(ctx.config.timeouts, "ds_connect_sec", 60)):
+            if not _wait_ds_alive(ctx, ds_id, timeout=BASELINE_ALIVE_WAIT_SEC):
                 raise BaselineError(f"datasource {name!r} did not become alive after enable")
         row["alive"] = True
     if must_be_empty:
