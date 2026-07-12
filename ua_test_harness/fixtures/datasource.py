@@ -1,6 +1,8 @@
 """Datasource fixtures with ownership-safe creation and LIFO cleanup."""
 from __future__ import annotations
 
+import time
+
 from tpt_api.datahub import add_ds_info, change_ds_state, delete_ds_info, list_ds_info
 from tpt_api.types import DsSubTypes, DsTypes
 
@@ -104,10 +106,25 @@ def _safe_delete(api, ds_id: int) -> None:
     actual_name = str(current.get("dsName") or current.get("name") or "")
     if not _is_automation_name(actual_name):
         raise RuntimeError(f"refusing to delete non-automation datasource id={ds_id} name={actual_name!r}")
+    delete_error: Exception | None = None
     try:
         delete_ds_info(api, [ds_id])
     except Exception as exc:
-        raise RuntimeError(f"delete ds {ds_id} failed: {exc}") from exc
+        delete_error = exc
+
+    deadline = time.monotonic() + 15.0
+    last_lookup_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            if find_ds_by_id(api, ds_id) is None:
+                return
+            last_lookup_error = None
+        except Exception as exc:
+            last_lookup_error = exc
+        time.sleep(1.0)
+
+    detail = delete_error or last_lookup_error or RuntimeError("datasource still exists after delete")
+    raise RuntimeError(f"delete ds {ds_id} failed: {detail}") from detail
 
 
 def change_state(ctx: RunContext, ds_id: int, enabled: bool) -> None:
