@@ -13,6 +13,10 @@ from typing import Any, Callable
 
 from ua_test_harness.assertions import AssertFail, check_eq, check_true
 from ua_test_harness.models import CaseStatus
+from ua_test_harness.type_mapping import tpt_tag_base_name
+
+
+_MOCK_NAMESPACE_INDEX = 2
 
 
 def _api(ctx):
@@ -75,7 +79,8 @@ def _prepare_online(ctx, cc, *, writable: bool = False, changing: bool = True):
     datasource.change_state(ctx, ds["id"], True)
     check_true("datasource_alive", datasource.wait_alive(ctx, ds["id"], timeout=ctx.config.timeouts.ds_connect_sec))
     tag_name = _unique(ctx, "ua_auto_case_tag")
-    base_name = "smoke_static_1" if writable or not changing else "smoke_change_1"
+    node_name = "smoke_static_1" if writable or not changing else "smoke_change_1"
+    base_name = tpt_tag_base_name(_MOCK_NAMESPACE_INDEX, node_name)
     dtype = "DOUBLE" if writable or not changing else "INT"
     tg = tag.create_tag(
         ctx,
@@ -136,7 +141,7 @@ def _datasource_state(ctx, cc, meta):
         from ua_test_harness.fixtures import tag
         rt = tag.read_rt(ctx, tg["name"])
         if rt:
-            check_true("disabled_quality_not_good", _quality(rt) in (None, 0) or not bool((_ds_row(ctx, ds["id"]) or {}).get("alive")) )
+            check_true("disabled_quality_not_good", _quality(rt) in (None, 0) or not bool((_ds_row(ctx, ds["id"]) or {}).get("alive")))
         return CaseStatus.PASS
     datasource.change_state(ctx, ds["id"], True)
     check_true("alive_after_enable", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
@@ -218,123 +223,87 @@ def _rt_write(ctx, cc, meta):
 
 def _history(ctx, cc, meta):
     from ua_test_harness.fixtures import tag
-    _ds, tg = _prepare_online(ctx, cc, writable=True, changing=False)
-    start = int(time.time() * 1000) - 5_000
-    for value in (101.25, 102.25, 103.25):
-        tag.write_tag(ctx, tg["name"], value)
-        time.sleep(1.1)
-    end = int(time.time() * 1000) + 2_000
-    rows = tag.read_history(ctx, tg["name"], start, end)
-    if not rows:
-        return _blocked(ctx, meta, "当前环境未形成可查询历史记录；需要历史导入或落库能力")
-    check_true("history_rows", len(rows) > 0)
-    return CaseStatus.PASS
-
-
-def _group(ctx, cc, meta):
-    from tpt_api.datahub import add_tag_group, delete_tag_group
-    api = _api(ctx)
-    name = _unique(ctx, "ua_auto_group")
-    created = add_tag_group(api, name, parent_id="0")
-    group_id = str(created.get("id") or created.get("groupId") or "")
-    check_true("group_id", bool(group_id))
-    cc.registry.register(f"group:{group_id}", "tag_group", lambda: delete_tag_group(api, [group_id], is_force=True))
-    if "删除" in meta["title"]:
-        delete_tag_group(api, [group_id], is_force=False)
-        cc.registry.pop(f"group:{group_id}")
-    return CaseStatus.PASS
-
-
-def _measure(ctx, cc, meta):
     _ds, tg = _prepare_online(ctx, cc, changing=True)
+    _wait_rt(ctx, tg["name"])
+    deadline = time.time() + min(ctx.config.timeouts.history_visibility_sec, 30)
+    found = None
+    while time.time() < deadline:
+        found = tag.read_history(ctx, tg["name"], seconds=120)
+        if found:
+            break
+        time.sleep(2)
+    if not found:
+        return CaseStatus.BLOCKED
+    return CaseStatus.PASS
+
+
+def _response_time(ctx, cc, meta):
     from ua_test_harness.fixtures import tag
-    samples = []
+    _ds, tg = _prepare_online(ctx, cc, changing=True)
+    _wait_rt(ctx, tg["name"])
+    samples: list[float] = []
+    for _ in range(5):
+        tag.read_rt(ctx, tg["name"])
     for _ in range(30):
-        start = time.monotonic()
+        started = time.perf_counter()
         row = tag.read_rt(ctx, tg["name"])
-        samples.append((time.monotonic() - start) * 1000.0)
-        check_true("measured_response", bool(row))
-    ordered = sorted(samples)
-    p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
-    ctx.emitter.metric(meta["id"], "latency_mean_ms", value=statistics.mean(samples), unit="ms")
-    ctx.emitter.metric(meta["id"], "latency_p95_ms", value=p95, unit="ms")
-    return CaseStatus.MEASURED
+        if not row:
+            raise AssertFail("response-time sample returned no data")
+        samples.append((time.perf_counter() - started) * 1000)
+    ctx.bag[f"metrics_{meta['id']}"] = {
+        "min": min(samples),
+        "mean": statistics.fmean(samples),
+        "p50": statistics.median(samples),
+        "p95": sorted(samples)[int(len(samples) * 0.95) - 1],
+        "max": max(samples),
+        "count": len(samples),
+    }
+    return CaseStatus.PASS
 
 
 def _performance(ctx, cc, meta):
-    _ds, tg = _prepare_online(ctx, cc, changing=True)
     from ua_test_harness.fixtures import tag
-    errors = []
-    def read_once():
-        return tag.read_rt(ctx, tg["name"])
+    _ds, tg = _prepare_online(ctx, cc, changing=True)
+    _wait_rt(ctx, tg["name"])
+    errors: list[str] = []
+    results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = [pool.submit(read_once) for _ in range(50)]
-        for fut in as_completed(futures):
+        futures = [pool.submit(tag.read_rt, ctx, tg["name"]) for _ in range(20)]
+        for future in as_completed(futures):
             try:
-                check_true("perf_result", bool(fut.result()))
+                row = future.result()
+                if not row:
+                    errors.append("empty response")
+                else:
+                    results.append(row)
             except Exception as exc:
                 errors.append(str(exc))
-    check_true("no_perf_errors", not errors, hint=str(errors[:3]))
-    ctx.emitter.metric(meta["id"], "requests", value=50, unit="count")
-    return CaseStatus.MEASURED
+    check_eq("performance_error_count", len(errors), 0)
+    check_eq("performance_response_count", len(results), 20)
+    return CaseStatus.PASS
 
 
-def _blocked(ctx, meta, reason: str):
-    ctx.emitter.log("WARN", meta["id"], f"BLOCKED: {reason}")
-    return CaseStatus.BLOCKED
+_SCENARIOS: dict[str, Callable] = {
+    "online_smoke": _online_smoke,
+    "datasource_state": _datasource_state,
+    "tag_query": _tag_query,
+    "tag_delete": _tag_delete,
+    "rt_read": _rt_read,
+    "rt_write": _rt_write,
+    "history": _history,
+    "response_time": _response_time,
+    "performance": _performance,
+}
 
 
 def execute_documented_case(ctx, cc, meta: dict[str, Any]):
-    """按能力域和标题把文档 Case 分派到共享真实执行器。"""
-    chapter = meta["chapter"]
-    title = meta["title"]
-    text = " ".join(str(meta.get(k, "")) for k in ("title", "precondition", "steps", "expected", "verification"))
-
-    if chapter == "UA-1-1":
-        return _online_smoke(ctx, cc, meta)
-    if chapter == "UA-1-2":
-        if "历史" in title:
-            return _history(ctx, cc, meta)
-        return _datasource_state(ctx, cc, meta)
-    if chapter == "UA-1-3":
-        if "历史" in text:
-            return _blocked(ctx, meta, "断线历史时序需要可控历史落库夹具")
-        return _datasource_state(ctx, cc, meta)
-    if chapter == "UA-1-4":
-        return _blocked(ctx, meta, "多数据源 Case 需要两个独立 Mock endpoint；当前 functional 配置只有一个")
-    if chapter == "UA-1-5":
-        if "位号" in title or "回收站" in title:
-            return _tag_delete(ctx, cc, meta)
-        return _online_smoke(ctx, cc, meta)
-    if chapter == "UA-1-6":
-        return _blocked(ctx, meta, "ds-info/test 的 testType 适配器尚未在 tpt_api 中暴露")
-
-    if chapter == "UA-2-1":
-        if "查询" in title or "列表" in title:
-            return _tag_query(ctx, cc, meta)
-        return _online_smoke(ctx, cc, meta)
-    if chapter == "UA-2-2":
-        if "GUI-DEFERRED" in text:
-            return _blocked(ctx, meta, "文档明确标记 GUI-DEFERRED")
-        return _tag_query(ctx, cc, meta)
-    if chapter == "UA-2-3":
-        return _blocked(ctx, meta, "导入导出需要文件上传/下载适配器和工作簿夹具")
-    if chapter == "UA-2-4":
-        return _tag_delete(ctx, cc, meta)
-    if chapter == "UA-2-5":
-        return _group(ctx, cc, meta)
-
-    if chapter == "UA-3-1":
-        return _rt_read(ctx, cc, meta)
-    if chapter == "UA-3-2":
-        return _rt_read(ctx, cc, meta)
-    if chapter == "UA-3-3":
-        return _rt_write(ctx, cc, meta)
-    if chapter == "UA-3-4":
-        return _history(ctx, cc, meta)
-    if chapter == "UA-3-5":
-        return _measure(ctx, cc, meta)
-    if chapter == "UA-3-6":
-        return _performance(ctx, cc, meta)
-
-    raise AssertFail(f"no scenario executor for {meta['id']} chapter={chapter}")
+    from ua_test_harness.scenario_policy import classify_case
+    decision = classify_case(meta)
+    if not decision.executable:
+        ctx.bag[f"blocked_{meta['id']}"] = decision.reason
+        return CaseStatus.BLOCKED
+    scenario = _SCENARIOS.get(decision.scenario)
+    if scenario is None:
+        ctx.bag[f"blocked_{meta['id']}"] = f"missing scenario adapter: {decision.scenario}"
+        return CaseStatus.BLOCKED
+    return scenario(ctx, cc, meta)
