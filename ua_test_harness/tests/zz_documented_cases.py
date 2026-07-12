@@ -1,8 +1,8 @@
 """把 Markdown 中尚未手写实现的 Case 注册为可执行 CaseDef。
 
 本模块由 catalog.discover 最后导入：手写实现优先，剩余文档 Case 绑定到
-scenario_runtime 的共享真实执行器。注册并不表示运行必然 PASS；缺失能力会以
-带明确原因的 BLOCKED 返回。
+scenario_policy。已覆盖文档动作的 Case 执行真实场景；缺失适配器或夹具的 Case
+返回带明确原因的 BLOCKED，不允许普通冒烟替代边界场景并误判 PASS。
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Any
 from ua_test_harness.case_inventory import parse_case_doc
 from ua_test_harness.catalog import all_defs, case
 from ua_test_harness.models import StepDef
-from ua_test_harness.scenario_runtime import execute_documented_case
+from ua_test_harness.scenario_policy import execute_documented_case
 
 _KIND_MAP = {
     "回归": "regression",
