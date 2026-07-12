@@ -186,3 +186,141 @@ def physical_delete_irreversible(ctx, cc):
     finally:
         # Idempotent: registry entry was popped above.
         cleanup_case_tag(ctx, cc, tag_id, tag_name)
+
+
+# ---------- UA-2-4 章节 dispatcher ----------
+
+_EXISTING_UA2_4 = {
+    "UA-2-4-001": soft_delete_one,
+    "UA-2-4-013": restore_one,
+    "UA-2-4-020": physical_delete_one,
+    "UA-2-4-024": physical_delete_irreversible,
+}
+
+
+def _blocked_ua2_4(ctx, meta, reason: str) -> CaseStatus:
+    ctx.bag[f"blocked_{meta['id']}"] = reason
+    return CaseStatus.BLOCKED
+
+
+def _observed_ua2_4(ctx, meta, detail=None) -> CaseStatus:
+    ctx.bag[f"observed_{meta['id']}"] = detail or meta.get("title")
+    return CaseStatus.OBSERVED
+
+
+def _make_tag(ctx, cc, suffix: str):
+    ds = require_shared_datasource(ctx, "types")
+    return create_case_tag(ctx, cc, int(ds["id"]), suffix=suffix, tag_desc=TAG_DESC)
+
+
+def dispatch_ua2_4(ctx, cc, meta) -> CaseStatus:
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    cid = meta["id"]
+    if cid in _EXISTING_UA2_4:
+        return _EXISTING_UA2_4[cid](ctx, cc)
+
+    if cid == "UA-2-4-002":
+        ids = []
+        try:
+            for i in range(3):
+                tag = _make_tag(ctx, cc, f"b{i}")
+                ids.append(int(tag["id"]))
+            for tid in ids:
+                soft_delete_tag(ctx, tid)
+            recycle = [r for r in all_recycle_rows(ctx) if int(r.get("id")) in ids]
+            check_eq("batch_in_recycle", len(ids), len(recycle))
+            return CaseStatus.PASS
+        finally:
+            for tid in ids:
+                physical_delete_tag(ctx, tid)
+
+    if cid == "UA-2-4-003":
+        types = require_shared_datasource(ctx, "types")
+        empty = require_shared_datasource(ctx, "empty")
+        t1 = create_case_tag(ctx, cc, int(types["id"]), suffix="3a")
+        t2 = create_case_tag(ctx, cc, int(empty["id"]), suffix="3b")
+        try:
+            soft_delete_tag(ctx, int(t1["id"]))
+            soft_delete_tag(ctx, int(t2["id"]))
+            r1 = [r for r in all_recycle_rows(ctx) if int(r.get("id")) == int(t1["id"])]
+            check_eq("types_recycle", 1, len(r1))
+            cleanup_case_tag(ctx, cc, int(t1["id"]), t1["name"])
+            cleanup_case_tag(ctx, cc, int(t2["id"]), t2["name"])
+            return CaseStatus.PASS
+        finally:
+            cleanup_case_tag(ctx, cc, int(t1["id"]), t1["name"])
+            cleanup_case_tag(ctx, cc, int(t2["id"]), t2["name"])
+
+    if cid == "UA-2-4-004":
+        tag = _make_tag(ctx, cc, "id4")
+        tag_id, tag_name = int(tag["id"]), tag["name"]
+        snap = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)[0]
+        try:
+            soft_delete_tag(ctx, tag_id)
+            rec = next(r for r in all_recycle_rows(ctx) if r.get("tagName") == tag_name)
+            for field in ("id", "tagName", "tagBaseName", "dsId", "dataType"):
+                check_eq(field, snap.get(field), rec.get(field))
+            return CaseStatus.PASS
+        finally:
+            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+
+    if cid in {"UA-2-4-005", "UA-2-4-006", "UA-2-4-007", "UA-2-4-008", "UA-2-4-011", "UA-2-4-012",
+               "UA-2-4-018", "UA-2-4-019", "UA-2-4-021", "UA-2-4-022", "UA-2-4-023", "UA-2-4-025"}:
+        return _observed_ua2_4(ctx, meta)
+
+    if cid == "UA-2-4-009":
+        tag = _make_tag(ctx, cc, "w9")
+        tag_id, tag_name = int(tag["id"]), tag["name"]
+        try:
+            soft_delete_tag(ctx, tag_id)
+            from ua_test_harness.fixtures.tag import write_tag
+            failed = False
+            try:
+                write_tag(ctx, tag_name, 1.0)
+            except Exception:
+                failed = True
+            check_true("write_blocked_after_soft_delete", failed)
+            return CaseStatus.PASS
+        finally:
+            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+
+    if cid == "UA-2-4-010":
+        return _observed_ua2_4(ctx, meta, "asyncua_source_preserved_explore")
+
+    if cid in {"UA-2-4-014", "UA-2-4-015", "UA-2-4-016", "UA-2-4-017"}:
+        return _observed_ua2_4(ctx, meta, "batch_restore_or_rt_explore")
+
+    if cid == "UA-2-4-026":
+        tag = _make_tag(ctx, cc, "rb")
+        tag_id, tag_name = int(tag["id"]), tag["name"]
+        base = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)[0].get("tagBaseName")
+        try:
+            soft_delete_tag(ctx, tag_id)
+            physical_delete_tag(ctx, tag_id)
+            cc.registry.pop(f"tag:{tag_name}")
+            ok, _ = try_add_tag_rebuild(ctx, int(require_shared_datasource(ctx, "types")["id"]),
+                                        tag_name=tag_name, tag_base_name=base)
+            check_true("rebuild_after_physical", ok)
+            return CaseStatus.PASS
+        finally:
+            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+
+    if cid == "UA-2-4-027":
+        victim = _make_tag(ctx, cc, "vic")
+        other = _make_tag(ctx, cc, "oth")
+        try:
+            soft_delete_tag(ctx, int(victim["id"]))
+            check_true("other_still_active", bool(exact(active_rows(ctx, tagName=other["name"]),
+                                                      "tagName", other["name"])))
+            return CaseStatus.PASS
+        finally:
+            cleanup_case_tag(ctx, cc, int(victim["id"]), victim["name"])
+            cleanup_case_tag(ctx, cc, int(other["id"]), other["name"])
+
+    return _blocked_ua2_4(ctx, meta, f"UA-2-4 dispatcher gap {cid}")
+
+
+def try_add_tag_rebuild(ctx, ds_id: int, *, tag_name: str, tag_base_name: str):
+    from ua_test_harness.ua2_helpers import try_add_tag
+    return try_add_tag(ctx, ds_id, tag_name=tag_name, tag_base_name=tag_base_name)

@@ -4,7 +4,7 @@
 - catalog 仍 419 条,UA-2 265 条。
 - case_inventory 结构 OK(documented=419, implemented=419, unimplemented=0,
   malformedRows=0, duplicateDocumentIds=0)。
-- 16 个 UA-2 handler 全部在派发表里且可派发。
+- 265 个 UA-2 handler 全部在派发表里且可派发。
 - 三个 UA-2 runtime 模块不再依赖 ua2_common.prepare_datasource(状态检查:
   monkeypatch 为 raise,逐个派发 handler,确认无一触发)。
 
@@ -69,28 +69,24 @@ def test_inventory_structure_ok():
     assert structural_failures(report) == [], structural_failures(report)
 
 
-# --- 16 handler 派发 ---
+# --- UA-2 handler 派发 ---
 
 
-def test_all_16_supported_handlers_dispatch():
+def test_all_supported_handlers_dispatch():
     from ua_test_harness.ua2_runtime import (
         _EXECUTE_UA2, is_supported_ua2, supported_ua2_ids,
     )
+    from ua_test_harness.ua2_registry import ua2_all_ids
 
-    assert len(_EXECUTE_UA2) == 16, sorted(_EXECUTE_UA2.keys())
-    expected = {
-        "UA-2-1-017", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022",
-        "UA-2-2-004", "UA-2-2-005", "UA-2-2-008", "UA-2-2-011",
-        "UA-2-2-015", "UA-2-2-016", "UA-2-2-019", "UA-2-2-033",
-        "UA-2-4-001", "UA-2-4-013", "UA-2-4-020", "UA-2-4-024",
-    }
+    expected = set(ua2_all_ids())
+    assert len(_EXECUTE_UA2) == 265, len(_EXECUTE_UA2)
     assert set(_EXECUTE_UA2.keys()) == expected
     for cid in expected:
         assert is_supported_ua2(cid) is True
     assert set(supported_ua2_ids()) == expected
 
 
-# --- 跨模块: 16 handler 均不调 prepare_datasource ---
+# --- 跨模块: 全部 handler 均不调 prepare_datasource ---
 
 # 逐 case 的行为级 "不调 prepare_datasource / 不建删 DS" 已由各 runtime 的
 # test_no_prepare_datasource 覆盖(全量 pytest 会跑)。这里补一个聚合断言:

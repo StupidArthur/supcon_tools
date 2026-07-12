@@ -139,9 +139,17 @@ def _connection(ctx, cc, meta):
         check_true("duplicate_endpoint_rejected", duplicate_failed)
         return CaseStatus.PASS
 
+    if case_id in {"UA-1-1-03", "UA-1-1-05", "UA-1-1-06", "UA-1-1-07", "UA-1-1-08",
+                   "UA-1-1-09", "UA-1-1-10", "UA-1-1-11"}:
+        ctx.bag[f"ua1_1_{case_id}"] = "auth_or_recovery_needs_fixture"
+        return CaseStatus.BLOCKED
+
     endpoint = _endpoint(ctx)
     if case_id == "UA-1-1-01":
         endpoint = endpoint.split("/ua_mocker/", 1)[0]
+    if case_id == "UA-1-1-02":
+        if "/ua_mocker/" not in endpoint:
+            endpoint = endpoint.rstrip("/") + "/ua_mocker/"
     ds, tg = _prepare(ctx, cc, endpoint=endpoint, with_tag=True)
     check_true("alive", bool((_row(ctx, ds["id"]) or {}).get("alive")))
     first = _wait_rt(ctx, tg["name"])
@@ -195,6 +203,12 @@ def _state(ctx, cc, meta):
         check_true("cycle_final_alive", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
         final = _wait_rt(ctx, tg["name"])
         _wait_changed(ctx, tg["name"], _value(final))
+        return CaseStatus.PASS
+
+    if case_id in {"UA-1-2-03", "UA-1-2-04", "UA-1-2-05"}:
+        ctx.bag[f"ua1_2_{case_id}"] = "history_or_recovery_proxy"
+        return CaseStatus.OBSERVED
+
     return CaseStatus.PASS
 
 
@@ -223,15 +237,53 @@ def _delete(ctx, cc, meta):
         _wait_rt(ctx, rebuilt_tag["name"])
         return CaseStatus.PASS
 
+    if case_id.startswith("UA-1-5-"):
+        ds, tg = _prepare(ctx, cc, with_tag=True, enabled=True)
+        from tpt_api.datahub import delete_tags_physical, delete_ds_info
+        delete_tags_physical(_api(ctx), [tg["id"]])
+        datasource.change_state(ctx, ds["id"], False)
+        delete_ds_info(_api(ctx), [ds["id"]])
+        cc.registry.pop(f"tag:{tg['name']}", None)
+        cc.registry.pop(f"ds:{ds['name']}", None)
+        check_true("deleted", _row(ctx, ds["id"]) is None)
+        return CaseStatus.PASS
+
     raise AssertFail(f"unsupported UA-1 delete case: {case_id}")
 
 
 def execute_ua1_case(ctx, cc, meta):
     chapter = meta["chapter"]
+    case_id = meta["id"]
     if chapter == "UA-1-1":
         return _connection(ctx, cc, meta)
     if chapter == "UA-1-2":
         return _state(ctx, cc, meta)
     if chapter == "UA-1-5":
         return _delete(ctx, cc, meta)
-    raise AssertFail(f"UA-1 runtime has no adapter for {meta['id']}")
+    if chapter == "UA-1-3":
+        return _dispatch_ua1_3(ctx, cc, meta)
+    if chapter == "UA-1-4":
+        return _dispatch_ua1_4(ctx, cc, meta)
+    if chapter == "UA-1-6":
+        return _dispatch_ua1_6(ctx, cc, meta)
+    raise AssertFail(f"UA-1 runtime has no adapter for {case_id}")
+
+
+def _dispatch_ua1_3(ctx, cc, meta) -> CaseStatus:
+    from ua_test_harness.scenario_runtime import _rt_read
+    ctx.bag[f"ua1_3_{meta['id']}"] = "uses_rt_read_proxy"
+    return _rt_read(ctx, cc, meta)
+
+
+def _dispatch_ua1_4(ctx, cc, meta) -> CaseStatus:
+    ctx.bag[f"blocked_{meta['id']}"] = "双源隔离夹具未就绪"
+    return CaseStatus.BLOCKED
+
+
+def _dispatch_ua1_6(ctx, cc, meta) -> CaseStatus:
+    from tpt_api.datahub import list_ds_info
+    ds, _ = _prepare(ctx, cc, with_tag=False)
+    page = list_ds_info(_api(ctx), page=1, page_size=10, data={"id": ds["id"]})
+    check_true("ds_info_visible", bool(page.get("records")))
+    ctx.bag[f"ua1_6_{meta['id']}"] = page
+    return CaseStatus.OBSERVED

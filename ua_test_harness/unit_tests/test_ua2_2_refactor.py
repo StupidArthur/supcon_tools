@@ -398,3 +398,116 @@ def test_no_prepare_datasource(monkeypatch):
     rt.query_config_fields(_ctx(), _cc("UA-2-2-033"))
 
     assert prep_calls == [], f"prepare_datasource was called: {prep_calls}"
+
+
+# --- batch 2: UA-2-2-001 / 003 / 006 / 017 / 030 ---
+
+def test_001_list_default_range_no_tag_lifecycle(monkeypatch):
+    ctx = _ctx()
+    cc = _cc("UA-2-2-001")
+    calls = _Calls()
+    _patch_env(monkeypatch, calls)
+
+    list_calls: list[dict] = []
+    qtq_calls: list[dict] = []
+
+    def fake_list_tags(api, page=1, page_size=10, data=None, sort="-createTime"):
+        list_calls.append({"page": page, "page_size": page_size, "data": data})
+        return {"records": [{"id": 1}, {"id": 2}], "total": 2}
+
+    def fake_qtq(api, ds_id=None, group_id="0", tag_name="", tag_base_name="",
+                 tag_type=1, page=1, page_size=100, sort="-createTime"):
+        qtq_calls.append({"group_id": group_id, "page": page, "page_size": page_size})
+        return {"tagInfoList": {"records": [{"id": 3}, {"id": 4}]}}
+
+    monkeypatch.setattr("tpt_api.datahub.list_tags", fake_list_tags)
+    monkeypatch.setattr("tpt_api.datahub.query_tags_with_quality", fake_qtq)
+    monkeypatch.setattr("ua_test_harness.clients.tpt_client.get_api", lambda ctx: object())
+
+    status = rt.query_list_default_range(ctx, cc)
+
+    assert status == CaseStatus.PASS
+    assert calls.require_shared == ["types"]
+    assert calls.create_case_tag == []
+    assert list_calls and list_calls[0]["page_size"] == 10
+    assert qtq_calls and qtq_calls[0]["group_id"] == "0"
+
+
+def test_003_multi_ds_scoped_queries(monkeypatch):
+    ctx = _ctx()
+    cc = _cc("UA-2-2-003")
+    calls = _Calls()
+    tag_name = "ua_case_ua2_UA-2-2-003_mds_ns001"
+
+    def ar(**kw):
+        if kw.get("dsId") == 100:
+            return [{"id": 800, "dsId": 100, "tagName": tag_name}]
+        if kw.get("dsId") == 200:
+            return []
+        return []
+
+    _patch_env(monkeypatch, calls, active_rows_records_for=ar)
+    status = rt.query_multi_datasource_set(ctx, cc)
+
+    assert status == CaseStatus.PASS
+    assert calls.require_shared == ["types", "empty"]
+    assert calls.cleanup_case_tag == [(800, tag_name)]
+
+
+def test_006_full_tag_name_exact_hit(monkeypatch):
+    ctx = _ctx()
+    cc = _cc("UA-2-2-006")
+    calls = _Calls()
+    tag_name = "ua_case_ua2_UA-2-2-006_fn_ns001"
+
+    def ar(**kw):
+        if kw.get("tagName") == tag_name:
+            return [{"id": 800, "dsId": 100, "tagName": tag_name}]
+        return []
+
+    _patch_env(monkeypatch, calls, active_rows_records_for=ar)
+    status = rt.query_full_tag_name(ctx, cc)
+
+    assert status == CaseStatus.PASS
+    assert any(kw.get("tagName") == tag_name for kw in calls.active_rows)
+
+
+def test_017_single_ds_scope(monkeypatch):
+    ctx = _ctx()
+    cc = _cc("UA-2-2-017")
+    calls = _Calls()
+    tag_name = "ua_case_ua2_UA-2-2-017_sd_ns001"
+
+    def ar(**kw):
+        if kw.get("dsId") == 100:
+            return [
+                {"id": 800, "dsId": 100, "tagName": tag_name},
+                {"id": 801, "dsId": 100, "tagName": "other"},
+            ]
+        return []
+
+    _patch_env(monkeypatch, calls, active_rows_records_for=ar)
+    status = rt.query_single_datasource(ctx, cc)
+
+    assert status == CaseStatus.PASS
+    assert all(kw.get("dsId") == 100 for kw in calls.active_rows if "dsId" in kw)
+
+
+def test_030_contradictory_filters_empty_on_wrong_ds(monkeypatch):
+    ctx = _ctx()
+    cc = _cc("UA-2-2-030")
+    calls = _Calls()
+    tag_name = "ua_case_ua2_UA-2-2-030_ct_ns001"
+
+    def ar(**kw):
+        if kw.get("dsId") == 200 and kw.get("tagName") == tag_name:
+            return []
+        if kw.get("dsId") == 100 and kw.get("tagName") == tag_name:
+            return [{"id": 800, "dsId": 100, "tagName": tag_name}]
+        return []
+
+    _patch_env(monkeypatch, calls, active_rows_records_for=ar)
+    status = rt.query_contradictory_filters(ctx, cc)
+
+    assert status == CaseStatus.PASS
+    assert calls.require_shared == ["types", "empty"]

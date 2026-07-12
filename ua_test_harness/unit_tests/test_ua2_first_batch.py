@@ -273,16 +273,11 @@ def test_catalog_unchanged_after_test_tags_deletion():
     assert len(ua2) == 265, len(ua2)
 
 
-def test_supported_ua2_count_is_sixteen():
-    assert len(_EXECUTE_UA2) == 16, sorted(_EXECUTE_UA2.keys())
+def test_supported_ua2_count_is_full_chapter():
+    assert len(_EXECUTE_UA2) == 265, len(_EXECUTE_UA2)
 
 
-def test_supported_ua2_set_matches_expected_first_batch():
-    expected = {
-        "UA-2-1-017", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022",
-        "UA-2-2-004", "UA-2-2-005", "UA-2-2-008", "UA-2-2-011",
-        "UA-2-2-015", "UA-2-2-016", "UA-2-2-019", "UA-2-2-033",
-        "UA-2-4-001", "UA-2-4-013", "UA-2-4-020", "UA-2-4-024",
-    }
-    assert set(_EXECUTE_UA2.keys()) == expected
+def test_supported_ua2_set_matches_all_documented():
+    from ua_test_harness.ua2_registry import ua2_all_ids
+    assert set(_EXECUTE_UA2.keys()) == set(ua2_all_ids())
 

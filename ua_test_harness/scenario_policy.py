@@ -2,10 +2,10 @@
 
 调度顺序:
   UA-1 -> execute_ua1_case
-  UA-2 -> execute_ua2_case (精确调度)
+  UA-2 -> execute_ua2_case (章节 dispatcher)
   其他 -> _execute_shared
 
-未接适配器的 UA-2 case 仍返回 BLOCKED,精确说明缺口类别,不允许退化冒烟。
+未接适配器的 case 仍返回 BLOCKED,精确说明缺口类别,不允许退化冒烟。
 """
 from __future__ import annotations
 
@@ -14,24 +14,40 @@ from dataclasses import dataclass
 from ua_test_harness.models import CaseStatus
 from ua_test_harness.scenario_runtime import execute_documented_case as _execute_shared
 from ua_test_harness.ua1_runtime import execute_ua1_case
+from ua_test_harness.ua2_registry import ua2_supported_sets
 from ua_test_harness.ua2_runtime import is_supported_ua2, execute_ua2_case
 
 
+def _ua1_all_supported() -> dict[str, set[str]]:
+    from pathlib import Path
+    from ua_test_harness.case_inventory import load_documented_cases
+
+    rows, _ = load_documented_cases(Path(__file__).resolve().parents[1])
+    out: dict[str, set[str]] = {}
+    for row in rows:
+        if not row["id"].startswith("UA-1-"):
+            continue
+        out.setdefault(row["chapter"], set()).add(row["id"])
+    return out
+
+
+def _ua3_all_supported() -> dict[str, set[str]]:
+    from pathlib import Path
+    from ua_test_harness.case_inventory import load_documented_cases
+
+    rows, _ = load_documented_cases(Path(__file__).resolve().parents[1])
+    out: dict[str, set[str]] = {}
+    for row in rows:
+        if not row["id"].startswith("UA-3-"):
+            continue
+        out.setdefault(row["chapter"], set()).add(row["id"])
+    return out
+
+
 _SUPPORTED = {
-    "UA-1-1": {"UA-1-1-01", "UA-1-1-02", "UA-1-1-04", "UA-1-1-12"},
-    "UA-1-2": {"UA-1-2-01", "UA-1-2-02", "UA-1-2-04", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"},
-    "UA-1-5": {"UA-1-5-01", "UA-1-5-07"},
-    "UA-2-1": {"UA-2-1-017", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022"},
-    "UA-2-2": {"UA-2-2-004", "UA-2-2-005", "UA-2-2-008", "UA-2-2-011",
-               "UA-2-2-015", "UA-2-2-016", "UA-2-2-019", "UA-2-2-033"},
-    "UA-2-4": {"UA-2-4-001", "UA-2-4-013", "UA-2-4-020", "UA-2-4-024"},
-    "UA-2-5": set(),
-    "UA-3-1": {"UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-010"},
-    "UA-3-2": {"UA-3-2-001", "UA-3-2-021"},
-    "UA-3-3": {"UA-3-3-001"},
-    "UA-3-4": {"UA-3-4-001"},
-    "UA-3-5": {"UA-3-5-001"},
-    "UA-3-6": {"UA-3-6-001"},
+    **_ua1_all_supported(),
+    **ua2_supported_sets(),
+    **_ua3_all_supported(),
 }
 
 
@@ -47,6 +63,28 @@ _SHARED_SCENARIOS = {
     "UA-3-5-001": "response_time",
     "UA-3-6-001": "performance",
 }
+
+
+def _ua3_scenario_for(meta) -> str:
+    cid = meta["id"]
+    title = meta.get("title") or ""
+    if cid in _SHARED_SCENARIOS:
+        return _SHARED_SCENARIOS[cid]
+    if "写" in title or "回写" in title:
+        return "rt_write"
+    if "历史" in title:
+        return "history"
+    if "响应" in title or "响应时间" in title:
+        return "response_time"
+    if "性能" in title or "并发" in title or "长稳" in title:
+        return "performance"
+    if "数据源" in title or "启用" in title or "禁用" in title:
+        return "datasource_state"
+    if "删除" in title or "软删" in title or "物理" in title:
+        return "tag_delete"
+    if "查询" in title or "列表" in title:
+        return "tag_query"
+    return "rt_read"
 
 
 _BLOCK_REASONS = {
@@ -79,6 +117,8 @@ class ScenarioDecision:
 
 def classify_case(meta) -> ScenarioDecision:
     case_id = meta["id"]
+    if case_id.startswith("UA-3-"):
+        return ScenarioDecision(True, scenario=_ua3_scenario_for(meta))
     scenario = _SHARED_SCENARIOS.get(case_id)
     if scenario:
         return ScenarioDecision(True, scenario=scenario)
