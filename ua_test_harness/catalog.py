@@ -1,10 +1,4 @@
-"""catalog.py:用例装饰器 + catalog JSON 导出。
-
-约定(plan.md 4):
-- 测试函数装饰器 @case(...) 元数据是执行事实源;
-- python -m ua_test_harness.catalog export 生成 catalog.json 给 Go/UI。
-- 同一进程内 also 通过 all_defs() 提供内存访问。
-"""
+"""catalog.py:用例装饰器 + catalog JSON 导出。"""
 from __future__ import annotations
 
 import importlib
@@ -66,34 +60,21 @@ def case(
 
 
 def step(step_id: str, title: str = "") -> Callable[[Callable], Callable]:
-    """步骤装饰器(轻量标记,仅记录到 CaseDef.steps)。"""
-    _LAST_STEP = (step_id, title)
-
     def deco(fn: Callable) -> Callable:
-        _LAST_STEP  # noqa: F841 (placeholder marker; CaseDef.steps 由装饰器构造)
         return fn
-
     return deco
 
 
 def all_defs() -> list[CaseDef]:
-    """返回当前进程中已注册的全部 CaseDef。
-
-    为保证稳定顺序,按 (chapter, id) 排序。
-    """
     return sorted(_REGISTRY, key=lambda c: (c.chapter, c.id))
 
 
 def reset() -> None:
-    """清空注册表(仅供单测)。"""
     _REGISTRY.clear()
 
 
 def discover(package: str = "ua_test_harness.tests") -> int:
-    """递归导入 tests 包以触发装饰器注册。
-
-    返回新注册的 CaseDef 数量。
-    """
+    """导入手写 Case 后，最后导入 Markdown 全量补齐注册器。"""
     before = len(_REGISTRY)
     try:
         mod = importlib.import_module(package)
@@ -101,11 +82,25 @@ def discover(package: str = "ua_test_harness.tests") -> int:
         return 0
     if not hasattr(mod, "__path__"):
         return 0
+
+    normal: list[str] = []
+    deferred: list[str] = []
     for _finder, name, _ispkg in pkgutil.walk_packages(mod.__path__, prefix=f"{package}."):
+        if name.endswith(".zz_documented_cases"):
+            deferred.append(name)
+        else:
+            normal.append(name)
+
+    failures: list[tuple[str, Exception]] = []
+    for name in sorted(normal) + sorted(deferred):
         try:
             importlib.import_module(name)
-        except Exception:
-            continue
+        except Exception as exc:
+            failures.append((name, exc))
+
+    if failures:
+        details = "; ".join(f"{name}: {type(exc).__name__}: {exc}" for name, exc in failures)
+        raise RuntimeError(f"case discovery failed: {details}")
     return len(_REGISTRY) - before
 
 
@@ -115,14 +110,10 @@ def export_catalog(
     package: str = "ua_test_harness.tests",
     version: int = 1,
 ) -> dict:
-    """导出 catalog JSON 到文件,并返回导出的 dict。"""
     discover(package)
     chapters_map: dict[str, dict] = {}
     for c in all_defs():
-        ch = chapters_map.setdefault(
-            c.chapter,
-            {"id": c.chapter, "title": c.chapter, "cases": []},
-        )
+        ch = chapters_map.setdefault(c.chapter, {"id": c.chapter, "title": c.chapter, "cases": []})
         ch["cases"].append(
             {
                 "id": c.id,
