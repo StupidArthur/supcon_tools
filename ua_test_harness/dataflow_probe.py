@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from ua_test_harness.type_mapping import tpt_data_type_value, tpt_tag_base_name
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -41,6 +43,7 @@ def probe(
     local_ip: str,
     mock_port: int = 18964,
     timeout: float = 90.0,
+    namespace_index: int = 2,
 ) -> dict[str, Any]:
     from tpt_api.client import AlgAPI
     from tpt_api.datahub import (
@@ -58,13 +61,15 @@ def probe(
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     ds_name = f"ua_auto_flow_{stamp}"
     tag_name = f"ua_auto_flow_tag_{stamp}"
+    node_name = "smoke_change_1"
+    tag_base_name = tpt_tag_base_name(namespace_index, node_name)
     endpoint = f"opc.tcp://{local_ip}:{mock_port}/ua_mocker/"
     started = time.monotonic()
     ds_id: int | None = None
     tag_id: int | None = None
     api: Any = None
     result: dict[str, Any] = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "generatedAt": _now(),
         "baseUrl": base_url,
         "username": username,
@@ -72,8 +77,9 @@ def probe(
         "passwordPresent": bool(password),
         "localIp": local_ip,
         "mockPort": mock_port,
+        "namespaceIndex": namespace_index,
         "datasource": {"name": ds_name, "endpoint": endpoint},
-        "tag": {"name": tag_name, "baseName": "smoke_change_1"},
+        "tag": {"name": tag_name, "nodeName": node_name, "baseName": tag_base_name},
         "checks": [],
         "cleanup": [],
     }
@@ -124,7 +130,7 @@ def probe(
         tag = add_tag(
             api,
             tag_name=tag_name,
-            data_type=DataTypes["INT32"],
+            data_type=tpt_data_type_value("Int32", DataTypes),
             tag_type=TagTypes["一次位号"],
             ds_id=ds_id,
             group_id="0",
@@ -134,7 +140,7 @@ def probe(
             need_push=True,
             tag_desc="Stage 3 minimal dataflow probe",
             is_vector=True,
-            tag_base_name="smoke_change_1",
+            tag_base_name=tag_base_name,
         )
         tag_id = int(tag.get("id") or tag.get("tagId") or 0)
         add("create_tag", tag_id > 0, tagId=tag_id, response=tag)
@@ -211,13 +217,22 @@ def main() -> int:
     parser.add_argument("--username", default=os.getenv("DATAHUB_USER", ""))
     parser.add_argument("--local-ip", default=os.getenv("UA_LOCAL_IP", ""))
     parser.add_argument("--mock-port", type=int, default=18964)
+    parser.add_argument("--namespace-index", type=int, default=2)
     parser.add_argument("--timeout", type=float, default=90.0)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     password = os.getenv("DATAHUB_PASSWORD", "")
     if not password:
         raise SystemExit("DATAHUB_PASSWORD is required")
-    report = probe(args.base_url, args.username, password, args.local_ip, args.mock_port, args.timeout)
+    report = probe(
+        args.base_url,
+        args.username,
+        password,
+        args.local_ip,
+        args.mock_port,
+        args.timeout,
+        args.namespace_index,
+    )
     payload = json.dumps(report, ensure_ascii=False, indent=2)
     path = Path(args.output).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
