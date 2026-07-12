@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 
-def test_load_roundtrip(tmp_path: Path):
-    raw = {
+def _raw(tmp_path: Path) -> dict:
+    return {
         "runId": "rid-1",
         "selectedCaseIds": ["UA-1", "UA-2"],
         "subject": {
@@ -27,10 +27,9 @@ def test_load_roundtrip(tmp_path: Path):
         "paths": {"runDir": str(tmp_path), "reportPath": str(tmp_path / "r.json")},
         "note": "smoke",
     }
-    p = tmp_path / "rc.json"
-    p.write_text(json.dumps(raw), encoding="utf-8")
-    from ua_test_harness.config import RunConfig
-    cfg = RunConfig.load(p)
+
+
+def _assert_loaded(cfg, tmp_path: Path) -> None:
     assert cfg.run_id == "rid-1"
     assert cfg.subject.base_url.endswith("31501")
     assert cfg.subject.username == "admin"
@@ -41,3 +40,17 @@ def test_load_roundtrip(tmp_path: Path):
     assert cfg.timeouts.rt_visibility_sec == 25
     assert cfg.paths.run_dir == str(tmp_path)
     assert cfg.note == "smoke"
+
+
+def test_load_roundtrip(tmp_path: Path):
+    p = tmp_path / "rc.json"
+    p.write_text(json.dumps(_raw(tmp_path)), encoding="utf-8")
+    from ua_test_harness.config import RunConfig
+    _assert_loaded(RunConfig.load(p), tmp_path)
+
+
+def test_load_accepts_utf8_bom_from_windows_powershell(tmp_path: Path):
+    p = tmp_path / "rc-bom.json"
+    p.write_text(json.dumps(_raw(tmp_path)), encoding="utf-8-sig")
+    from ua_test_harness.config import RunConfig
+    _assert_loaded(RunConfig.load(p), tmp_path)
