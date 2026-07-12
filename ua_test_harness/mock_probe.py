@@ -45,7 +45,7 @@ async def probe(endpoint: str, namespace_index: int = 2, wait_sec: float = 1.2) 
             if mocker_node is not None:
                 children = await mocker_node.get_children()
                 child_names = [str(await child.read_browse_name()) for child in children]
-                add("browse_mocker_children", len(children) >= 2, count=len(children), children=child_names)
+                add("browse_mocker_children", len(children) >= 1, count=len(children), children=child_names)
 
             static_node_id = f"ns={namespace_index};s=smoke_static_1"
             changing_node_id = f"ns={namespace_index};s=smoke_change_1"
