@@ -538,7 +538,13 @@ def main() -> int:
             summary["blockedCount"] += 1
         elif st == "TIMEOUT":
             summary["timeoutCount"] += 1
-        if result.get("cleanupStatus") == "CLEANUP_FAILED" or (cleanup_report.get("report") or {}).get("residualDatasources", 0) > 0:
+        _cleanup_report = cleanup_report.get("report") or {}
+        _residual = (
+            _cleanup_report.get("residualActive", 0)
+            or _cleanup_report.get("residualRecycle", 0)
+            or _cleanup_report.get("residualCaseDatasources", 0)
+        )
+        if result.get("cleanupStatus") == "CLEANUP_FAILED" or _residual:
             summary["cleanupFailedCount"] += 1
 
     summary["caseResults"] = case_results
