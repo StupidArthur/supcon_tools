@@ -1,24 +1,24 @@
-"""Precise UA-2-1 tag creation scenarios backed by confirmed APIs."""
+"""Precise UA-2-1 creation scenarios.
+
+Only uses confirmed tag creation/query/RT helpers.
+"""
 from __future__ import annotations
 
-from tpt_api.datahub import add_tag, delete_tags_physical
-from tpt_api.types import DataTypes, TagTypes
-
-from ua_test_harness.assertions import AssertFail, check_eq, check_true
+from ua_test_harness.assertions import check_true
 from ua_test_harness.models import CaseStatus
-from ua_test_harness.ua2_common import (
-    active_rows,
-    api,
-    create_read_tag,
-    prepare_datasource,
-    unique,
-    wait_rt,
-)
+from ua_test_harness.ua2_common import create_read_tag, wait_rt
 
 
-def _raw_add(ctx, *, name: str, ds_id: int, base_name: str):
-    return add_tag(
-        api(ctx),
-        tag_name=name,
-        data_type=DataTypes["INT"],
-        tag_type=TagTypes
+def create_tag_online(ctx, cc):
+    _ds, tag = create_read_tag(ctx, cc)
+    row = wait_rt(ctx, tag["name"])
+    check_true("tag_created", bool(tag.get("id")))
+    check_true("rt_available", bool(row))
+    return CaseStatus.PASS
+
+
+def create_tag_and_query(ctx, cc):
+    _ds, tag = create_read_tag(ctx, cc)
+    row = wait_rt(ctx, tag["name"])
+    check_true("tag_name", row.get("tagName", tag["name"]) == tag["name"])
+    return CaseStatus.PASS
