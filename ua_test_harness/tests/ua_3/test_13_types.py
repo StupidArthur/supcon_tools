@@ -1,7 +1,7 @@
 """tests/ua_3/test_13_types.py:13 类型参数化采集与写(plan.md 11 推荐补充)。
 
-参数化方式:循环 13 种数据类型,每个跑一次 UA-3-1-001 + UA-3-3-001 的核心断言。
-为了避免 catalog 爆胀,这里只暴露一个 case(UA-3-1-013types),但函数内遍历 13 种类型。
+参数化方式:循环 13 种数据类型,每个跑一次 UA-3-1-004 的核心断言。
+为了避免 catalog 爆胀,这里只暴露文档中定义的 UA-3-1-004,函数内遍历 13 种类型。
 """
 from __future__ import annotations
 
@@ -23,20 +23,21 @@ TYPES = [
 
 
 @case(
-    id="UA-3-1-013types",
-    title="13 类型参数化采集",
+    id="UA-3-1-004",
+    title="数据类型_13种采集",
     chapter="UA-3-1",
-    kind="exploratory",
+    kind="regression",
     tags=["rt", "ua-3", "13-types"],
     timeout_sec=600,
+    doc_path="ua_test_gui/doc/test_cases/UA-3-1.md",
     steps=[
         StepDef(step_id="ensure-mock", title="mock ready"),
         StepDef(step_id="create-ds", title="创建数据源"),
         StepDef(step_id="loop-types", title="遍历 13 种类型 add + 采集"),
     ],
-    assertions=["每种类型 RT 在 timeout 内出现值;不串类型"],
+    assertions=["13种类型的值和表示正确,不串类型"],
 )
-def ua_3_1_013types_collect(ctx, cc):
+def ua_3_1_004_collect_13_types(ctx, cc):
     ensure_mock_ready(ctx, "functional")
     ensure_logged_in(ctx)
     endpoint = mock_control.get_endpoint("functional", ctx)
@@ -46,8 +47,22 @@ def ua_3_1_013types_collect(ctx, cc):
     wait_alive(ctx, ds["id"], timeout=90.0)
     for dtype, sample in TYPES:
         name = f"ua31t_{dtype.lower()}_{ctx.config.run_id[:10]}".replace("-", "_")
-        tag.create_tag(ctx, name, ds_id=ds["id"], data_type=dtype, writable=(dtype not in ("STRING", "DATE_TIME")), frequency=5)
-        def has_value(d=dtype):
-            rt = tag.read_rt(ctx, name)
+        tag.create_tag(
+            ctx,
+            name,
+            ds_id=ds["id"],
+            data_type=dtype,
+            writable=(dtype not in ("STRING", "DATE_TIME")),
+            frequency=5,
+        )
+
+        def has_value(tag_name=name):
+            rt = tag.read_rt(ctx, tag_name)
             return rt.get("quality", 0) != 0
-        wait_until(f"rt:{name}", has_value, timeout=ctx.config.timeouts.rt_visibility_sec, interval=2.0)
+
+        wait_until(
+            f"rt:{name}",
+            has_value,
+            timeout=ctx.config.timeouts.rt_visibility_sec,
+            interval=2.0,
+        )
