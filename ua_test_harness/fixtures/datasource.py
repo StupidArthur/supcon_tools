@@ -6,14 +6,14 @@ from tpt_api.types import DsSubTypes, DsTypes
 
 from ua_test_harness.assertions import AssertFail
 from ua_test_harness.context import RunContext
+from ua_test_harness.resources import ResourceRegistry
 
 _AUTOMATION_PREFIXES = ("ua_auto_", "ua_test_")
 
 
 def find_ds_by_name(api, name: str) -> dict | None:
     page = list_ds_info(api, page=1, page_size=500, data={"dsName": name})
-    rows = page.get("records") or []
-    for row in rows:
+    for row in page.get("records") or []:
         if row.get("name") == name or row.get("dsName") == name:
             return row
     return None
@@ -49,12 +49,11 @@ def create_datasource(
     name: str,
     endpoint: str,
     sub_type: str = "OPC_UA_SERVER",
+    registry: ResourceRegistry | None = None,
 ) -> dict:
-    """Create a fresh automation-owned datasource and register its deletion.
+    """创建全新自动化数据源并登记到 Case 或 Run 资源栈。
 
-    Existing resources are never silently reused. A stale datasource may be deleted
-    only when its exact name is automation-owned. A duplicate endpoint owned by any
-    other name is treated as an environment conflict rather than user data to remove.
+    不复用用户数据源；只有同名且带自动化前缀的陈旧资源允许删除。
     """
     from ua_test_harness.clients.tpt_client import get_api
 
@@ -69,21 +68,13 @@ def create_datasource(
         _delete_owned_stale(api, stale, name)
 
     endpoint_page = list_ds_info(api, page=1, page_size=500, data={"dsTarUrl": endpoint})
-    endpoint_rows = [
-        row for row in endpoint_page.get("records") or [] if row.get("dsTarUrl") == endpoint
-    ]
+    endpoint_rows = [row for row in endpoint_page.get("records") or [] if row.get("dsTarUrl") == endpoint]
     if endpoint_rows:
         conflicts = [
-            {
-                "id": row.get("id"),
-                "name": row.get("dsName") or row.get("name"),
-                "endpoint": row.get("dsTarUrl"),
-            }
+            {"id": row.get("id"), "name": row.get("dsName") or row.get("name"), "endpoint": row.get("dsTarUrl")}
             for row in endpoint_rows
         ]
-        raise AssertFail(
-            f"datasource endpoint already exists; refusing to reuse/delete it: {conflicts}"
-        )
+        raise AssertFail(f"datasource endpoint already exists; refusing to reuse/delete it: {conflicts}")
 
     data = add_ds_info(
         api,
@@ -97,7 +88,7 @@ def create_datasource(
         raise AssertFail(f"create datasource {name} returned no id: {data}")
 
     owned_id = int(ds_id)
-    ctx.registry.register(
+    (registry or ctx.registry).register(
         f"ds:{name}",
         "datasource",
         lambda: _safe_delete(api, owned_id),
@@ -112,9 +103,7 @@ def _safe_delete(api, ds_id: int) -> None:
         return
     actual_name = str(current.get("dsName") or current.get("name") or "")
     if not _is_automation_name(actual_name):
-        raise RuntimeError(
-            f"refusing to delete non-automation datasource id={ds_id} name={actual_name!r}"
-        )
+        raise RuntimeError(f"refusing to delete non-automation datasource id={ds_id} name={actual_name!r}")
     try:
         delete_ds_info(api, [ds_id])
     except Exception as exc:
@@ -123,20 +112,17 @@ def _safe_delete(api, ds_id: int) -> None:
 
 def change_state(ctx: RunContext, ds_id: int, enabled: bool) -> None:
     from ua_test_harness.clients.tpt_client import get_api
-
     change_ds_state(get_api(ctx), ds_id, enabled)
 
 
 def get_state(ctx: RunContext, ds_id: int) -> dict | None:
     from ua_test_harness.clients.tpt_client import get_api
-
     return find_ds_by_id(get_api(ctx), ds_id)
 
 
 def wait_alive(ctx: RunContext, ds_id: int, timeout: float = 60.0) -> bool:
     from ua_test_harness.clients.tpt_client import get_api
     from ua_test_harness.polling import wait_until
-
     api = get_api(ctx)
 
     def fetch() -> bool:
@@ -145,23 +131,6 @@ def wait_alive(ctx: RunContext, ds_id: int, timeout: float = 60.0) -> bool:
 
     try:
         wait_until(f"ds_alive:{ds_id}", fetch, timeout=timeout, interval=1.0)
-        return True
-    except Exception:
-        return False
-
-
-def wait_not_alive(ctx: RunContext, ds_id: int, timeout: float = 60.0) -> bool:
-    from ua_test_harness.clients.tpt_client import get_api
-    from ua_test_harness.polling import wait_until
-
-    api = get_api(ctx)
-
-    def fetch() -> bool:
-        row = find_ds_by_id(api, ds_id)
-        return bool(row) and not bool(row.get("alive"))
-
-    try:
-        wait_until(f"ds_not_alive:{ds_id}", fetch, timeout=timeout, interval=1.0)
         return True
     except Exception:
         return False
