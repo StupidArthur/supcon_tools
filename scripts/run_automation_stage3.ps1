@@ -3,7 +3,8 @@ param(
     [string]$BaseUrl = "http://10.10.58.153:31501/",
     [string]$Username = "admin",
     [string]$LocalIp = "10.30.70.77",
-    [string]$PythonExe = "python"
+    [string]$PythonExe = "python",
+    [int]$MockPort = 18964
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +45,24 @@ function Run-Step {
     }
 }
 
+function Run-PythonCaptured {
+    param(
+        [string[]]$Arguments,
+        [string]$StdoutPath,
+        [string]$StderrPath
+    )
+    $proc = Start-Process -FilePath $PythonExe `
+        -ArgumentList $Arguments `
+        -WorkingDirectory $RepoRoot `
+        -RedirectStandardOutput $StdoutPath `
+        -RedirectStandardError $StderrPath `
+        -PassThru `
+        -Wait
+    if (Test-Path $StdoutPath) { Get-Content $StdoutPath }
+    if (Test-Path $StderrPath) { Get-Content $StderrPath | ForEach-Object { Write-Host $_ } }
+    $script:LASTEXITCODE = $proc.ExitCode
+}
+
 try {
     Set-Location $RepoRoot
 
@@ -55,7 +74,7 @@ try {
     $mockStdout = Join-Path $outDir "mock.stdout.log"
     $mockStderr = Join-Path $outDir "mock.stderr.log"
     $mock = Start-Process -FilePath $PythonExe `
-        -ArgumentList @("main.py", (Join-Path $RepoRoot "ua_mocker\smoke.yaml")) `
+        -ArgumentList @("main.py", (Join-Path $RepoRoot "ua_mocker\smoke_stage3.yaml")) `
         -WorkingDirectory (Join-Path $RepoRoot "ua_mocker") `
         -RedirectStandardOutput $mockStdout `
         -RedirectStandardError $mockStderr `
@@ -67,29 +86,26 @@ try {
         if ($mock.HasExited) { break }
         try {
             $tcp = [System.Net.Sockets.TcpClient]::new()
-            $tcp.Connect("127.0.0.1", 18960)
+            $tcp.Connect("127.0.0.1", $MockPort)
             $tcp.Dispose()
             $ready = $true
             break
         } catch { }
     }
-    if (-not $ready) { throw "functional mock did not become ready; see mock logs" }
+    if (-not $ready) { throw "stage3 mock did not become ready on port $MockPort; see mock logs" }
 
     Run-Step "local-mock-probe" {
-        & $PythonExe -m ua_test_harness.mock_probe `
-            --endpoint "opc.tcp://127.0.0.1:18960/ua_mocker/" `
-            --output (Join-Path $outDir "mock-probe.json") 2>&1 |
-            Tee-Object -FilePath (Join-Path $outDir "mock-probe.log")
+        Run-PythonCaptured `
+            -Arguments @("-m", "ua_test_harness.mock_probe", "--endpoint", "opc.tcp://127.0.0.1:$MockPort/ua_mocker/", "--output", (Join-Path $outDir "mock-probe.json")) `
+            -StdoutPath (Join-Path $outDir "mock-probe.log") `
+            -StderrPath (Join-Path $outDir "mock-probe.stderr.log")
     }
 
     Run-Step "tpt-dataflow-probe" {
-        & $PythonExe -m ua_test_harness.dataflow_probe `
-            --base-url $BaseUrl `
-            --username $Username `
-            --local-ip $LocalIp `
-            --timeout 90 `
-            --output (Join-Path $outDir "dataflow-probe.json") 2>&1 |
-            Tee-Object -FilePath (Join-Path $outDir "dataflow-probe.log")
+        Run-PythonCaptured `
+            -Arguments @("-m", "ua_test_harness.dataflow_probe", "--base-url", $BaseUrl, "--username", $Username, "--local-ip", $LocalIp, "--mock-port", "$MockPort", "--timeout", "90", "--output", (Join-Path $outDir "dataflow-probe.json")) `
+            -StdoutPath (Join-Path $outDir "dataflow-probe.log") `
+            -StderrPath (Join-Path $outDir "dataflow-probe.stderr.log")
     }
 } catch {
     $fatal = $_.Exception.Message
@@ -114,6 +130,7 @@ try {
         username=$Username;
         tenantId="";
         localIp=$LocalIp;
+        mockPort=$MockPort;
         passwordPresent=(-not [string]::IsNullOrWhiteSpace($env:DATAHUB_PASSWORD));
         steps=$steps;
         fatalError=$fatal;
