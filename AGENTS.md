@@ -1,5 +1,13 @@
 # 工程纪律(执行 Agent 必读)
 
+## 0. 当前开发顺序
+
+- 冻结新的 GUI 功能开发和 GUI 联调。
+- 先完成 `ua_test_gui/doc/test_cases/*.md` 定义的 419 条 Case。
+- 实现顺序为 UA-1 → UA-2 → UA-3；详细规则见 `ua_test_gui/doc/case-first-plan.md`。
+- 只有覆盖矩阵达到 `documented=419`、`implemented=419` 后，才恢复 GUI 工作。
+- 已有 GUI / Go / SQLite 代码保留；只允许修复阻断 CLI Case 执行、报告或清理的底层问题。
+
 ## 1. 环境/工具问题不绕路
 
 如果执行过程中发现环境问题或第三方工具(如 ua_mocker)bug:
