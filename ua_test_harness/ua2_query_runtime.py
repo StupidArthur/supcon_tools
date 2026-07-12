@@ -1,13 +1,12 @@
-"""UA-2 query scenarios."""
-from ua_test_harness.assertions import check_true
-from ua_test_harness.ua2_common import active_rows, exact
+"""Precise UA-2-2 query scenarios using tag-info/page only."""
+from __future__ import annotations
+
+from ua_test_harness.assertions import check_eq, check_true
+from ua_test_harness.models import CaseStatus
+from ua_test_harness.ua2_common import active_rows, create_read_tag, prepare_datasource, unique
 
 
-def query_by_name(ctx, cc, tag_name: str):
-    rows = active_rows(ctx)
-    check_true("tag_query_by_name", bool(exact(rows, "tagName", tag_name)))
-
-
-def query_returns_active_only(ctx, cc):
-    rows = active_rows(ctx)
-    check_true("tag_query_response", isinstance(rows, list))
+def _prepared(ctx, cc):
+    ds = prepare_datasource(ctx, cc)
+    name = unique(ctx, "ua_auto_ua22")
+    tag, row = create
