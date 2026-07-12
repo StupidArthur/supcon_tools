@@ -14,7 +14,7 @@ from tpt_api.datahub import (
 from tpt_api.types import DataTypes, TagTypes
 
 from ua_test_harness.context import RunContext
-from ua_test_harness.assertions import AssertFail
+from ua_test_harness.resources import ResourceRegistry
 
 
 def create_tag(
@@ -26,7 +26,9 @@ def create_tag(
     frequency: int = 10,
     group_id: str = "0",
     tag_base_name: str | None = None,
+    registry: ResourceRegistry | None = None,
 ) -> dict:
+    """创建唯一临时位号，并把物理删除登记到指定资源栈。"""
     from tpt_api.datahub import delete_tags_physical, list_recycle_tags, list_tags
     from ua_test_harness.clients.tpt_client import get_api
 
@@ -34,18 +36,12 @@ def create_tag(
     page = list_tags(api, page=1, page_size=500, data={"tagName": name})
     active_ids = [int(r["id"]) for r in page.get("records") or [] if r.get("tagName") == name]
     if active_ids:
-        try:
-            delete_tags_physical(api, active_ids)
-        except Exception:
-            pass
+        delete_tags_physical(api, active_ids)
     rec = list_recycle_tags(api, page=1, page_size=500)
     records = ((rec or {}).get("tagInfoList") or {}).get("records") or []
     recycle_ids = [int(r["id"]) for r in records if r.get("tagName") == name]
     if recycle_ids:
-        try:
-            delete_tags_physical(api, recycle_ids)
-        except Exception:
-            pass
+        delete_tags_physical(api, recycle_ids)
 
     data = add_tag(
         api,
@@ -63,55 +59,49 @@ def create_tag(
         tag_base_name=tag_base_name or f"1_{name}",
     )
     tag_id = data.get("id") or data.get("tagId")
+    if not tag_id:
+        raise RuntimeError(f"create tag {name} returned no id: {data}")
 
     def cleanup() -> None:
         try:
-            if tag_id:
-                delete_tags_physical(api, [int(tag_id)])
-        except Exception as e:
-            raise RuntimeError(f"delete tag {name} failed: {e}")
+            delete_tags_physical(api, [int(tag_id)])
+        except Exception as exc:
+            # 已被 Case 主体物理删除时视为幂等成功；仍可查询到时才报清理失败。
+            remaining = list_tags(api, page=1, page_size=100, data={"tagName": name}).get("records") or []
+            if any(r.get("tagName") == name for r in remaining):
+                raise RuntimeError(f"delete tag {name} failed: {exc}") from exc
 
-    ctx.registry.register(f"tag:{name}", "tag", cleanup)
-    return {"id": int(tag_id) if tag_id else 0, "name": name}
+    (registry or ctx.registry).register(f"tag:{name}", "tag", cleanup)
+    return {"id": int(tag_id), "name": name}
 
 
 def find_tag(ctx: RunContext, name: str) -> dict | None:
-    from tpt_api.datahub import list_tags
     from ua_test_harness.clients.tpt_client import get_api
-
     api = get_api(ctx)
     page = list_tags(api, page=1, page_size=500, data={"tagName": name})
-    for r in page.get("records") or []:
-        if r.get("tagName") == name:
-            return r
+    for row in page.get("records") or []:
+        if row.get("tagName") == name:
+            return row
     return None
 
 
 def wait_tag_present(ctx: RunContext, name: str, timeout: float = 30.0) -> dict:
     from ua_test_harness.polling import wait_until
-
     found: dict = {}
 
     def fetch() -> bool:
-        tag = find_tag(ctx, name)
-        if not tag:
+        current = find_tag(ctx, name)
+        if not current:
             return False
-        found["v"] = tag
+        found["value"] = current
         return True
 
-    wait_until(
-        f"tag_present:{name}",
-        fetch,
-        timeout=timeout,
-        interval=1.0,
-    )
-    return found.get("v") or find_tag(ctx, name) or {}
+    wait_until(f"tag_present:{name}", fetch, timeout=timeout, interval=1.0)
+    return found.get("value") or find_tag(ctx, name) or {}
 
 
 def soft_delete_tag(ctx: RunContext, name: str) -> None:
-    from tpt_api.datahub import delete_tags, list_tags
     from ua_test_harness.clients.tpt_client import get_api
-
     api = get_api(ctx)
     page = list_tags(api, page=1, page_size=500, data={"tagName": name})
     ids = [int(r["id"]) for r in page.get("records") or [] if r.get("tagName") == name]
@@ -121,10 +111,8 @@ def soft_delete_tag(ctx: RunContext, name: str) -> None:
 
 def restore_from_recycle(ctx: RunContext, name: str) -> None:
     from ua_test_harness.clients.tpt_client import get_api
-
-    api = get_api(ctx)
     from tpt_api.datahub import list_recycle_tags
-
+    api = get_api(ctx)
     data = list_recycle_tags(api, page=1, page_size=500)
     records = ((data or {}).get("tagInfoList") or {}).get("records") or []
     ids = [int(r["id"]) for r in records if r.get("tagName") == name]
@@ -134,39 +122,34 @@ def restore_from_recycle(ctx: RunContext, name: str) -> None:
 
 def write_tag(ctx: RunContext, name: str, value) -> None:
     from ua_test_harness.clients.tpt_client import get_api
-
-    api = get_api(ctx)
-    write_tag_values(api, {name: value})
+    write_tag_values(get_api(ctx), {name: value})
 
 
 def read_rt(ctx: RunContext, name: str, from_db: bool = False) -> dict:
     from ua_test_harness.clients.tpt_client import get_api
-
-    api = get_api(ctx)
-    data = get_rt_value(api, [name], is_from_db=from_db)
+    data = get_rt_value(get_api(ctx), [name], is_from_db=from_db)
     if isinstance(data, list):
-        for p in data:
-            if p.get("tagName") == name:
-                return p
+        for point in data:
+            if point.get("tagName") == name:
+                return point
         return {}
     if isinstance(data, dict):
-        return data
+        nested = data.get(name)
+        return nested if isinstance(nested, dict) else data
     return {}
 
 
 def read_history(ctx: RunContext, name: str, begin_ms: int, end_ms: int) -> list:
     from datetime import datetime, timezone
     from ua_test_harness.clients.tpt_client import get_api
-
-    api = get_api(ctx)
     beg_str = datetime.fromtimestamp(begin_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     end_str = datetime.fromtimestamp(end_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    raw = get_history_value(api, tag_names=[name], beg_time=beg_str, end_time=end_str, page=1, page_size=1000)
+    raw = get_history_value(get_api(ctx), tag_names=[name], beg_time=beg_str, end_time=end_str, page=1, page_size=1000)
     if isinstance(raw, dict):
         entry = raw.get(name) or {}
         if isinstance(entry, dict):
-            return entry.get("list") or []
-        return []
+            return entry.get("list") or entry.get("records") or []
+        return raw.get("records") or []
     if isinstance(raw, list):
         return raw
-    return (raw or {}).get("records") or []
+    return []

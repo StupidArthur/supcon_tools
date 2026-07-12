@@ -1,4 +1,4 @@
-"""生成文档 Case 与 Python catalog 实现状态的机器可读覆盖矩阵。"""
+"""Generate a machine-readable matrix of documented and implemented Cases."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 CASE_ID_RE = re.compile(r"^UA-\d+-\d+-[A-Za-z0-9][A-Za-z0-9_-]*$")
 HEADING_RE = re.compile(r"^#\s+(UA-\d+-\d+)\s*(.*)$")
+_SEPARATOR_RE = re.compile(r"^:?-{3,}:?$")
 
 
 def _now() -> str:
@@ -27,62 +28,177 @@ def _split_table_row(line: str) -> list[str]:
     return [cell.strip() for cell in body.split("|")]
 
 
-def _case_from_cells(
-    cells: list[str], chapter: str, chapter_title: str, path: Path, repo_root: Path, lineno: int
-) -> dict[str, Any] | None:
-    if len(cells) == 6:
-        case_id, title, precondition, steps, expected, verification = cells
-        kind = ""
-        cleanup = ""
-    elif len(cells) == 8:
-        case_id, title, kind, precondition, steps, expected, verification, cleanup = cells
-    else:
-        return None
+def _is_separator(cells: list[str]) -> bool:
+    return bool(cells) and all(_SEPARATOR_RE.fullmatch(cell.replace(" ", "")) for cell in cells)
+
+
+def _header_key(cell: str) -> str:
+    compact = re.sub(r"[\s/（）()_-]+", "", cell).lower()
+    aliases = {
+        "编号": "id",
+        "id": "id",
+        "caseid": "id",
+        "三级点": "title",
+        "名称": "title",
+        "标题": "title",
+        "类型": "kind",
+        "用例类型": "kind",
+        "前置条件": "precondition",
+        "前置": "precondition",
+        "测试步骤": "steps",
+        "步骤": "steps",
+        "造数步骤": "steps",
+        "操作": "steps",
+        "测试数据": "testData",
+        "数据": "testData",
+        "预期结果": "expected",
+        "预期结果断言": "expected",
+        "断言": "expected",
+        "预期": "expected",
+        "验证手段": "verification",
+        "验证": "verification",
+        "清理": "cleanup",
+        "清理恢复": "cleanup",
+    }
+    return aliases.get(compact, compact)
+
+
+def _looks_like_header(cells: list[str]) -> bool:
+    return bool(cells) and _header_key(cells[0]) == "id" and any(
+        _header_key(cell) == "title" for cell in cells[1:]
+    )
+
+
+def _row_from_header(
+    cells: list[str],
+    header: list[str],
+    *,
+    chapter: str,
+    chapter_title: str,
+    path: Path,
+    repo_root: Path,
+    lineno: int,
+) -> dict[str, Any]:
+    warnings: list[str] = []
+    if len(cells) < len(header):
+        warnings.append(
+            f"row has {len(cells)} cells but header has {len(header)}; missing trailing cells padded"
+        )
+        cells = cells + [""] * (len(header) - len(cells))
+    elif len(cells) > len(header):
+        warnings.append(
+            f"row has {len(cells)} cells but header has {len(header)}; extra cells merged"
+        )
+        cells = cells[: len(header) - 1] + [" | ".join(cells[len(header) - 1 :])]
+
+    data: dict[str, str] = {}
+    for raw_key, value in zip(header, cells):
+        key = _header_key(raw_key)
+        if key in data and value:
+            data[key] = f"{data[key]} | {value}" if data[key] else value
+        else:
+            data[key] = value
+
+    steps = data.get("steps", "")
+    test_data = data.get("testData", "")
+    if not steps and test_data:
+        steps = f"测试数据：{test_data}"
+
     return {
-        "id": case_id,
+        "id": data.get("id", cells[0] if cells else ""),
         "chapter": chapter,
         "chapterTitle": chapter_title,
-        "title": title,
-        "kind": kind,
-        "precondition": precondition,
+        "title": data.get("title", ""),
+        "kind": data.get("kind", ""),
+        "precondition": data.get("precondition", ""),
         "steps": steps,
-        "expected": expected,
-        "verification": verification,
-        "cleanup": cleanup,
+        "testData": test_data,
+        "expected": data.get("expected", ""),
+        "verification": data.get("verification", ""),
+        "cleanup": data.get("cleanup", ""),
         "docPath": path.relative_to(repo_root).as_posix(),
         "docLine": lineno,
+        "documentWarnings": warnings,
     }
 
 
 def parse_case_doc(path: Path, repo_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """解析文档中的六列或八列 Case 表格；允许行末省略竖线。"""
+    """Parse Case tables by their headers instead of assuming a fixed column count."""
     chapter = path.stem
     chapter_title = chapter
+    active_header: list[str] = []
     cases: list[dict[str, Any]] = []
     malformed: list[dict[str, Any]] = []
+
     for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         heading = HEADING_RE.match(line.strip())
         if heading:
             chapter = heading.group(1)
             chapter_title = heading.group(2).strip() or chapter
             continue
+
         cells = _split_table_row(line)
-        if not cells or not CASE_ID_RE.fullmatch(cells[0]):
+        if not cells:
             continue
-        row = _case_from_cells(cells, chapter, chapter_title, path, repo_root, lineno)
-        if row is None:
+        if _looks_like_header(cells):
+            active_header = cells
+            continue
+        if _is_separator(cells):
+            continue
+        if not CASE_ID_RE.fullmatch(cells[0]):
+            continue
+
+        if not active_header:
             malformed.append(
                 {
                     "path": path.relative_to(repo_root).as_posix(),
                     "line": lineno,
                     "caseId": cells[0],
                     "columnCount": len(cells),
+                    "reason": "case row has no preceding recognized header",
+                    "raw": line,
+                }
+            )
+            continue
+
+        row = _row_from_header(
+            cells,
+            active_header,
+            chapter=chapter,
+            chapter_title=chapter_title,
+            path=path,
+            repo_root=repo_root,
+            lineno=lineno,
+        )
+        if not row["title"]:
+            malformed.append(
+                {
+                    "path": path.relative_to(repo_root).as_posix(),
+                    "line": lineno,
+                    "caseId": cells[0],
+                    "columnCount": len(cells),
+                    "reason": "case title is empty after header mapping",
                     "raw": line,
                 }
             )
             continue
         cases.append(row)
+
     return cases, malformed
+
+
+def load_documented_cases(repo_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    repo_root = repo_root.resolve()
+    docs_dir = repo_root / "ua_test_gui" / "doc" / "test_cases"
+    if not docs_dir.is_dir():
+        raise FileNotFoundError(f"test case docs directory not found: {docs_dir}")
+    rows: list[dict[str, Any]] = []
+    malformed: list[dict[str, Any]] = []
+    for path in sorted(docs_dir.glob("*.md")):
+        parsed, bad = parse_case_doc(path, repo_root)
+        rows.extend(parsed)
+        malformed.extend(bad)
+    return rows, malformed
 
 
 def _implementation_map() -> dict[str, dict[str, Any]]:
@@ -108,17 +224,7 @@ def build_inventory(
     expected_total: int = 419,
 ) -> dict[str, Any]:
     repo_root = repo_root.resolve()
-    docs_dir = repo_root / "ua_test_gui" / "doc" / "test_cases"
-    if not docs_dir.is_dir():
-        raise FileNotFoundError(f"test case docs directory not found: {docs_dir}")
-
-    rows: list[dict[str, Any]] = []
-    malformed: list[dict[str, Any]] = []
-    for path in sorted(docs_dir.glob("*.md")):
-        parsed, bad = parse_case_doc(path, repo_root)
-        rows.extend(parsed)
-        malformed.extend(bad)
-
+    rows, malformed = load_documented_cases(repo_root)
     implementation = implemented if implemented is not None else _implementation_map()
     counts = Counter(row["id"] for row in rows)
     duplicates = sorted(case_id for case_id, count in counts.items() if count > 1)
@@ -139,6 +245,7 @@ def build_inventory(
 
     implemented_count = sum(1 for row in cases if row["implementationStatus"] == "IMPLEMENTED")
     document_count = len(cases)
+    warning_count = sum(len(row.get("documentWarnings") or []) for row in cases)
     summary = {
         "expectedTotal": expected_total,
         "documented": document_count,
@@ -147,11 +254,12 @@ def build_inventory(
         "coveragePercent": round((implemented_count / document_count * 100.0), 2) if document_count else 0.0,
         "duplicateDocumentIds": len(duplicates),
         "malformedRows": len(malformed),
+        "documentWarnings": warning_count,
         "orphanImplementations": len(orphan_implementations),
         "structureOk": document_count == expected_total and not duplicates and not malformed,
     }
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "generatedAt": _now(),
         "repoRoot": str(repo_root),
         "summary": summary,
