@@ -121,7 +121,12 @@ def test_teardown_requires_confirm(teardown_mod, monkeypatch, tmp_path):
     calls = _install_fakes(monkeypatch)
     result_path = tmp_path / "teardown.json"
     monkeypatch.setattr(sys, "argv", ["teardown", "--result", str(result_path)])
-    monkeypatch.setenv("DATAHUB_PASSWORD", "secret")
+    # Patch load_env_json to return a fake env (teardown script reads from env.json).
+    import ua_test_harness.env_config as env_cfg_mod
+    fake_env = {"baseUrl": "http://x", "username": "u", "password": "secret",
+                "tenantId": "", "localIp": "127.0.0.1"}
+    monkeypatch.setattr(env_cfg_mod, "load_env_json", lambda: fake_env)
+    monkeypatch.setattr(teardown_mod, "load_env_json", lambda: fake_env)
 
     rc = teardown_mod.main()
 
@@ -153,8 +158,12 @@ def test_teardown_with_confirm_calls_disable_and_delete(teardown_mod, monkeypatc
 
     result_path = tmp_path / "teardown.json"
     monkeypatch.setattr(sys, "argv", ["teardown", "--confirm-delete-shared", "--result", str(result_path)])
-    monkeypatch.setenv("DATAHUB_PASSWORD", "secret")
-    monkeypatch.setenv("UA_LOCAL_IP", "127.0.0.1")
+    # Patch load_env_json (teardown script reads from env.json).
+    import ua_test_harness.env_config as env_cfg_mod
+    fake_env = {"baseUrl": "http://x", "username": "u", "password": "secret",
+                "tenantId": "", "localIp": "127.0.0.1"}
+    monkeypatch.setattr(env_cfg_mod, "load_env_json", lambda: fake_env)
+    monkeypatch.setattr(teardown_mod, "load_env_json", lambda: fake_env)
 
     rc = teardown_mod.main()
 
@@ -176,7 +185,17 @@ def _run_diagnose(diagnose_mod, monkeypatch, tmp_path, *, args=None, **fake_kwar
     result_path = tmp_path / "diagnose.json"
     argv = ["diagnose", "--result", str(result_path)] + args
     monkeypatch.setattr(sys, "argv", argv)
-    monkeypatch.setenv("DATAHUB_PASSWORD", "secret")
+    # Patch load_env_json to return a fake env (diagnose script reads from env.json).
+    import ua_test_harness.env_config as env_cfg_mod
+    fake_env = {
+        "baseUrl": "http://x",
+        "username": "u",
+        "password": "secret",
+        "tenantId": "",
+        "localIp": "127.0.0.1",
+    }
+    monkeypatch.setattr(env_cfg_mod, "load_env_json", lambda: fake_env)
+    monkeypatch.setattr(diagnose_mod, "load_env_json", lambda: fake_env)
     rc = diagnose_mod.main()
     log = None
     if result_path.exists():

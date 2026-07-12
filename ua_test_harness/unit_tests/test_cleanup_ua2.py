@@ -114,7 +114,17 @@ def _run(mod, monkeypatch, tmp_path, argv_extra, *, active_pages=None,
     result_path = tmp_path / "cleanup_result.json"
     argv = ["cleanup", "--result", str(result_path)] + list(argv_extra)
     monkeypatch.setattr(sys, "argv", argv)
-    monkeypatch.setenv("DATAHUB_PASSWORD", password)
+    # Patch load_env_json to return a fake env (cleanup script reads from env.json).
+    import ua_test_harness.env_config as env_cfg_mod
+    fake_env = {
+        "baseUrl": "http://x",
+        "username": "u",
+        "password": password,
+        "tenantId": "",
+        "localIp": "127.0.0.1",
+    }
+    monkeypatch.setattr(env_cfg_mod, "load_env_json", lambda: fake_env)
+    monkeypatch.setattr(mod, "load_env_json", lambda: fake_env)
     rc = mod.main()
     log = None
     if result_path.exists():

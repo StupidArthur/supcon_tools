@@ -31,6 +31,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from ua_test_harness.env_config import load_env_json
+
 THIS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parent
 SRC_DIRS = ["ua_test_harness", "scripts", "ua_mocker"]
@@ -214,14 +216,13 @@ def _provision_shared_baseline(local_ip: str, deadline_ts: float) -> tuple[dict[
     pcfg.run_id = f"ua2_baseline_{int(time.time())}"
     pcfg.local_ip = local_ip
     pcfg.mock.endpoints.functional = f"opc.tcp://{local_ip}:{TYPES_PORT}/ua_mocker/"
-    pcfg.subject.base_url = os.environ.get("DATAHUB_BASE_URL", "")
-    pcfg.subject.username = os.environ.get("DATAHUB_USER", "admin")
-    pcfg.subject.password = os.environ.get("DATAHUB_PASSWORD", "")
-    pcfg.subject.tenant_id = os.environ.get("DATAHUB_TENANT_ID", "")
+    env = load_env_json()
+    pcfg.subject.base_url = env.get("baseUrl", "")
+    pcfg.subject.username = env.get("username", "admin")
+    pcfg.subject.password = env.get("password", "")
+    pcfg.subject.tenant_id = env.get("tenantId", "")
 
     pctx = RunContext(config=pcfg, emitter=MagicMock())
-    # Make empty endpoint discoverable for require_shared_datasource(ctx, "empty")
-    os.environ["UA2_EMPTY_ENDPOINT"] = f"opc.tcp://{local_ip}:{EMPTY_PORT}/ua_mocker/"
 
     if time.monotonic() >= deadline_ts:
         return {"status": "BLOCKED", "error": "chapter deadline already elapsed"}, None
@@ -257,14 +258,15 @@ def _case_timeout(case_id: str) -> float:
 
 def _build_case_run_config(case_dir: Path, case_id: str, baseline,
                            local_ip: str) -> dict[str, Any]:
+    env = load_env_json()
     payload = {
         "runId": f"ua2_{case_id}",
         "selectedCaseIds": [case_id],
         "subject": {
-            "baseUrl": os.environ.get("DATAHUB_BASE_URL", ""),
-            "tenantId": os.environ.get("DATAHUB_TENANT_ID", ""),
-            "username": os.environ.get("DATAHUB_USER", "admin"),
-            "password": "",
+            "baseUrl": env.get("baseUrl", ""),
+            "tenantId": env.get("tenantId", ""),
+            "username": env.get("username", "admin"),
+            "password": env.get("password", ""),
             "token": "",
         },
         "localIp": local_ip,
@@ -319,8 +321,6 @@ def _run_single_case(out_dir: Path, case_id: str, baseline, local_ip: str) -> di
     ]
     env = os.environ.copy()
     env["PYTHONPATH"] = str(REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
-    # Subprocess should see the empty endpoint via env (used by provisioning module).
-    env["UA2_EMPTY_ENDPOINT"] = f"opc.tcp://{local_ip}:{EMPTY_PORT}/ua_mocker/"
     proc = subprocess.run(
         cmd,
         cwd=str(REPO_ROOT),
@@ -452,9 +452,10 @@ def main() -> int:
         "status": "FAIL",
     }
 
-    if not os.environ.get("DATAHUB_PASSWORD"):
+    env_cfg = load_env_json()
+    if not env_cfg.get("password"):
         (out_dir / "result.json").write_text(
-            json.dumps({"status": "FAIL", "error": "DATAHUB_PASSWORD is required"}, ensure_ascii=False, indent=2),
+            json.dumps({"status": "FAIL", "error": "env.json missing password"}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         return 2
@@ -463,7 +464,7 @@ def main() -> int:
     deadline_ts = started + CHAPTER_TOTAL_TIMEOUT
     summary["startedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started))
 
-    local_ip = os.environ.get("UA_LOCAL_IP", "127.0.0.1")
+    local_ip = env_cfg.get("localIp", "127.0.0.1")
 
     prereq_results = []
     prereq_results.append(phase_compile(deadline_ts))

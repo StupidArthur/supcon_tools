@@ -72,9 +72,6 @@ def _types_endpoint(ctx) -> str:
 
 
 def _empty_endpoint(ctx) -> str:
-    ep = os.environ.get("UA2_EMPTY_ENDPOINT", "").strip()
-    if ep:
-        return ep
     ip = getattr(ctx.config, "local_ip", "") or "127.0.0.1"
     return f"opc.tcp://{ip}:18967/ua_mocker/"
 

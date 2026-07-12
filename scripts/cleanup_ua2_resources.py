@@ -15,6 +15,8 @@ import os
 import sys
 from typing import Any
 
+from ua_test_harness.env_config import load_env_json
+
 PREFIX = "ua_case_ua2_"
 CASE_DS_PREFIX = "ua_case_ua2_ds_"
 SHARED_PREFIX = "ua_shared_ua2_"
@@ -84,9 +86,10 @@ def _collect_case_ds_ids(api) -> list[int]:
 
 
 def main() -> int:
+    env_cfg = load_env_json()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default=os.environ.get("DATAHUB_BASE_URL", "http://10.10.58.153:31501/"))
-    parser.add_argument("--username", default=os.environ.get("DATAHUB_USER", "admin"))
+    parser.add_argument("--base-url", default=env_cfg.get("baseUrl", "http://10.10.58.153:31501/"))
+    parser.add_argument("--username", default=env_cfg.get("username", "admin"))
     parser.add_argument("--prefix", default=PREFIX)
     parser.add_argument("--include-case-datasources", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -100,10 +103,10 @@ def main() -> int:
     ctx = {
         "base_url": args.base_url,
         "username": args.username,
-        "password": os.environ.get("DATAHUB_PASSWORD", ""),
+        "password": env_cfg.get("password", ""),
     }
     if not ctx["password"]:
-        print("DATAHUB_PASSWORD is required", file=sys.stderr)
+        print("env.json missing password", file=sys.stderr)
         return 2
 
     api = _login(ctx)

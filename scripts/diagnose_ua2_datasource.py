@@ -22,6 +22,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ua_test_harness.env_config import load_env_json
+
 
 ALLOWED_CLEAN_PREFIXES = ("ua_case_ua2_", "ua_auto_ua2_")
 
@@ -145,11 +147,12 @@ def main() -> int:
                         help="Path to write JSON result, or '-' for stdout.")
     args = parser.parse_args()
 
-    base_url = os.environ.get("DATAHUB_BASE_URL", "http://10.10.58.153:31501/")
-    username = os.environ.get("DATAHUB_USER", "admin")
-    password = os.environ.get("DATAHUB_PASSWORD", "")
+    env_cfg = load_env_json()
+    base_url = env_cfg.get("baseUrl", "http://10.10.58.153:31501/")
+    username = env_cfg.get("username", "admin")
+    password = env_cfg.get("password", "")
     if not password:
-        print("DATAHUB_PASSWORD is required", file=sys.stderr)
+        print("env.json missing password", file=sys.stderr)
         return 2
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

@@ -121,16 +121,24 @@ def _install_fakes(monkeypatch, runner_mod, *, baseline_should_succeed=True):
     return calls
 
 
-def _drive(runner_mod, monkeypatch, tmp_path, *, password="secret"):
+def _drive(runner_mod, monkeypatch, tmp_path, *, password="secret", local_ip="127.0.0.1"):
     """Invoke runner_mod.main() with fakes installed; write result to tmp.
 
     Returns (rc, result_dict_or_None, calls).
     """
     out_root = tmp_path
     monkeypatch.setattr(sys, "argv", ["run_automation_ua2", "--out-root", str(out_root)])
-    monkeypatch.setenv("DATAHUB_PASSWORD", password)
-    monkeypatch.setenv("UA_LOCAL_IP", "127.0.0.1")
-    # Ensure DATAHUB_PASSWORD is present
+    # Patch load_env_json (the script reads env.json instead of os.environ).
+    import ua_test_harness.env_config as env_cfg_mod
+    fake_env = {
+        "baseUrl": "http://x",
+        "username": "u",
+        "password": password,
+        "tenantId": "",
+        "localIp": local_ip,
+    }
+    monkeypatch.setattr(env_cfg_mod, "load_env_json", lambda: fake_env)
+    monkeypatch.setattr(runner_mod, "load_env_json", lambda: fake_env)
     rc = runner_mod.main()
     # Find the most recent result.json (or ua2-result.json)
     result_path = None

@@ -20,12 +20,6 @@ from ua_test_harness.provisioning.ua2_baseline import (
 )
 
 
-# Deterministic empty endpoint: never let the real environment leak in.
-@pytest.fixture(autouse=True)
-def _clear_empty_ep_env(monkeypatch):
-    monkeypatch.delenv("UA2_EMPTY_ENDPOINT", raising=False)
-
-
 def _ctx():
     cfg = RunConfig()
     cfg.run_id = "t"

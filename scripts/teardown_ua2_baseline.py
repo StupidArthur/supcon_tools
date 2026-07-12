@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
+
+from ua_test_harness.env_config import load_env_json
 
 
 def main() -> int:
@@ -34,15 +35,14 @@ def main() -> int:
     from ua_test_harness.context import RunContext
     from ua_test_harness.provisioning import teardown_ua2_baseline
 
+    env_cfg = load_env_json()
     cfg = RunConfig()
-    cfg.local_ip = os.environ.get("UA_LOCAL_IP", "127.0.0.1")
-    cfg.mock.endpoints.functional = os.environ.get(
-        "DATAHUB_BASE_MOCK", f"opc.tcp://{cfg.local_ip}:18965/ua_mocker/"
-    )
-    cfg.subject.base_url = os.environ.get("DATAHUB_BASE_URL", "")
-    cfg.subject.username = os.environ.get("DATAHUB_USER", "admin")
-    cfg.subject.password = os.environ.get("DATAHUB_PASSWORD", "")
-    cfg.subject.tenant_id = os.environ.get("DATAHUB_TENANT_ID", "")
+    cfg.local_ip = env_cfg.get("localIp", "127.0.0.1")
+    cfg.mock.endpoints.functional = f"opc.tcp://{cfg.local_ip}:18965/ua_mocker/"
+    cfg.subject.base_url = env_cfg.get("baseUrl", "")
+    cfg.subject.username = env_cfg.get("username", "admin")
+    cfg.subject.password = env_cfg.get("password", "")
+    cfg.subject.tenant_id = env_cfg.get("tenantId", "")
 
     ctx = RunContext(config=cfg, emitter=MagicMock())
     result = teardown_ua2_baseline(ctx, confirm=True)
