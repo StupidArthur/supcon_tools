@@ -1,8 +1,11 @@
 """文档 Case 的执行精确度策略。
 
-只有共享执行器已覆盖文档动作和核心断言时才执行；其余返回带原因的 BLOCKED，n防止用普通在线冒烟代替异常、批量、导入导出、重连或性能边界场景。
+只有共享执行器已覆盖文档动作和核心断言时才执行；其余返回带原因的 BLOCKED，
+防止用普通在线冒烟代替异常、批量、导入导出、重连或性能边界场景。
 """
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from ua_test_harness.models import CaseStatus
 from ua_test_harness.scenario_runtime import execute_documented_case as _execute_shared
@@ -25,6 +28,36 @@ _SUPPORTED = {
     "UA-3-6": {"UA-3-6-001"},
 }
 
+_SHARED_SCENARIOS = {
+    "UA-1-2-01": "datasource_state",
+    "UA-1-2-02": "datasource_state",
+    "UA-1-2-03": "history",
+    "UA-1-2-04": "datasource_state",
+    "UA-1-2-05": "history",
+    "UA-1-2-06": "datasource_state",
+    "UA-1-2-07": "datasource_state",
+    "UA-1-2-08": "datasource_state",
+    "UA-2-1-001": "online_smoke",
+    "UA-2-1-002": "online_smoke",
+    "UA-2-2-001": "tag_query",
+    "UA-2-2-004": "tag_query",
+    "UA-2-2-005": "tag_query",
+    "UA-2-2-006": "tag_query",
+    "UA-2-4-001": "tag_delete",
+    "UA-2-4-020": "tag_delete",
+    "UA-2-5-004": "tag_query",
+    "UA-2-5-018": "tag_delete",
+    "UA-3-1-001": "rt_read",
+    "UA-3-1-002": "rt_read",
+    "UA-3-1-003": "rt_read",
+    "UA-3-1-010": "rt_read",
+    "UA-3-2-001": "rt_read",
+    "UA-3-2-021": "rt_read",
+    "UA-3-3-001": "rt_write",
+    "UA-3-4-001": "history",
+    "UA-3-5-001": "response_time",
+    "UA-3-6-001": "performance",
+}
 
 _BLOCK_REASONS = {
     "UA-1-1": "需要鉴权 Mock、质量码扩展配置或不可达转可达控制夹具",
@@ -46,6 +79,21 @@ _BLOCK_REASONS = {
 }
 
 
+@dataclass(frozen=True)
+class ScenarioDecision:
+    executable: bool
+    scenario: str = ""
+    reason: str = ""
+
+
+def classify_case(meta) -> ScenarioDecision:
+    case_id = meta["id"]
+    scenario = _SHARED_SCENARIOS.get(case_id)
+    if scenario:
+        return ScenarioDecision(True, scenario=scenario)
+    return ScenarioDecision(False, reason=f"no precise shared scenario for {case_id}")
+
+
 def execute_documented_case(ctx, cc, meta):
     chapter = meta["chapter"]
     case_id = meta["id"]
@@ -53,6 +101,6 @@ def execute_documented_case(ctx, cc, meta):
         reason = _BLOCK_REASONS.get(chapter, f"章节 {chapter} 尚无精确共享执行器")
         ctx.emitter.log("WARN", case_id, f"BLOCKED: {reason}")
         return CaseStatus.BLOCKED
-    if chapter.startswith("UA-1-"):
+    if chapter.startswith("UA-1-") and chapter != "UA-1-2":
         return execute_ua1_case(ctx, cc, meta)
     return _execute_shared(ctx, cc, meta)
