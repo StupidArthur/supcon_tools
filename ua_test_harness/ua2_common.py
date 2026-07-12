@@ -48,17 +48,19 @@ def row_value(row: dict[str, Any] | None):
     return row.get("tagValue", row.get("value"))
 
 
-def prepare_datasource(ctx, cc, *, enabled: bool = True, endpoint_value: str | None = None):
+def prepare_datasource(ctx, cc, *, enabled: bool = True, endpoint_value: str | None = None,
+                       endpoint: str | None = None, registry=None):
     from ua_test_harness.fixtures import datasource
     from ua_test_harness.fixtures.environment import ensure_logged_in, ensure_mock_ready
 
     ensure_mock_ready(ctx, "functional")
     ensure_logged_in(ctx)
+    final_endpoint = endpoint_value if endpoint_value is not None else (endpoint or endpoint(ctx))
     ds = datasource.create_datasource(
         ctx,
         unique(ctx, "ua_auto_ua2_ds"),
-        endpoint_value or endpoint(ctx),
-        registry=cc.registry,
+        final_endpoint,
+        registry=registry or cc.registry,
     )
     if enabled:
         datasource.change_state(ctx, ds["id"], True)

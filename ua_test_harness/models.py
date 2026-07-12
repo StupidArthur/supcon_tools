@@ -25,6 +25,7 @@ class CaseStatus(str, Enum):
     MEASURED = "MEASURED"
     CANCELLED = "CANCELLED"
     CLEANUP_FAILED = "CLEANUP_FAILED"
+    TIMEOUT = "TIMEOUT"
 
     @classmethod
     def from_str(cls, v: str) -> "CaseStatus":
@@ -119,6 +120,7 @@ class RunStats:
     observed: int = 0
     measured: int = 0
     cleanup_failed: int = 0
+    timeout_count: int = 0
 
     def add(self, status: CaseStatus) -> None:
         self.total += 1
@@ -131,6 +133,7 @@ class RunStats:
             CaseStatus.OBSERVED: "observed",
             CaseStatus.MEASURED: "measured",
             CaseStatus.CLEANUP_FAILED: "cleanup_failed",
+            CaseStatus.TIMEOUT: "timeout_count",
         }.get(status)
         if m:
             setattr(self, m, getattr(self, m) + 1)
@@ -146,4 +149,5 @@ class RunStats:
             "observed": self.observed,
             "measured": self.measured,
             "cleanupFailed": self.cleanup_failed,
+            "timeoutCount": self.timeout_count,
         }

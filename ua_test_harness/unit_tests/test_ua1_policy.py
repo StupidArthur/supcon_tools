@@ -16,6 +16,8 @@ def test_ua1_precise_matrix_contains_twelve_cases() -> None:
 
 
 def test_shared_non_ua1_cases_have_deterministic_scenarios() -> None:
-    assert classify_case({"id": "UA-2-1-001"}).scenario == "online_smoke"
     assert classify_case({"id": "UA-3-6-001"}).scenario == "performance"
     assert classify_case({"id": "UA-1-2-03"}).executable is False
+    assert classify_case({"id": "UA-2-1-001"}).executable is False
+    assert classify_case({"id": "UA-2-4-001"}).executable is False
+    assert classify_case({"id": "UA-2-5-004"}).executable is False

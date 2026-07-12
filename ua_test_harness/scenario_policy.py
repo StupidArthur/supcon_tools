@@ -1,7 +1,11 @@
-"""文档 Case 的执行精确度策略。
+"""Document Case exact-execution dispatch.
 
-只有共享执行器已覆盖文档动作和核心断言时才执行；其余返回带原因的 BLOCKED，
-防止用普通在线冒烟代替异常、批量、导入导出、重连或性能边界场景。
+调度顺序:
+  UA-1 -> execute_ua1_case
+  UA-2 -> execute_ua2_case (精确调度)
+  其他 -> _execute_shared
+
+未接适配器的 UA-2 case 仍返回 BLOCKED,精确说明缺口类别,不允许退化冒烟。
 """
 from __future__ import annotations
 
@@ -10,16 +14,18 @@ from dataclasses import dataclass
 from ua_test_harness.models import CaseStatus
 from ua_test_harness.scenario_runtime import execute_documented_case as _execute_shared
 from ua_test_harness.ua1_runtime import execute_ua1_case
+from ua_test_harness.ua2_runtime import is_supported_ua2, execute_ua2_case
 
 
 _SUPPORTED = {
     "UA-1-1": {"UA-1-1-01", "UA-1-1-02", "UA-1-1-04", "UA-1-1-12"},
     "UA-1-2": {"UA-1-2-01", "UA-1-2-02", "UA-1-2-04", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"},
     "UA-1-5": {"UA-1-5-01", "UA-1-5-07"},
-    "UA-2-1": {"UA-2-1-001", "UA-2-1-002"},
-    "UA-2-2": {"UA-2-2-001", "UA-2-2-004", "UA-2-2-005", "UA-2-2-006"},
-    "UA-2-4": {"UA-2-4-001", "UA-2-4-020"},
-    "UA-2-5": {"UA-2-5-004", "UA-2-5-018"},
+    "UA-2-1": {"UA-2-1-017", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022"},
+    "UA-2-2": {"UA-2-2-004", "UA-2-2-005", "UA-2-2-008", "UA-2-2-011",
+               "UA-2-2-015", "UA-2-2-016", "UA-2-2-019", "UA-2-2-033"},
+    "UA-2-4": {"UA-2-4-001", "UA-2-4-013", "UA-2-4-020", "UA-2-4-024"},
+    "UA-2-5": set(),
     "UA-3-1": {"UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-010"},
     "UA-3-2": {"UA-3-2-001", "UA-3-2-021"},
     "UA-3-3": {"UA-3-3-001"},
@@ -28,17 +34,8 @@ _SUPPORTED = {
     "UA-3-6": {"UA-3-6-001"},
 }
 
+
 _SHARED_SCENARIOS = {
-    "UA-2-1-001": "online_smoke",
-    "UA-2-1-002": "online_smoke",
-    "UA-2-2-001": "tag_query",
-    "UA-2-2-004": "tag_query",
-    "UA-2-2-005": "tag_query",
-    "UA-2-2-006": "tag_query",
-    "UA-2-4-001": "tag_delete",
-    "UA-2-4-020": "tag_delete",
-    "UA-2-5-004": "tag_query",
-    "UA-2-5-018": "tag_delete",
     "UA-3-1-001": "rt_read",
     "UA-3-1-002": "rt_read",
     "UA-3-1-003": "rt_read",
@@ -51,6 +48,7 @@ _SHARED_SCENARIOS = {
     "UA-3-6-001": "performance",
 }
 
+
 _BLOCK_REASONS = {
     "UA-1-1": "需要鉴权 Mock、质量码扩展配置或不可达转可达控制夹具",
     "UA-1-2": "历史增长/停增场景需要稳定历史落库夹具",
@@ -58,11 +56,11 @@ _BLOCK_REASONS = {
     "UA-1-4": "需要两个独立 Mock endpoint 和双源隔离夹具",
     "UA-1-5": "需要启用删除、有位号删除、回收站关联和多数据源删除执行器",
     "UA-1-6": "需要 ds-info/test testType=1..5 的 tpt_api 适配器",
-    "UA-2-1": "需要按文档参数生成类型、边界、异常映射和批量新增请求",
-    "UA-2-2": "需要 queryWithQuality、底层节点浏览、分组/收藏和分页选择器适配器",
     "UA-2-3": "需要导入导出上传下载适配器及 xlsx 夹具",
-    "UA-2-4": "需要批量、恢复、删除影响、重建和历史生命周期执行器",
     "UA-2-5": "需要完整分组树、移动、收藏、循环检测和批量操作执行器",
+    "UA-2-1": "未在 UA-2 第一批精确清单内的 case 需要 queryWithQuality、异常映射、空名边界或长名边界执行器",
+    "UA-2-2": "未在 UA-2 第一批精确清单内的 case 需要 queryWithQuality、底层节点浏览、分组/收藏和分页选择器适配器",
+    "UA-2-4": "未在 UA-2 第一批精确清单内的 case 需要批量、恢复、删除影响、重建和历史生命周期执行器",
     "UA-3-1": "需要 13 类型源端对照、频率、断线、多源和历史落地执行器",
     "UA-3-2": "需要 ID/分组/数据库/queryTime 选择器和删除恢复执行器",
     "UA-3-3": "需要批量类型、失败隔离、时间质量、源端对照和并发写执行器",
@@ -96,4 +94,14 @@ def execute_documented_case(ctx, cc, meta):
         return CaseStatus.BLOCKED
     if chapter.startswith("UA-1-"):
         return execute_ua1_case(ctx, cc, meta)
+    if chapter.startswith("UA-2-"):
+        if not is_supported_ua2(case_id):
+            ctx.emitter.log(
+                "WARN",
+                case_id,
+                "BLOCKED: UA-2 在 registered set 中但未挂 handler;"
+                " 需要 queryWithQuality、asyncua、批量、导入导出或分组适配器。",
+            )
+            return CaseStatus.BLOCKED
+        return execute_ua2_case(ctx, cc, meta)
     return _execute_shared(ctx, cc, meta)

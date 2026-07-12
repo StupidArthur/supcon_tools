@@ -160,20 +160,34 @@ def cmd_run(args) -> int:
     from ua_test_harness.runner import Runner
 
     discover(args.package)
-    defs = all_defs()
+    defs = list(all_defs())
 
+    cli_explicit = False
     selected: list = []
     if args.cases:
+        cli_explicit = True
         ids = {s.strip() for s in args.cases.split(",") if s.strip()}
+        if not ids:
+            print("--cases provided but parsed empty", file=sys.stderr)
+            return 2
         selected = [d for d in defs if d.id in ids]
+        if not selected:
+            print(f"--cases matched no cases: {sorted(ids)}", file=sys.stderr)
+            return 2
     elif args.chapters:
+        cli_explicit = True
         chs = {s.strip() for s in args.chapters.split(",") if s.strip()}
+        if not chs:
+            print("--chapters provided but parsed empty", file=sys.stderr)
+            return 2
         selected = [d for d in defs if d.chapter in chs]
+        if not selected:
+            print(f"--chapters matched no cases: {sorted(chs)}", file=sys.stderr)
+            return 2
 
-    # 真实执行模式需要 --config + 至少一个选择(来自 config 或 CLI)
     if args.dry_run:
         if not selected:
-            selected = defs
+            selected = list(defs)
         for d in selected:
             print(f"  planned: {d.id:18s} {d.title} [{d.kind}] file={d.file_path}:{d.lineno}")
         print(f"dry-run: {len(selected)} cases")
@@ -188,14 +202,22 @@ def cmd_run(args) -> int:
         return 2
     cfg = RunConfig.load(cfg_path)
 
-    if not selected and cfg.selected_case_ids:
-        ids = set(cfg.selected_case_ids)
-        selected = [d for d in defs if d.id in ids]
     if not selected:
-        selected = defs
-    if not selected:
-        print("no cases matched (run-config selectedCaseIds empty and no --cases/--chapters)", file=sys.stderr)
-        return 2
+        cfg_ids = list(cfg.selected_case_ids or [])
+        if cfg_ids:
+            ids = set(cfg_ids)
+            selected = [d for d in defs if d.id in ids]
+            if not selected:
+                print(
+                    f"config selectedCaseIds matched no cases: {sorted(ids)}",
+                    file=sys.stderr,
+                )
+                return 2
+        elif cli_explicit:
+            print("explicit selector matched nothing", file=sys.stderr)
+            return 2
+        else:
+            selected = list(defs)
 
     runner = Runner(cfg, cases=selected)
     return runner.run()
