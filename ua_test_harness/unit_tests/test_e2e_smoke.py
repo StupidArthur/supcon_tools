@@ -49,7 +49,7 @@ def test_catalog_export(tmp_path: Path):
     case_ids = []
     for ch in data["chapters"]:
         case_ids.extend(c["id"] for c in ch["cases"])
-    required = ["UA-1-1-001", "UA-2-1-001", "UA-3-1-001", "UA-3-2-001", "UA-3-3-001", "UA-3-4-001"]
+    required = ["UA-1-1-01", "UA-2-1-001", "UA-3-1-001", "UA-3-2-001", "UA-3-3-001", "UA-3-4-001"]
     missing = [r for r in required if r not in case_ids]
     assert not missing, f"missing smoke cases: {missing}"
 
@@ -109,7 +109,7 @@ def test_smoke_preset_match(tmp_path: Path):
     assert rc.returncode == 0, rc.stderr
     data = json.loads(out.read_text(encoding="utf-8"))
     ids = {c["id"] for ch in data["chapters"] for c in ch["cases"]}
-    smoke = ["UA-1-1-001", "UA-2-1-001", "UA-3-1-001", "UA-3-2-001", "UA-3-3-001", "UA-3-4-001"]
+    smoke = ["UA-1-1-01", "UA-2-1-001", "UA-3-1-001", "UA-3-2-001", "UA-3-3-001", "UA-3-4-001"]
     for s in smoke:
         assert s in ids, f"smoke case missing in catalog: {s}"
 
@@ -122,7 +122,7 @@ def test_run_cli_dry_run(tmp_path: Path):
         [
             sys.executable, "-m", "ua_test_harness.cli", "run",
             "--config", str(cfg_path),
-            "--cases", "UA-1-1-001,UA-2-1-001",
+            "--cases", "UA-1-1-01,UA-2-1-001",
             "--dry-run",
         ],
         env={**__import__("os").environ, "PYTHONPATH": str(REPO_ROOT)},
@@ -131,5 +131,5 @@ def test_run_cli_dry_run(tmp_path: Path):
         timeout=60,
     )
     assert rc.returncode == 0, rc.stderr
-    assert "UA-1-1-001" in rc.stdout
+    assert "UA-1-1-01" in rc.stdout
     assert "UA-2-1-001" in rc.stdout
