@@ -54,7 +54,7 @@ try {
     }
 
     Run-Step "catalog-export" {
-        & $PythonExe -m ua_test_harness.cli catalog export `
+        & $PythonExe -m ua_test_harness.cli catalog `
             --output (Join-Path $outDir "catalog.json") 2>&1 |
             Tee-Object -FilePath (Join-Path $outDir "catalog.log")
     }
