@@ -26,5 +26,3 @@ nodes:
     writable: true
     default: 0
   - name: ua2_byte_r_
-    type: Byte
-    count
