@@ -32,3 +32,12 @@ def wait_ready(key: str, timeout: float = 60.0, ctx: RunContext | None = None) -
     from ua_test_harness.polling import wait_until
 
     wait_until(f"mock_{key}_ready", lambda: status(key) in ("ready", "running"), timeout=timeout, interval=1.0)
+
+
+def get_endpoint(key: str, ctx: RunContext | None = None) -> str:
+    """从 RunConfig 取 mock endpoint;无则按 key + 本机 IP 兜底。"""
+    if ctx is not None:
+        from .tpt_client import endpoint_for
+        return endpoint_for(key, ctx)
+    port = {"functional": 18960, "reconnect": 18961, "performance": 18962, "abnormal": 18963}.get(key, 18960)
+    return f"opc.tcp://127.0.0.1:{port}/ua_mocker/"

@@ -78,13 +78,12 @@ def ua_1_2_001_datasource_enable_disable(ctx, cc):
     _check_alive_after_enable(ctx, ds_id, timeout=90.0)
     datasource.change_state(ctx, ds_id, False)
     # 轮询 alive=false
+    from tpt_api.datahub import list_ds_info
     from ua_test_harness.polling import wait_until
 
     def fetch_alive() -> bool:
-        rows = (
-            datasource._post(ctx.bag["tpt_api"], datasource.DataHubDsInfoPage, {"pageNum": 1, "pageSize": 200, "id": ds_id})
-            .get("records") or []
-        )
+        page = list_ds_info(ctx.bag["tpt_api"], page=1, page_size=200, data={"id": ds_id})
+        rows = page.get("records") or []
         return bool(rows) and bool(rows[0].get("alive"))
 
     wait_until(f"ds_offline:{ds_id}", lambda: not fetch_alive(), timeout=60.0, interval=1.0)
@@ -118,13 +117,12 @@ def ua_1_3_001_datasource_disconnect_recover(ctx, cc):
     ds_id = ds["id"]
     _check_alive_after_enable(ctx, ds_id, timeout=90.0)
     mock_control.stop_mock("reconnect")
+    from tpt_api.datahub import list_ds_info
     from ua_test_harness.polling import wait_until
 
     def fetch_alive() -> bool:
-        rows = (
-            datasource._post(ctx.bag["tpt_api"], datasource.DataHubDsInfoPage, {"pageNum": 1, "pageSize": 200, "id": ds_id})
-            .get("records") or []
-        )
+        page = list_ds_info(ctx.bag["tpt_api"], page=1, page_size=200, data={"id": ds_id})
+        rows = page.get("records") or []
         return bool(rows) and bool(rows[0].get("alive"))
 
     wait_until(f"ds_offline_after_mock_stop:{ds_id}", lambda: not fetch_alive(), timeout=60.0, interval=1.0)

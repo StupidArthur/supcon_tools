@@ -5,18 +5,13 @@
 from __future__ import annotations
 
 import time
-from tpt_api.datahub import DataHubImportTagValue, DataHubImportTagValueHistory, DataHubGetHistoryValue
-from tpt_api.errors import SuccessCode
+from tpt_api.datahub import (
+    import_tag_value,
+    get_history_value,
+)
 
 from ua_test_harness.assertions import AssertFail
 from ua_test_harness.context import RunContext
-
-
-def _post(api, endpoint: str, payload: dict) -> dict:
-    r = api.post(endpoint, payload)
-    if r.get("code") != SuccessCode:
-        raise AssertFail(f"POST {endpoint} -> {r}")
-    return r.get("data") or {}
 
 
 class HistoryFixtureFactory:
@@ -37,7 +32,7 @@ class HistoryFixtureFactory:
             {"tagName": tag_name, "tagValue": float(i), "tagTime": now_ms - (count - i) * interval_sec * 1000}
             for i in range(count)
         ]
-        _post(self.api, DataHubImportTagValue, {"items": items})
+        import_tag_value(self.api, items)
         return {"count": count, "tagName": tag_name}
 
     def create_import_dataset(self, tag_name: str, count: int = 50) -> dict:
@@ -47,15 +42,15 @@ class HistoryFixtureFactory:
             {"tagName": tag_name, "tagValue": float(i), "tagTime": now_ms - (count - i) * 60 * 1000}
             for i in range(count)
         ]
-        _post(self.api, DataHubImportTagValue, {"items": items})
+        import_tag_value(self.api, items)
         return {"count": count, "tagName": tag_name}
 
     def create_write_dataset(self, tag_name: str, count: int = 5) -> dict:
         """方式 C:实时写库产生少量历史点。"""
+        from tpt_api.datahub import write_tag_values
+
         for i in range(count):
-            _post(self.api, "ibd-data-hub-web-v2.2/api/tag-value/writeTagValues", {
-                "items": [{"tagName": tag_name, "tagValue": float(i)}]
-            })
+            write_tag_values(self.api, [{"tagName": tag_name, "tagValue": float(i)}])
             time.sleep(0.2)
         return {"count": count, "tagName": tag_name}
 
@@ -66,11 +61,28 @@ class HistoryFixtureFactory:
             begin_ms = int(time.time() * 1000) - 24 * 3600 * 1000
         if end_ms is None:
             end_ms = int(time.time() * 1000) + 60 * 1000
-        data = _post(self.api, DataHubGetHistoryValue, {
-            "tagNames": [tag_name], "beginTime": begin_ms, "endTime": end_ms,
-            "pageNum": 1, "pageSize": max(1000, min_count * 2),
-        })
-        pts = data if isinstance(data, list) else (data.get("records") or [])
+        from datetime import datetime, timezone
+        beg_str = datetime.fromtimestamp(begin_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        end_str = datetime.fromtimestamp(end_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        raw = get_history_value(
+            self.api,
+            tag_names=[tag_name],
+            beg_time=beg_str,
+            end_time=end_str,
+            page=1,
+            page_size=max(1000, min_count * 2),
+        )
+        # 返回结构: {tagName: {list: [...], total, ...}}
+        if isinstance(raw, dict):
+            entry = raw.get(tag_name) or {}
+            if isinstance(entry, dict):
+                pts = entry.get("list") or []
+            else:
+                pts = []
+        elif isinstance(raw, list):
+            pts = raw
+        else:
+            pts = (raw or {}).get("records") or []
         if len(pts) < min_count:
             raise AssertFail(
                 f"[history:{tag_name}] expected>={min_count}, actual={len(pts)} (window=({begin_ms},{end_ms}))"

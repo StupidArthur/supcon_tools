@@ -20,11 +20,10 @@ def get_api(ctx: RunContext) -> Any:
     if api is not None:
         return api
     from tpt_api.client import AlgAPI
-    from tpt_api.users import login
 
     cfg = ctx.config.subject
     api = AlgAPI(base_url=cfg.base_url, timeout=20.0)
-    api = login(api, username=cfg.username, password=cfg.password, tenant_id=cfg.tenant_id)
+    api.login(cfg.username, cfg.password, cfg.tenant_id)
     ctx.bag["tpt_api"] = api
     return api
 
