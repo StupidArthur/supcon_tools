@@ -3,7 +3,7 @@
 不走 PowerShell pipeline;每条 Case 用独立进程 + 超时 + 强制 cleanup。
 
 阶段:
-  1. 预检 DATAHUB_PASSWORD
+  1. 预检 env.json password
   2. compileall ua_test_harness (180s)
   3. unit tests (300s)
   4. catalog export (180s)
