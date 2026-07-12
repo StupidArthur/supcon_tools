@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from ua_test_harness.assertions import AssertFail
 from ua_test_harness.models import CaseStatus
+from ua_test_harness.provisioning import BaselineError
 
 from ua_test_harness import ua2_create_runtime, ua2_query_runtime, ua2_recycle_runtime
 
@@ -56,4 +57,11 @@ def execute_ua2_case(ctx, cc, meta) -> CaseStatus:
     for i, name in enumerate(sig.parameters):
         if name in accepted:
             kwargs[name] = {"ctx": ctx, "cc": cc, "meta": meta}[name]
-    return handler(**kwargs)
+    try:
+        return handler(**kwargs)
+    except BaselineError:
+        # 共享数据源 / 环境前置不可用(共享 DS 缺失、配置不匹配、未 alive、
+        # empty DS 非空等)不是框架 ERROR,而是 BLOCKED 前置条件。显式映射,
+        # 让 runner 记 BLOCKED 而非 ERROR;产品断言失败(AssertFail)仍正常
+        # 向上抛出归为 FAIL。
+        return CaseStatus.BLOCKED
