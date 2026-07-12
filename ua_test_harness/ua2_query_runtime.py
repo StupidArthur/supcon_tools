@@ -8,5 +8,4 @@ from ua_test_harness.ua2_common import active_rows, create_read_tag, prepare_dat
 
 def _prepared(ctx, cc):
     ds = prepare_datasource(ctx, cc)
-    name = unique(ctx, "ua_auto_ua22")
-    tag, row = create
+    name
