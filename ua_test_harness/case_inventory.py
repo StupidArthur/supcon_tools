@@ -19,13 +19,43 @@ def _now() -> str:
 
 def _split_table_row(line: str) -> list[str]:
     stripped = line.strip()
-    if not stripped.startswith("|") or not stripped.endswith("|"):
+    if not stripped.startswith("|"):
         return []
-    return [cell.strip() for cell in stripped[1:-1].split("|")]
+    body = stripped[1:]
+    if body.endswith("|"):
+        body = body[:-1]
+    return [cell.strip() for cell in body.split("|")]
+
+
+def _case_from_cells(
+    cells: list[str], chapter: str, chapter_title: str, path: Path, repo_root: Path, lineno: int
+) -> dict[str, Any] | None:
+    if len(cells) == 6:
+        case_id, title, precondition, steps, expected, verification = cells
+        kind = ""
+        cleanup = ""
+    elif len(cells) == 8:
+        case_id, title, kind, precondition, steps, expected, verification, cleanup = cells
+    else:
+        return None
+    return {
+        "id": case_id,
+        "chapter": chapter,
+        "chapterTitle": chapter_title,
+        "title": title,
+        "kind": kind,
+        "precondition": precondition,
+        "steps": steps,
+        "expected": expected,
+        "verification": verification,
+        "cleanup": cleanup,
+        "docPath": path.relative_to(repo_root).as_posix(),
+        "docLine": lineno,
+    }
 
 
 def parse_case_doc(path: Path, repo_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """解析一个固定六列表格的用例 Markdown。"""
+    """解析文档中的六列或八列 Case 表格；允许行末省略竖线。"""
     chapter = path.stem
     chapter_title = chapter
     cases: list[dict[str, Any]] = []
@@ -39,7 +69,8 @@ def parse_case_doc(path: Path, repo_root: Path) -> tuple[list[dict[str, Any]], l
         cells = _split_table_row(line)
         if not cells or not CASE_ID_RE.fullmatch(cells[0]):
             continue
-        if len(cells) != 6:
+        row = _case_from_cells(cells, chapter, chapter_title, path, repo_root, lineno)
+        if row is None:
             malformed.append(
                 {
                     "path": path.relative_to(repo_root).as_posix(),
@@ -50,21 +81,7 @@ def parse_case_doc(path: Path, repo_root: Path) -> tuple[list[dict[str, Any]], l
                 }
             )
             continue
-        case_id, title, precondition, steps, expected, verification = cells
-        cases.append(
-            {
-                "id": case_id,
-                "chapter": chapter,
-                "chapterTitle": chapter_title,
-                "title": title,
-                "precondition": precondition,
-                "steps": steps,
-                "expected": expected,
-                "verification": verification,
-                "docPath": path.relative_to(repo_root).as_posix(),
-                "docLine": lineno,
-            }
-        )
+        cases.append(row)
     return cases, malformed
 
 
@@ -170,10 +187,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--strict-structure", action="store_true")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    report = build_inventory(
-        Path(args.repo_root),
-        expected_total=args.expected_total,
-    )
+    report = build_inventory(Path(args.repo_root), expected_total=args.expected_total)
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
