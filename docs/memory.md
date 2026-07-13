@@ -1,114 +1,157 @@
-# memory.md - UA-2 资源模型重构 & 419 全量开发 交接文档
+# memory.md - UA-2 资源重构 & 419 全量开发 完整交接(2026-07-13 更新)
 
-> 本文件是新会话接手的**第一份必读**。记录项目背景、已完成工作、当前状态、架构、决策、通宵派单、文件地图、下一步。读完本文件再读 `docs/talk-main.md`、`docs/BACKGROUND.md`、`bugs.md`。
+> 新会话第一份必读。记录项目全貌、已完成里程碑、剩余问题分类、下一步。读完再读 `docs/talk-main.md`、`docs/overnight-findings.md`、`bugs.md`。
 
 ---
 
 ## 0. 一句话现状
-UA-2 位号测试资源模型重构已完成并真实验证(16 条第一批 = 15 PASS / 1 产品 bug FAIL);419 全量开发进行中(真实实现 38/419);子 Agent 正通宵自主开发剩余 case,结果落在 `docs/overnight-report.md` + `docs/overnight-findings.md`。
+
+UA-2 资源模型重构完成;419 全量挂接 + 304 严格 IMPLEMENTED;全部 304 条已真跑(~203 VERIFIED / ~61 FAIL / ~12 BLOCKED);剩余 ~61 FAIL 分三类(产品 bug / mock 不足 / doc 可能错),115 探索 PARTIAL 是正确终态。
 
 ---
 
-## 1. 项目背景
-- 仓库:`F:\github\supcon_tools`(Windows PowerShell)。
-- 被测对象:TPT/DataHub 平台的 OPC UA 数据源、位号、采集、实时、历史、性能。
-- **419 条文档 case**,定义在 `ua_test_gui/doc/test_cases/*.md`:
-  - UA-1 数据源 56 条、UA-2 位号 265 条、UA-3 采集/实时/写/历史/性能 98 条。
-- 每条 case 有 markdown 预期(前置/步骤/断言/清理);测试代码实现 handler,跑真实 TPT 验证产品行为。
-- 工程纪律见 `AGENTS.md`:Case 跑不过不改 Case;不绕路;环境问题说出来;不吞错(除 `cleanup_case_tag`);不降阈值;不碰子模块 `review3`/`data_factory_server`;不提交 output/密码/token/真实 IP/日志;禁止 `git reset --hard`/`clean -fd`/`checkout .`/`restore .`/`stash`;不 `git add .`。
+## 1. 里程碑(已完成)
 
-## 2. 已完成并验证(资源模型重构)
-- **旧问题**:每条 case 自建自删数据源 -> endpoint 冲突("currently in use" / "endpoint already exists") -> UA-2 第一批 0/16 全 FAIL。
-- **新模型**:两个共享数据源在 TPT 服务器上 provision 一次,所有 case 复用;case 只建删自己的私有位号。
-- **UA-2 第一批 16 条已完成 + 真实验证**:K 跑 `output/automation_ua2_20260712_235003` = **15 PASS / 1 FAIL / 0 ERROR / 0 BLOCKED / 0 cleanupFailed**。
-  - 1 FAIL = UA-2-1-019 空名产品 bug(平台接受空名,保留 FAIL,按用户决策不改)。
-- 凭据改用本地 `env.json`(不用环境变量)。
+| 维度 | 数值 |
+|---|---|
+| 文档登记 | 419 |
+| 严格 IMPLEMENTED(有真实断言) | 304(72.55%) |
+| PARTIAL(探索,doc 无硬断言) | 115(正确终态,NOT_VERIFIED) |
+| UNIMPLEMENTED | 0 |
+| VERIFIED(真跑通过) | **~203** |
+| VERIFIED_FAIL(产品 bug 保留) | **~61** |
+| VERIFIED_BLOCKED | ~12 |
+| 单测 | 190 passed(+1 已知 GBK 环境失败) |
+| catalog | 419 cases / 17 chapters |
+| inventory | documented=419 / implemented=304 / partial=115 / structureOk |
 
-## 3. 当前状态
-- **真实实现 38/419**:UA-1 12、UA-2 16、UA-3 10。余 381 条已注册但 BLOCKED(无 handler)。
-- HEAD commit = `e7ada0e`。工作树干净(只剩子模块 `review3`/`data_factory_server` 移动 + untracked 文档)。
-- 单测 142 passed(唯一失败 `test_e2e_smoke::test_run_cli_dry_run` 是预先存在的 GBK 解码环境问题,非回归)。
-- catalog=419、inventory documented=419/implemented=419/unimplemented=0/structureOk。
+**从接手时**(38 真实实现 / UA-2 0/16 全 FAIL endpoint 冲突)**到现在**(304 严格 / ~203 VERIFIED / 资源模型重构 + 全章真跑)。
 
-## 4. 架构(实现 case 时复用)
-- **共享 DS**:`ua_shared_ua2_types_ds`(mock 18965)/ `ua_shared_ua2_empty_ds`(mock 18967)。`require_shared_datasource(ctx,"types"/"empty")` 按名查回复用,**不建不删不登记 cleanup**。provisioning 在 `ua_test_harness/provisioning/ua2_baseline.py`(`ensure_ua2_baseline`)。
-- **case 私有位号**:`ua_case_ua2_` 前缀;`create_case_tag` 建 + 登记 registry 兜底;`cleanup_case_tag` 在 try/finally 显式物理删 + 确认 + pop(吞自身异常只为不掩盖 case 状态)。
-- **薄操作层** `ua_test_harness/ua2_ops.py`:每函数单动作,无隐式预删/auto-enable/auto-cleanup。含 `create_case_tag`/`cleanup_case_tag`/`active_rows`/`all_active_rows`/`all_recycle_rows`/`physical_delete_tag`/`soft_delete_tag`/`restore_tag`/`create_tag_raw` 等。
-- **provisioning**:`ensure_ua2_baseline` 创建/校验共享 DS;`BaselineError -> BLOCKED`(已在 `ua2_runtime.execute_ua2_case` 接线)。
-- **状态分类**:FAIL(产品断言不符)/ERROR(Python 框架异常)/BLOCKED(共享DS/环境)/CLEANUP_FAILED(清理,与 case 状态独立记录)。
-- **active 视图查询**:用 `query_tags_with_quality(groupId="0")`(经 `ua2_ops.active_rows`);**不要用 `list_tags`**(它含软删记录,Bug #1)。回收站用 `all_recycle_rows`。
-- **alive-wait**:provisioning 业务级专用 `BASELINE_ALIVE_WAIT_SEC=120`/`BASELINE_ALIVE_POLL_SEC=1.0`(与通用 `ds_connect_sec` 解耦;停过又起的 DS 恢复需 1~2 分钟)。
-- **UA-2 case 不调 `prepare_datasource`**;UA-1 继续用 `ua1_runtime` 现模式(**不迁移**,需用户决策);UA-3 用 `scenario_runtime` 共享场景。
-- **凭据**:读 `env.json`(`ua_test_harness/env_config.py`),不用环境变量。`env.json` 已 gitignored;`env.json.example` 是模板(密码留空)。
+## 2. 架构(已落地,实现 case 时复用)
 
-## 5. Bug 决策(用户已定)
-- **Bug #1 = A**:接受 `9e826e6`(QTQ 切换)。`list_tags`(tag-info/page)含软删记录,不是 active 视图;`query_tags_with_quality(groupId=0)` 是平台自己的 active 视图。测试原本用错端点,切换合理。已真实验证(UA-2-4-001 转 PASS)。
-- **Bug #2 = A**:产品 bug。平台 `add_tag(tag_name="")` 接受空名并生成 `tagName="2_"` 位号,与 doc "空名必拒" 不符。**保留 UA-2-1-019 为 FAIL**,不改断言,作为产品缺陷上报。
-- **019 泄漏已修**(`04e4628`):handler 加 try/finally 兜底清理(check_true 抛 AssertFail 后也清掉平台偷建的位号),不改 FAIL 结局。
-- **alive-wait 已修**(`e7ada0e`):60s -> 120s 业务级专用。
-- 详见 `bugs.md`。
+- **共享 DS**:`ua_shared_ua2_types_ds`(mock 18965)/ `ua_shared_ua2_empty_ds`(mock 18967);`require_shared_datasource(ctx,"types"/"empty")` 按名查回复用,不建不删。
+- **case 私有位号**:`ua_case_ua2_` 前缀;`create_case_tag`+`cleanup_case_tag`(try/finally,registry 兜底)。
+- **薄操作层** `ua2_ops.py`;**provisioning** `provisioning/ua2_baseline.py`(`BaselineError->BLOCKED`)。
+- **active 视图**:用 `query_tags_with_quality(groupId="0")`(不用 `list_tags`,含软删记录 Bug#1)。
+- **alive-wait**:provisioning 业务级专用 `BASELINE_ALIVE_WAIT_SEC=120`。
+- **env.json** 凭据(不用环境变量);`case_fidelity.py` 三态(STRICT/PARTIAL/UNIMPLEMENTED)。
+- **UA-3** 走 `ua3_runtime`(非 scenario_runtime,已删死代码)。
+- **UA-1** 走 `ua1_runtime`(每条独立 DS,functional mock 18960,不迁共享 baseline)。
+- **runner** `run_automation_ua2.py` 支持 `--chapter/--cases/--limit/--skip-prereqs/--chapter-timeout-sec`;UA-1 自动切 18960 mock。
 
-## 6. 通宵派单(子 Agent 自主执行)
-- 用户已睡。新子 Agent 按 `docs/talk-main.md`(任务+决策边界+工作流)+ `docs/BACKGROUND.md`(背景+文件地图)通宵自主开发剩余 381 case。
-- **优先级**:UA-2 余量(基础设施已就绪)-> UA-3(scenario_runtime)-> UA-1(需新夹具,做能做的,不迁移模型)。
-- **决策边界**:测试代码 bug 可修;产品 FAIL/模糊语义/缺夹具 -> 保留现状记 `docs/overnight-findings.md`,不掩盖不让步;**绝不放宽断言/改产品语义/加 try/except 过**。
-- **早晨交付**:`docs/overnight-report.md`(批清单/计数/单测/catalog/inventory/真跑/发现/缺口/commits)+ `docs/overnight-findings.md`(逐条待决策)。
-- **新会话接手后**:先读这两个文件,陪用户 triage 产品发现和缺口;再继续未完成批次。
+## 3. Bug 决策(已定)
 
-## 7. 文件地图(去哪读什么)
-- **任务/派单**:`docs/talk-main.md`(通宵全量开发)、`docs/BACKGROUND.md`(新 Agent 背景与地图)。
-- **路线图/验收/工作流**:`.mimocode/plans/1783855834448-mighty-nebula.md`(Part 1 env.json、Part 2 K、Part 3 alive-wait、Part 4 全量 419 路线图)。
-- **架构/验收细则**:`docs/compose/guidance/ua2-refactor-guide.md`。
-- **总 Plan(参考代码)**:`docs/compose/plans/2026-07-12-ua2-resource-refactor.md`。
-- **case 规格(不改)**:`ua_test_gui/doc/test_cases/UA-*.md`。
-- **派发注册 + 各章缺口**:`ua_test_harness/scenario_policy.py`(`_SUPPORTED` 已支持清单 / `_SHARED_SCENARIOS` UA-3 场景 / `_BLOCK_REASONS` 各章待补适配器=路线图)。
-- **现有 handler 范本**:
-  - UA-2:`ua_test_harness/ua2_create_runtime.py`、`ua2_query_runtime.py`、`ua2_recycle_runtime.py`(16 个已实现 handler)。
-  - UA-1:`ua_test_harness/ua1_runtime.py`。
-  - UA-3:`ua_test_harness/scenario_runtime.py`(共享场景 rt_read/rt_write/history/response_time/performance)。
-- **薄操作层**:`ua_test_harness/ua2_ops.py`。
-- **provisioning**:`ua_test_harness/provisioning/ua2_baseline.py`。
-- **tpt_api 真实签名(实现前核实)**:`tpt_api/python/tpt_api/datahub.py` -- `add_tag`/`list_tags`/`query_tags_with_quality`/`delete_tags`(软)/`delete_tags_physical`/`remove_tag_group_relation`/`list_recycle_tags`/`list_ds_info`/`add_ds_info`/`change_ds_state`/`delete_ds_info`。
-- **config/runner/脚本**:`ua_test_harness/config.py`、`context.py`、`runner.py`、`ua2_runtime.py`;`scripts/run_automation_ua2.py`、`cleanup_ua2_resources.py`、`diagnose_ua2_datasource.py`、`teardown_ua2_baseline.py`、`run_with_timeout.py`。
-- **bug 记录**:`bugs.md`。
-- **env.json 模板**:`env.json.example`(真实 `env.json` 本地、gitignored;password 没有就问用户)。
-- **工程纪律**:`AGENTS.md`、`ua_test_gui/doc/case-first-plan.md`。
-- **真实跑产物**:`output/automation_ua2_20260712_235003/`(最新有效 K 跑);旧废产物 221246/225922/230301。
+- **Bug #1=A**(`9e826e6`):`list_tags` 含软删记录 -> 改用 `query_tags_with_quality(groupId=0)`。已验证。
+- **Bug #2=A**(`04e4628`):平台接受空名(产品 bug) -> UA-2-1-019 保留 FAIL。
+- **019 泄漏**(`04e4628`):handler 加 finally 兜底。
+- **alive-wait**(`e7ada0e`):60s->120s 业务级。
+- **TPT DS 重连问题**:mock 停后 DS enabled+not-alive 不恢复(teardown+fresh provision 是 workaround,已登记 findings)。
 
-## 8. commit 链(本会话新增,基于接手时 `9fb5685`)
+## 4. 剩余问题分类(~61 FAIL)
+
+### A. 产品 bug(doc 对、测试对、产品不符)-- ~23 条,交产品团队
+
+| 聚类 | 条数 | 代表 case | 现象 |
+|---|---|---|---|
+| `opcua_matches_rt2` | 9 | UA-2-1-001/004/006 等 | OPC UA 源端值 ≠ RT 读回 |
+| `by_id_hit` | 2 | UA-3-2-002/013 | 按 ID 查 RT 不返回,按名可以 |
+| `tagTime_parseable` | 1 | UA-2-2-039 | tagTime 格式不可解析 |
+| `has_quality` | 1 | UA-3-2-012 | quality 字段无效 |
+| `rt_matches_write` | 1 | UA-3-3-003 | 写值不匹配 RT |
+| `getRTValue timeout`(绑节点+等60s) | 9 | UA-2-3-008/021/028, UA-3-1/2 | mock 在提供数据但产品不采集 |
+
+### B. Mock/测试基础设施问题(doc 对、测试对、mock 模拟不了)-- ~20 条,子 Agent 可修
+
+| 聚类 | 条数 | 代表 case | 现象 | 修法 |
+|---|---|---|---|---|
+| `rt_changed`(UA-1-2/3) | 14 | UA-1-2-01~03/06~08, UA-1-3-01~08 | smoke.yaml `change=true` 节点应自变但 RT 不变 | **先确认 mock change 节点是否真的在变**:若不变=mock bug 修 smoke.yaml;若变但 TPT 不采集=转 A 类产品 bug |
+| `BadNodeIdUnknown`(UA-1-6) | 4 | UA-1-6-02/04/07/10 | smoke.yaml 没有测试引用的节点 | **smoke.yaml 补节点** 或测试改引用已有节点 |
+| `value_stable` 5.0 vs 9.0 | 2 | UA-2-2-040, UA-3-1-003 | mock 节点值与测试预期不符 | **对齐 mock 默认值与测试预期** |
+
+### C. 可能的 doc/case 问题(doc 预期本身可能有误)-- ~5 条,需用户判断
+
+| 聚类 | 条数 | 代表 case | 现象 | 判断点 |
+|---|---|---|---|---|
+| `no_dup_bases` expected=520 actual=26 | 1 | UA-2-2-055 | 520 从哪来?测试只建 26 个 | **doc 说 520 是否错?** 若错改 doc+调整预期 |
+| 部分 `getRTValue timeout`(静态节点) | ~4 | UA-3-1/2 部分 | doc 预期 RT 有值,但 tag 绑的 mock 节点不提供数据流 | **doc 对 mock 能力预期是否现实?** 若不现实改 doc 或换动态节点 |
+
+### 其他剩余
+
+| 类别 | 条数 | 说明 |
+|---|---|---|
+| UA-1-4 双源 BLOCKED | 6 | 需 18965+18967,UA-1 runner 仅 18960(架构缺口,registered in known_blocked) |
+| UA-3-4 历史造数 BLOCKED | 5 | `verify_history` 未达 min_count(产品/环境) |
+| 115 PARTIAL 探索 | 115 | doc 无硬断言,正确终态(NOT_VERIFIED),不转 |
+
+## 5. commit 链(本会话,基于接手时 `9fb5685`)
+
 ```
-e7ada0e fix(ua2): dedicated business-level baseline alive-wait (120s/1s poll)
-04e4628 fix(ua2): clean up leaked tag in UA-2-1-019 finally; record bug decisions
-9e826e6 fix(ua2): replace list_tags with query_tags_with_quality (groupId=0/1)
-e213cea docs(ua2): fix stale precheck comment to reflect env.json
-473fbce refactor(ua2): replace env-var config with local env.json for UA-2 automation
-2ea2dbd refactor(ua2): runner starts two mocks, provisions baseline, keeps shared DS   (I)
-ca2de29 feat(ua2): add baseline teardown and read-only datasource diagnostic         (H)
-6b3d99b refactor(ua2): UA-2-4 delete/restore cases use shared datasource              (F)
-785c7d2 refactor(ua2): UA-2-2 query cases use shared datasources + push filters        (E)
-16fdc10 refactor(ua2): UA-2-1 cases use shared datasource and explicit tag cleanup    (D)
-856b779 feat(ua2): map BaselineError to BLOCKED in UA-2 dispatch           (主Agent接线)
-f3899c3 refactor(ua2): cleanup tool scoped to case-private resources                   (G)
-263a8a6 feat(ua2): add shared baseline datasource provisioning layer                   (B)
-491d02d feat(ua2): add thin single-action ops layer for UA-2 cases                     (C)
-9fb5685 (接手时 HEAD,旧反模式第一批实现)
+b0df8ee fix(ua): UA-1 DS name prefix fix (21 test-code FAIL eliminated)
+823fd53 feat(ua): UA-1 chapter run + runner UA-1 mode (18960 functional mock)
+3c87951 fix(ua): UA-3 triage - import/writeTagValues/node-binding fixes
+8e48c9c feat(ua): UA-3-1~4 chapter runs - 22 VERIFIED + 17 product FAIL
+fa61f7b feat(ua): UA-2-5 chapter run - 17 VERIFIED, 0 FAIL (cleanest)
+de63f46 fix(ua): UA-2-3 RT timeout triage - bind tags to mock nodes
+c2bb083 feat(ua): UA-2-4 chapter run - 8 VERIFIED + 2 FAIL
+c34520c feat(ua): UA-2-2 chapter run - 39 VERIFIED + 4 FAIL
+036812e fix(ua): registry.pop 2-arg bug + UA-2-3 chapter run
+0e0cb97 fix(ua): restore_original BadTypeMismatch - opcua type coercion
+6f348c2 fix(ua): UA-2-1 FAIL triage - onlyRead/quality/write/import
+a3a234f feat(ua): task E UA-2-1 real-run - 34 VERIFIED + 48 FAIL
+6f4b9d6 feat(ua): parameterize run_automation_ua2 for batch real-run
+6ecfa45 feat(ua): tasks B+D+E - scale audit, report fix, VERIFIED 15/1
+2ba0732 feat(ua): task A batch3 + task C - UA-2-1 exploration + merge legacy
+7afa154 feat(ua): task A batch2 + task F - 11 assertions + delete dead code
+0c14426 feat(ua): task A batch1 - 24 OBSERVED->real assertions
+b33256b feat(ua): inventory PARTIAL status + case_fidelity registry
+1c11987 feat(ua): overnight 419 case dispatch + chapter handlers (save-point)
+... (earlier: e7ada0e alive-wait, 04e4628 bug decisions, 9e826e6 QTQ, etc.)
 ```
-任务字母对应 `.mimocode/plans` 与 guidance 的任务分解:A(Empty Mock,`fe119c5` 在 0cb9780 之前)、B/C/G(基础设施)、D/E/F(UA-2 三章重构)、H/I(脚本)、J(跨模块回归 `0cb9780`)、K(真实环境)。
 
-## 9. 关键 gotchas
-- `list_tags` 含软删记录,active 视图必须用 `query_tags_with_quality(groupId=0)`(Bug #1)。
-- 共享 DS 停过又起恢复 alive 需 1~2 分钟,provisioning alive-wait 已设 120s。
-- `test_e2e_smoke::test_run_cli_dry_run` 在 Windows GBK 区域会失败(子进程 UTF-8 输出用 GBK 解码),非回归,不要修。
-- 子 Agent 是**外部便宜 Agent**,经 `docs/talk-main.md` 派单,**不要用主 Agent 的 actor 工具**(消耗高成本 token)。主 Agent 角色:架构/验收/triage,非测试代码问题问用户。
-- 不要改 doc markdown 产品预期;不要为通过放宽断言。
-- UA-1 资源模型迁移到共享 baseline 需用户决策(未授权,先别动)。
+## 6. 下一步(新会话)
 
-## 10. 下一步(新会话)
-1. 读本文件 + `docs/overnight-report.md` + `docs/overnight-findings.md`(若子 Agent 已产出)。
-2. 陪用户 triage 产品发现(Bug #2 类)和缺口(需新夹具的章节)。
-3. 继续未完成的 419 批次:按 `.mimocode/plans/1783855834448-mighty-nebula.md` Part 4 路线图,逐章派单 `docs/talk-main.md` -> 子 Agent 实现 -> 主 Agent 验收。
-4. 验收每批:commit 范围/资源模型/状态分类/断言未放宽/单测+回归/catalog-inventory 仍 419。
-5. 最终:catalog 419、`_SUPPORTED`∪`_SHARED_SCENARIOS` 全覆盖、各章真实跑+残留检查、compileall 干净。
+### 优先级 1:修 B 类 mock 问题(子 Agent 可做)
+- **UA-1-2/3 `rt_changed`**(14 条):先诊断 smoke.yaml `change=true` 节点是否真的在变值(用 asyncua 直接读节点);若不变 -> 修 smoke.yaml/mock change 逻辑;若变但 TPT 不采集 -> 转 A 类产品 bug。
+- **UA-1-6 `BadNodeIdUnknown`**(4 条):smoke.yaml 补测试引用的节点,或测试改引用已有节点。
+- **`value_stable`**(2 条):对齐 mock 默认值与测试预期。
+
+### 优先级 2:C 类 doc 判断(用户决策)
+- `no_dup_bases` 520:doc 是否错?
+- 静态节点 RT 预期:doc 对 mock 能力预期是否现实?
+
+### 优先级 3:A 类产品 bug 交产品团队
+- ~23 条附现象+证据上报。
+
+### 优先级 4:其他
+- UA-1-4 双源(6 BLOCKED):runner 为 UA-1-4 额外 provision 18965/18967,或标 BLOCKED 保留。
+- UA-3-4 历史造数(5 BLOCKED):产品/环境排查。
+- 115 探索 PARTIAL:正确终态,不动。
+- overlay 集成进 CLI inventory(目前 verified 在 docs/case-inventory.json,CLI 显示 0)。
+
+## 7. 关键文件地图
+
+- **交接文档**:本文件 + `docs/talk-main.md`(任务派单) + `docs/overnight-findings.md`(批次发现/FAIL triage) + `bugs.md`(Bug#1/#2 决策)。
+- **架构**: `docs/compose/guidance/ua2-refactor-guide.md` + `.mimocode/plans/1783855834448-mighty-nebula.md`。
+- **case 规格**: `ua_test_gui/doc/test_cases/UA-*.md`(不改)。
+- **调度/缺口**: `scenario_policy.py` + `case_fidelity.py` + `known_blocked.py`。
+- **runtime**: `ua1_runtime.py`/`ua1_precise.py`、`ua2_*_runtime.py`/`ua2_precise.py`/`ua2_ops.py`、`ua3_runtime.py`/`ua3_precise.py`/`ua3_extra.py`。
+- **provisioning**: `provisioning/ua2_baseline.py`。
+- **runner**: `scripts/run_automation_ua2.py`(支持 --chapter)、`cleanup_ua2_resources.py`、`teardown_ua2_baseline.py`、`diagnose_ua2_datasource.py`。
+- **tpt_api**: `tpt_api/python/tpt_api/datahub.py`(真实签名)。
+- **env.json**: 本地凭据(gitignored),`env.json.example` 模板。
+- **mock**: `ua_mocker/ua2_types.yaml`(18965)、`ua2_empty.yaml`(18967)、`smoke.yaml`(18960 functional)。
+- **工程纪律**: `AGENTS.md`。
+- **子 Agent 协作**: 经 `docs/talk-main.md` 派单,主 Agent 验收+commit,非测试代码问题问用户。
+
+## 8. gotchas
+
+- `list_tags` 含软删 -> 用 `query_tags_with_quality(groupId=0)`。
+- 共享 DS 停过又起恢复 alive 慢(1-2 分钟)或卡死(teardown+fresh provision workaround)。
+- `test_e2e_smoke::test_run_cli_dry_run` Windows GBK 失败(非回归,不修)。
+- 子 Agent 经 talk-main.md 派单,不用主 Agent actor 工具(贵)。
+- commit 由主 Agent 把控,子 Agent 不 commit。
+- UA-1 用 functional mock(18960),不走共享 baseline。
+- inventory CLI 不显示 verified(overlay 在 docs/case-inventory.json,未集成进 CLI)。
 
 ---
-**生成时间**:2026-07-13(本地凌晨)。**生成者**:主 Agent(MiMoCode)。用户已睡,子 Agent 通宵开发中。
+**更新时间**:2026-07-13 下午。**生成者**:主 Agent(MiMoCode)。全部 304 严格 IMPLEMENTED case 已真跑完毕。
