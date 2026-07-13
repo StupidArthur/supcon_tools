@@ -639,6 +639,13 @@
 
 **未 commit**; pytest **190 passed**.
 
+### restore BadTypeMismatch 修复 (2026-07-13 14:17)
+
+- **根因**: `public_write_closed_loop` 恢复源端时 `opcua_write` 未带 `varianttype`,asyncua 对 SByte/Byte/UInt*/Float 等抛 BadTypeMismatch。
+- **修复**: `opcua/client.py` 增加 `VARIANT_TYPE_BY_UA2_KEY` + `coerce_opcua_value`; `opcua_write(..., type_key=)` 写时显式 varianttype; `public_write_closed_loop` restore 传 `type_key`。
+- **重跑**: `output/automation_ua2_default_20260713_141718` — 10 条 **全部 PASS** (042/044/046/048/050/052/057/058/060/061)。
+- **库存**: 全局 `verified` 63→**73** (+10), `verifiedFail` **23** 不变; UA-2-1 `VERIFIED` 51→**61** (+10)。
+
 ---
 
 ## 真跑批次 — triage-fix-rerun-full (2026-07-13 13:59)
@@ -694,3 +701,13 @@
   - step `None`: [history_has_points] not true.
 - `UA-2-1-005`: assert: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_179700
   - step `None`: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_179700
+
+---
+
+## 真跑批次 — restore-badtype-fix (2026-07-13 14:20)
+
+**产物**: `output/automation_ua2_default_20260713_141718`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052", "UA-2-1-057", "UA-2-1-058", "UA-2-1-060", "UA-2-1-061"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 10, "selectedCases": ["UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052", "UA-2-1-057", "UA-2-1-058", "UA-2-1-060", "UA-2-1-061"], "remainingAfterBatch": 0}
+**结果**: PASS=10 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL**: 无

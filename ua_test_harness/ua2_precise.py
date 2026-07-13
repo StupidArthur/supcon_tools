@@ -98,10 +98,10 @@ def opcua_read(endpoint: str, node_name: str) -> Any:
     return client.read_sync(node_name)
 
 
-def opcua_write(endpoint: str, node_name: str, value: Any) -> None:
-    """asyncua 直写源端节点(namespace=2)。"""
+def opcua_write(endpoint: str, node_name: str, value: Any, *, type_key: str | None = None) -> None:
+    """asyncua 直写源端节点(namespace=2);type_key 用于恢复源端时显式 varianttype。"""
     client = UaSourceClient(endpoint, namespace_index=NAMESPACE_INDEX)
-    client.write_sync(node_name, value)
+    client.write_sync(node_name, value, type_key=type_key)
 
 
 def _values_close(a: Any, b: Any, *, type_key: str) -> bool:
@@ -471,14 +471,14 @@ def public_write_closed_loop(
         if restore_original:
             from ua_test_harness.fixtures.tag import write_tag
             write_tag(ctx, tag_name, original)
-            opcua_write(endpoint, node_name, original)
+            opcua_write(endpoint, node_name, original, type_key=type_key)
         return CaseStatus.PASS, tag_id, tag_name
     except Exception:
         if restore_original:
             try:
                 from ua_test_harness.fixtures.tag import write_tag
                 write_tag(ctx, tag_name, original)
-                opcua_write(endpoint, node_name, original)
+                opcua_write(endpoint, node_name, original, type_key=type_key)
             except Exception:
                 pass
         raise
