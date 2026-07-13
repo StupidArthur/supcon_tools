@@ -729,3 +729,17 @@
   - step `None`: [value_stable] expected=5.0 actual=9.0
 - `UA-2-2-055`: assert: [no_dup_bases] expected=520 actual=26
   - step `None`: [no_dup_bases] expected=520 actual=26
+
+---
+
+## 真跑批次 — UA-2-4-chapter-run (2026-07-13 14:47)
+
+**产物**: `output/automation_ua2_ua24_20260713_144441`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-4", "strictPoolSize": 15, "excludedPartial": [], "skippedVerified": ["UA-2-4-001", "UA-2-4-013", "UA-2-4-020", "UA-2-4-024"], "limitApplied": 15, "selectedCases": ["UA-2-4-002", "UA-2-4-003", "UA-2-4-004", "UA-2-4-009", "UA-2-4-010", "UA-2-4-014", "UA-2-4-015", "UA-2-4-016", "UA-2-4-017", "UA-2-4-021", "UA-2-4-026"], "remainingAfterBatch": 0}
+**结果**: PASS=8 FAIL=2 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-4-009`: assert: [write_blocked_after_soft_delete] not true.
+  - step `None`: [write_blocked_after_soft_delete] not true.
+- `UA-2-4-016`: assert: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_34600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_34600
