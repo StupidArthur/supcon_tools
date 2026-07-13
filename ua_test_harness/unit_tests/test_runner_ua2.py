@@ -127,7 +127,11 @@ def _drive(runner_mod, monkeypatch, tmp_path, *, password="secret", local_ip="12
     Returns (rc, result_dict_or_None, calls).
     """
     out_root = tmp_path
-    monkeypatch.setattr(sys, "argv", ["run_automation_ua2", "--out-root", str(out_root)])
+    monkeypatch.setattr(sys, "argv", [
+        "run_automation_ua2",
+        "--out-root", str(out_root),
+        "--skip-prereqs",
+    ])
     # Patch load_env_json (the script reads env.json instead of os.environ).
     import ua_test_harness.env_config as env_cfg_mod
     fake_env = {
@@ -139,6 +143,8 @@ def _drive(runner_mod, monkeypatch, tmp_path, *, password="secret", local_ip="12
     }
     monkeypatch.setattr(env_cfg_mod, "load_env_json", lambda: fake_env)
     monkeypatch.setattr(runner_mod, "load_env_json", lambda: fake_env)
+    monkeypatch.setattr(runner_mod, "_write_verification_overlay", lambda *a, **k: None)
+    monkeypatch.setattr(runner_mod, "_append_overnight_findings", lambda *a, **k: None)
     rc = runner_mod.main()
     # Find the most recent result.json (or ua2-result.json)
     result_path = None

@@ -348,3 +348,29 @@
 - `run_automation_ua2.py` 批次结束写 `verification-overlay.json` 并刷新 `docs/case-inventory.json`
 - 单测 `test_verification_overlay.py` +2
 
+
+---
+
+## 真跑批次 — 任务E UA-2-1余量首批 (2026-07-13 10:31)
+
+**产物**: `output/automation_ua2_ua21_20260713_102916`
+**选择**: UA-2-1 章 STRICT 余量 10 条（001~010），跳过已 VERIFIED 的 017/019/021/022
+**环境 BLOCKED**: `ua_shared_ua2_types_ds` enable 后 120s 内未 alive（mock 18965/18967 已启动）
+**case 执行**: **0 条** — baseline provision 失败，未更新 VERIFIED
+**triage（主 Agent）**: 共享 DS 复用路径；需排查 TPT→mock 连通或 DS 卡死（非 case 断言 FAIL）
+
+---
+
+## 批次 17 — 任务 E 扩展：UA-2 批量真跑参数化 (2026-07-13)
+
+**脚本扩展** (`scripts/run_automation_ua2.py` + `.ps1`):
+- `--chapter UA-2-1` / `--cases id1,id2` / `--limit N` / `--chapter-timeout-sec`
+- `--skip-prereqs` 续跑批次；`--rerun-verified` 可选
+- 仅选 `STRICT_IMPLEMENTED`，**跳过 PARTIAL 探索类**；默认跳过已 VERIFIED
+- 自动按超时估算 batch（`PREREQ_BUDGET` + per-case 200s）
+- 共享 baseline 18965/18967 复用；`PYTHONPATH` 固化；inventory 刷新防 implemented=0
+- 真跑结束追加 `overnight-findings.md` + FAIL triage
+
+**单测**: `test_run_automation_ua2.py` +2
+
+**UA-2-1 余量首批真跑**: 环境 BLOCKED（见上），**待 baseline 恢复后重跑** `--chapter UA-2-1 --limit 10 --skip-prereqs`
