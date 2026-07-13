@@ -29,11 +29,20 @@ export function VerifyPanel({ disabled, onAuthError }: Props) {
   // A 卡:实时值
   const [rt, setRt] = useState<RTValue | null>(null);
   const rtTimerRef = useRef<number | null>(null);
+  // RT 读取 in-flight 锁:防止 setInterval 触发重叠请求
+  const rtInFlightRef = useRef(false);
+  // RT 错误 toast 限流:上次弹 toast 的时间戳
+  const lastRtErrorRef = useRef(0);
 
   // B 卡:写值
   const [writeVal, setWriteVal] = useState<string>('');
   const [writeBusy, setWriteBusy] = useState(false);
   const writeInputRef = useRef<HTMLInputElement | null>(null);
+  // writeVal 同步 ref:供 RT tick 内读取最新值,避免陈旧闭包
+  const writeValRef = useRef('');
+  useEffect(() => {
+    writeValRef.current = writeVal;
+  }, [writeVal]);
 
   // C 卡:历史值
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -58,6 +67,18 @@ export function VerifyPanel({ disabled, onAuthError }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picked?.tagId]);
 
+  // 登出/disabled 时清空全部状态,确保无残留
+  useEffect(() => {
+    if (disabled) {
+      stopRtPoll();
+      setPicked(null);
+      setRt(null);
+      setHistory([]);
+      setWriteVal('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disabled]);
+
   // A 卡:实时值轮询(1 秒),选中后才开始
   function stopRtPoll() {
     if (rtTimerRef.current !== null) {
@@ -68,30 +89,42 @@ export function VerifyPanel({ disabled, onAuthError }: Props) {
 
   useEffect(() => {
     stopRtPoll();
-    if (!tagName) {
+    if (disabled || !tagName) {
       setRt(null);
       return;
     }
     let stopped = false;
     const tick = async () => {
+      if (rtInFlightRef.current) return;
+      rtInFlightRef.current = true;
       try {
         const list = await rwApi.readRealtime([tagName]);
         if (stopped) return;
         const first = list[0];
         if (first) {
-          setRt((prev) => {
-            if ((prev == null || writeVal === '') && writeInputRef.current !== document.activeElement) {
-              setWriteVal(first.value);
-            }
-            return first;
-          });
+          setRt(first);
+          lastRtErrorRef.current = 0;
+          // 自动填充 writeVal:仅当输入框为空且未聚焦时(避免打断用户输入)
+          if (writeValRef.current === '' && writeInputRef.current !== document.activeElement) {
+            setWriteVal(first.value);
+          }
+        } else {
+          // 后端返回空列表:清掉旧 RT,避免残留值
+          setRt(null);
         }
       } catch (e) {
         if (isAuthError(e)) {
           onAuthError?.();
           return;
         }
-        toast.push({ kind: 'error', message: 'RT 读取失败: ' + (e as Error).message });
+        // 限流:5 秒内最多弹一个 RT 错误 toast
+        const now = Date.now();
+        if (now - lastRtErrorRef.current > 5000) {
+          toast.push({ kind: 'error', message: 'RT 读取失败: ' + (e as Error).message });
+          lastRtErrorRef.current = now;
+        }
+      } finally {
+        rtInFlightRef.current = false;
       }
     };
     void tick();
@@ -101,7 +134,7 @@ export function VerifyPanel({ disabled, onAuthError }: Props) {
       stopRtPoll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tagName]);
+  }, [tagName, disabled]);
 
   // B 卡:写值
   async function writeValue() {
