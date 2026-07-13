@@ -406,3 +406,136 @@
 - **(c) TPT↔mock 网络** → **首要怀疑**（TPT `10.10.58.153` 须 OPC 连 `10.30.70.77:18965`；本机 TCP 通 ≠ TPT 可达；180s 不 alive 符合 TPT 连不上 mock）
 
 **未做**：teardown、改 case、拉长 baseline 超时、绕路换 endpoint。
+
+---
+
+## 产品发现 — TPT DS 重连不恢复（2026-07-13，用户确认网络正常）
+
+**现象**：mock 停止后，共享 DS（id=80/81）长期 **enabled=true + alive=false**；再次 `enable` 或等待 **>180s** 仍不恢复；本机 mock TCP 可达，排除 TPT↔runner 网络问题（用户确认）。
+
+**根因归类**：TPT 侧 DS **重连/会话状态卡死**（非 case 断言、非 120s 等待不足）。
+
+**运营 workaround（如实记录，非绕路）**：`python scripts\teardown_ua2_baseline.py --confirm-delete-shared` 删除卡死 DS → runner `ensure_ua2_baseline` 重建全新 DS → 再跑 case。
+
+**teardown 执行**（2026-07-13 12:59）: 已删 id=80 `ua_shared_ua2_types_ds`、id=81 `ua_shared_ua2_empty_ds`。
+
+**teardown 后真跑**（`output/automation_ua2_ua21_20260713_130117/`，~405s）:
+- 全新 baseline **OK**（types id=**82**, empty id=**83**）— 证实 workaround 有效，非网络硬故障
+- UA-2-1 STRICT 余量 **83 条**执行：PASS=31 FAIL=46 ERROR=3 BLOCKED=1 OBSERVED=2
+- 章级累计（含首批+smoke）：VERIFIED=**34** VERIFIED_FAIL=**48** VERIFIED_BLOCKED=**4**；PARTIAL 26 条未跑
+- **产品 FAIL 主因**：`[onlyRead] expected=True actual=False`×16、`[qtq_quality_valid]`×17、`[rt_matches_write]`×5 等（详见 findings 真跑批次附录）
+- inventory 全局：verified=**46** verifiedFail=**48** verifiedBlocked=**4**
+
+---
+
+## 真跑批次 — UA-2-1 smoke after teardown (2026-07-13 13:01)
+
+**产物**: `output/automation_ua2_ua21_20260713_130048`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "excludedPartial": [], "skippedVerified": ["UA-2-1-017", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022"], "limitApplied": 1, "selectedCases": ["UA-2-1-001"], "remainingAfterBatch": 83}
+**结果**: PASS=0 FAIL=1 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-001`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+
+---
+
+## 真跑批次 — 任务E UA-2-1余量 teardown后全量 (2026-07-13 13:07)
+
+**产物**: `output/automation_ua2_ua21_20260713_130117`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "excludedPartial": [], "skippedVerified": ["UA-2-1-001", "UA-2-1-017", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022"], "limitApplied": 83, "selectedCases": ["UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007", "UA-2-1-008", "UA-2-1-009", "UA-2-1-010", "UA-2-1-011", "UA-2-1-012", "UA-2-1-013", "UA-2-1-014", "UA-2-1-016", "UA-2-1-018", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-041", "UA-2-1-042", "UA-2-1-043", "UA-2-1-044", "UA-2-1-045", "UA-2-1-046", "UA-2-1-047", "UA-2-1-048", "UA-2-1-049", "UA-2-1-050", "UA-2-1-051", "UA-2-1-052", "UA-2-1-053", "UA-2-1-054", "UA-2-1-055", "UA-2-1-056", "UA-2-1-057", "UA-2-1-058", "UA-2-1-059", "UA-2-1-060", "UA-2-1-061", "UA-2-1-062", "UA-2-1-063", "UA-2-1-064", "UA-2-1-065", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-076", "UA-2-1-077", "UA-2-1-078", "UA-2-1-079", "UA-2-1-080", "UA-2-1-082", "UA-2-1-084", "UA-2-1-085", "UA-2-1-086", "UA-2-1-091", "UA-2-1-092", "UA-2-1-095", "UA-2-1-098", "UA-2-1-099", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-105", "UA-2-1-106", "UA-2-1-107", "UA-2-1-108"], "remainingAfterBatch": 0}
+**结果**: PASS=31 FAIL=46 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=20000.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-002`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-008`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-026`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-027`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-028`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-029`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-030`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-031`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-032`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-033`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-034`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-035`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-036`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-037`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-038`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-039`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-040`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-042`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-044`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-046`: assert: [qtq_matches_rt] not true.
+  - step `None`: [qtq_matches_rt] not true.
+- `UA-2-1-048`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-050`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-052`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-054`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-055`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-057`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-058`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-060`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-061`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-063`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-064`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-066`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-067`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-068`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-071`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-072`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-073`: assert: [bad_date_rejected] not true.
+  - step `None`: [bad_date_rejected] not true.
+- `UA-2-1-074`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-085`: assert: [write_failed_or_ineffective] not true.
+  - step `None`: [write_failed_or_ineffective] not true.
+- `UA-2-1-086`: assert: [default_frequency] expected=10 actual=1
+  - step `None`: [default_frequency] expected=10 actual=1
+- `UA-2-1-091`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_519400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_519400
+- `UA-2-1-092`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_152900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_152900
+- `UA-2-1-095`: assert: [limitUp] expected=80 actual='80'
+  - step `None`: [limitUp] expected=80 actual='80'
+- `UA-2-1-102`: assert: [onlyRead] expected=True actual=False
+  - step `None`: [onlyRead] expected=True actual=False
+- `UA-2-1-103`: assert: [qtq_quality_valid] not true.
+  - step `None`: [qtq_quality_valid] not true.
+- `UA-2-1-104`: assert: [qtq_matches_rt] not true.
+  - step `None`: [qtq_matches_rt] not true.
