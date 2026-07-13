@@ -374,3 +374,35 @@
 **单测**: `test_run_automation_ua2.py` +2
 
 **UA-2-1 余量首批真跑**: 环境 BLOCKED（见上），**待 baseline 恢复后重跑** `--chapter UA-2-1 --limit 10 --skip-prereqs`
+
+---
+
+## baseline alive 失败诊断（只读，2026-07-13 10:42）
+
+**① DS 状态** (`diagnose_ua2_datasource.py --ds-name ua_shared_ua2_types_ds`):
+| 字段 | 值 |
+|------|-----|
+| id | **80** |
+| enabled | **true** |
+| alive | **false** |
+| endpoint | `opc.tcp://10.30.70.77:18965/ua_mocker/` |
+| active/recycle tags | **0 / 0** |
+
+`ua_shared_ua2_empty_ds` id=**81** 同样 enabled=true alive=false，endpoint `...18967...`，无残留 tag。
+
+**② mock / 端口**:
+- 失败批次时 automation 日志：mock 18965/18967 **started=true**（非 mock 未起）
+- 诊断时刻（无 mock）：`10.30.70.77:18965` TCP **不通**
+- 手动起 `ua2_types.yaml` 后：本机 TCP **通**（`18965_connect=OK`）
+
+**③ enable + 180s 轮询**（mock 已起，`change_ds_state(enable)` 后每 1s 查 alive）:
+- `firstAliveAtSec`: **null**
+- `finalAlive`: **false**（enabled 仍为 true）
+- 产物：`output/diag_poll_ds80_result.json`
+
+**④ 归类（供主 Agent 决策）**:
+- **(a) 慢恢复 >120s** → **排除**（mock 在跑，180s 仍不 alive；非单纯 120→180 可解）
+- **(b) DS 卡死** → **可疑**（id=80 长期 enabled+not-alive、无 tag；约 10:04 同 DS 曾 baseline OK，mock 停后可能 TPT 侧连接状态未恢复；需 disable→wait→enable 或 teardown+重建验证）
+- **(c) TPT↔mock 网络** → **首要怀疑**（TPT `10.10.58.153` 须 OPC 连 `10.30.70.77:18965`；本机 TCP 通 ≠ TPT 可达；180s 不 alive 符合 TPT 连不上 mock）
+
+**未做**：teardown、改 case、拉长 baseline 超时、绕路换 endpoint。
