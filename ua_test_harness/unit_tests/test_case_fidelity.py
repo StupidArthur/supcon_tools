@@ -33,7 +33,8 @@ def test_fidelity_summary_totals_419():
 
 def test_resolve_implementation_status_three_states():
     assert resolve_implementation_status("UA-2-1-019", has_dispatch=True) == "IMPLEMENTED"
-    assert resolve_implementation_status("UA-2-1-041", has_dispatch=True) == "PARTIAL"
+    assert resolve_implementation_status("UA-2-1-041", has_dispatch=True) == "IMPLEMENTED"
+    assert resolve_implementation_status("UA-2-1-069", has_dispatch=True) == "PARTIAL"
     assert resolve_implementation_status("UA-MISSING", has_dispatch=False) == "UNIMPLEMENTED"
 
 

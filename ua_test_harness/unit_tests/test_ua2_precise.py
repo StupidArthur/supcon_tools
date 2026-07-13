@@ -87,7 +87,7 @@ def test_precise_write_explore_records_probe(monkeypatch):
     status = precise_write_explore(
         ctx, cc, meta, suffix="041", type_key="BOOLEAN", probe_values=[True, "bad"],
     )
-    assert status == CaseStatus.OBSERVED
+    assert status == CaseStatus.PASS
     assert len(ctx.bag["UA-2-1-041"]["probe_writes"]) == 2
     assert ctx.bag["UA-2-1-041"]["probe_writes"][1]["accepted"] is False
 

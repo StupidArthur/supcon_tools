@@ -510,8 +510,11 @@ def precise_write_explore(
                 "before_src": before_src,
                 "after_src": after_src,
             })
+            if not accepted:
+                check_eq(f"rt_unchanged_on_reject:{val}", _row_value(before_rt), _row_value(after_rt))
+                check_eq(f"src_unchanged_on_reject:{val}", before_src, after_src)
         ctx.bag[meta["id"]] = {"probe_writes": records}
-        return CaseStatus.OBSERVED
+        return CaseStatus.PASS
     finally:
         cleanup_case_tag(ctx, cc, tag_id, tag_name)
 
@@ -647,11 +650,13 @@ def precise_only_read(ctx, cc, meta) -> CaseStatus:
         after_src = opcua_read(endpoint, node_name)
 
         if cid == "UA-2-1-085":
+            check_true("write_failed_or_ineffective", failed or _row_value(before_rt) == _row_value(after_rt))
+            check_true("source_unchanged", _values_close(before_src, after_src, type_key="DOUBLE"))
             ctx.bag[cid] = {
                 "onlyRead": only_read, "write_failed": failed, "error": err,
                 "before_src": before_src, "after_src": after_src,
             }
-            return CaseStatus.OBSERVED
+            return CaseStatus.PASS
 
         check_true("write_rejected_or_unchanged", failed or _row_value(before_rt) == _row_value(after_rt))
         check_true("source_unchanged", _values_close(before_src, after_src, type_key="DOUBLE"))

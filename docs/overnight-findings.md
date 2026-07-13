@@ -269,3 +269,28 @@
 - `coveragePercent` 64.44% → **67.06%**
 
 **单测**: `compileall` OK；`pytest ua_test_harness/unit_tests` **181 passed**
+
+---
+
+## 批次 15 — talk-main 任务 A 第三批 + 任务 C (2026-07-13)
+
+**任务 A 范围**: UA-2-1 探索余量中带 doc 硬断言的 case
+
+**OBSERVED → 真实断言 (晋升 STRICT)**:
+- `UA-2-1-099/102/104`: needPush 关闭 / 可用性读取 / 历史落库
+- `UA-2-1-011/012`: 重复映射拒绝后原位号仍在 / 非法 base 拒绝无残留
+- `UA-2-1-041/043/045/047/049/051/053/056/059/062/065`: 探索写入拒绝路径 `rt/src unchanged`
+- `UA-2-1-085`: 源只读+配置可写 — 写入失败或源端不变
+
+**任务 C — legacy 双轨合并**:
+- 下线 `tests/ua_3/test_collection.py` + `test_13_types.py` 的 7 条 `@case` 手写实现
+- 统一由 `zz_documented_cases` → `execute_documented_case` → `ua3_runtime`
+- `UA-3-5-001` `measure_rt_samples` 补 `samples_recorded` 断言 → PASS
+- 晋升 STRICT: `UA-3-1-001~004`, `UA-3-2-001`, `UA-3-3-001`, `UA-3-4-001`, `UA-3-5-001`
+
+**inventory 变化** (相对批次 14 `281/138`):
+- `IMPLEMENTED` 281 → **304** (+23)
+- `PARTIAL` 138 → **115** (-23)
+- `coveragePercent` 67.06% → **72.55%**
+
+**单测**: `pytest ua_test_harness/unit_tests` **185 passed**

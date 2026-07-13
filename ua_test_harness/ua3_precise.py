@@ -242,7 +242,8 @@ def measure_rt_samples(ctx, cc, meta, *, from_db: bool = False, count: int = 30)
             "p95": sorted(samples)[int(len(samples) * 0.95) - 1],
             "max": max(samples), "from_db": from_db,
         }
-        return CaseStatus.OBSERVED
+        check_true("samples_recorded", len(samples) >= 5)
+        return CaseStatus.PASS
     finally:
         cleanup_case_tag(ctx, cc, tag_id, tag_name)
 

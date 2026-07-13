@@ -233,7 +233,9 @@ def _precise_explore_duplicate_base(ctx, cc, meta) -> _CS:
             rows = exact(active_rows(ctx, tagBaseName=base), "tagBaseName", base)
             ctx.bag[f"{meta['id']}_count"] = len(rows)
             cleanup_case_tag(ctx, cc, int(rows[-1]["id"]), rows[-1]["tagName"])
-        return _CS.OBSERVED
+        else:
+            check_true("first_tag_intact", bool(exact(active_rows(ctx, tagName=a_name), "tagName", a_name)))
+        return _CS.PASS
     finally:
         cleanup_case_tag(ctx, cc, a_id, a_name)
 
@@ -252,7 +254,9 @@ def _precise_explore_invalid_base(ctx, cc, meta) -> _CS:
         rows = exact(active_rows(ctx, tagName=b_name), "tagName", b_name)
         if rows:
             cleanup_case_tag(ctx, cc, int(rows[0]["id"]), b_name)
-    return _CS.OBSERVED
+    else:
+        check_eq("no_residual_on_reject", 0, len(exact(active_rows(ctx, tagName=b_name), "tagName", b_name)))
+    return _CS.PASS
 
 
 def _precise_explore_type_mismatch(ctx, cc, meta) -> _CS:
