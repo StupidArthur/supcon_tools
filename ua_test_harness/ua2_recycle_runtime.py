@@ -571,7 +571,7 @@ def _precise_physical_explore(ctx, cc, meta, cid: str) -> CaseStatus:
                 soft_delete_tag(ctx, tid)
             delete_tags_physical(api, ids)
             for t in tags:
-                cc.registry.pop(f"tag:{t['name']}", None)
+                cc.registry.pop(f"tag:{t['name']}")
             recycle = [r for r in all_recycle_rows(ctx) if int(r.get("id")) in ids]
             active = [r for r in (active_rows(ctx) or []) if int(r.get("id", -1)) in ids]
             check_eq("not_in_recycle", 0, len(recycle))
@@ -587,7 +587,7 @@ def _precise_physical_explore(ctx, cc, meta, cid: str) -> CaseStatus:
         try:
             soft_delete_tag(ctx, tag_id)
             delete_tags_physical(api, [tag_id])
-            cc.registry.pop(f"tag:{tag['name']}", None)
+            cc.registry.pop(f"tag:{tag['name']}")
             err = None
             try:
                 delete_tags_physical(api, [tag_id])
@@ -615,7 +615,7 @@ def _precise_physical_explore(ctx, cc, meta, cid: str) -> CaseStatus:
             gone = not exact(active_rows(ctx, tagName=t1["name"]), "tagName", t1["name"])
             ctx.bag[cid] = {"batch_ok": batch_ok, "valid_gone": gone, "error": err}
             if batch_ok:
-                cc.registry.pop(f"tag:{t1['name']}", None)
+                cc.registry.pop(f"tag:{t1['name']}")
             return CaseStatus.OBSERVED
         finally:
             cleanup_case_tag(ctx, cc, int(t1["id"]), t1["name"])

@@ -743,3 +743,65 @@
   - step `None`: [write_blocked_after_soft_delete] not true.
 - `UA-2-4-016`: assert: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_34600
   - step `None`: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_34600
+
+---
+
+## 真跑批次 — registry-pop-fix-rerun (2026-07-13 14:57)
+
+**产物**: `output/automation_ua2_default_20260713_145651`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-2-061", "UA-2-2-062", "UA-2-4-021"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 3, "selectedCases": ["UA-2-2-061", "UA-2-2-062", "UA-2-4-021"], "remainingAfterBatch": 0}
+**结果**: PASS=3 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2-3-chapter-run (2026-07-13 15:20)
+
+**产物**: `output/automation_ua2_ua23_20260713_145740`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-3", "strictPoolSize": 25, "excludedPartial": [], "skippedVerified": [], "limitApplied": 32, "selectedCases": ["UA-2-3-001", "UA-2-3-002", "UA-2-3-003", "UA-2-3-004", "UA-2-3-005", "UA-2-3-006", "UA-2-3-007", "UA-2-3-008", "UA-2-3-009", "UA-2-3-010", "UA-2-3-011", "UA-2-3-013", "UA-2-3-014", "UA-2-3-015", "UA-2-3-016", "UA-2-3-017", "UA-2-3-019", "UA-2-3-020", "UA-2-3-021", "UA-2-3-025", "UA-2-3-026", "UA-2-3-028", "UA-2-3-029", "UA-2-3-030", "UA-2-3-031"], "remainingAfterBatch": 0}
+**结果**: PASS=4 FAIL=21 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-3-001`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_001_ua2_UA_2_3_0_t0_784900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_001_ua2_UA_2_3_0_t0_784900
+- `UA-2-3-002`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_002_ua2_UA_2_3_0_t0_396100
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_002_ua2_UA_2_3_0_t0_396100
+- `UA-2-3-003`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_003_ua2_UA_2_3_0_t0_606500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_003_ua2_UA_2_3_0_t0_606500
+- `UA-2-3-004`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_004_ua2_UA_2_3_0_t0_299600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_004_ua2_UA_2_3_0_t0_299600
+- `UA-2-3-005`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_005_ua2_UA_2_3_0_t0_24200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_005_ua2_UA_2_3_0_t0_24200
+- `UA-2-3-006`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_006_ua2_UA_2_3_0_t0_361700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_006_ua2_UA_2_3_0_t0_361700
+- `UA-2-3-007`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_007_ua2_UA_2_3_0_t0_584800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_007_ua2_UA_2_3_0_t0_584800
+- `UA-2-3-008`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_225200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_225200
+- `UA-2-3-009`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_009_ua2_UA_2_3_0_t0_751000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_009_ua2_UA_2_3_0_t0_751000
+- `UA-2-3-011`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_011_ua2_UA_2_3_0_t0_890400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_011_ua2_UA_2_3_0_t0_890400
+- `UA-2-3-013`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_013_ua2_UA_2_3_0_t0_705400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_013_ua2_UA_2_3_0_t0_705400
+- `UA-2-3-014`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_014_ua2_UA_2_3_0_t0_328800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_014_ua2_UA_2_3_0_t0_328800
+- `UA-2-3-015`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_015_ua2_UA_2_3_0_t0_685700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_015_ua2_UA_2_3_0_t0_685700
+- `UA-2-3-016`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_016_ua2_UA_2_3_0_t0_236900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_016_ua2_UA_2_3_0_t0_236900
+- `UA-2-3-017`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_017_ua2_UA_2_3_0_t0_707400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_017_ua2_UA_2_3_0_t0_707400
+- `UA-2-3-019`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_019_ua2_UA_2_3_0_t0_704000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_019_ua2_UA_2_3_0_t0_704000
+- `UA-2-3-020`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_020_ua2_UA_2_3_0_t0_602400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_020_ua2_UA_2_3_0_t0_602400
+- `UA-2-3-021`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_185000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_185000
+- `UA-2-3-025`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_025_ua2_UA_2_3_0_t0_568200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_025_ua2_UA_2_3_0_t0_568200
+- `UA-2-3-026`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_026_ua2_UA_2_3_0_t0_812400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_026_ua2_UA_2_3_0_t0_812400
+- `UA-2-3-028`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_736000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_736000

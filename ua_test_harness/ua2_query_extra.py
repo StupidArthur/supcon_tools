@@ -415,7 +415,7 @@ def result_update_cases(ctx, cc, meta, cid: str) -> CaseStatus:
             check_eq("gone_active", 0, len(exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)))
             check_true("in_recycle", bool([r for r in all_recycle_rows(ctx) if r.get("tagName") == tag_name]))
             physical_delete_tag(ctx, tag_id)
-            cc.registry.pop(f"tag:{tag_name}", None)
+            cc.registry.pop(f"tag:{tag_name}")
             tag_id = tag_name = 0
             return CaseStatus.PASS
 
@@ -429,7 +429,7 @@ def result_update_cases(ctx, cc, meta, cid: str) -> CaseStatus:
                 soft_delete_tag(ctx, tag_id)
                 after_soft = len(filter_unregistered(ctx, ds_id, browse_all_nodes(ctx, ds_id)))
                 physical_delete_tag(ctx, tag_id)
-                cc.registry.pop(f"tag:{tag_name}", None)
+                cc.registry.pop(f"tag:{tag_name}")
                 tag_id = tag_name = 0
                 after_phys = len(filter_unregistered(ctx, ds_id, browse_all_nodes(ctx, ds_id)))
                 ctx.bag[cid] = {"after_soft": after_soft, "after_physical": after_phys}
@@ -438,7 +438,7 @@ def result_update_cases(ctx, cc, meta, cid: str) -> CaseStatus:
         if cid == "UA-2-2-062":
             soft_delete_tag(ctx, tag_id)
             physical_delete_tag(ctx, tag_id)
-            cc.registry.pop(f"tag:{tag_name}", None)
+            cc.registry.pop(f"tag:{tag_name}")
             check_eq("no_active", 0, len(exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)))
             check_eq("no_recycle", 0, len([r for r in all_recycle_rows(ctx) if r.get("tagName") == tag_name]))
             tag_id = tag_name = 0
