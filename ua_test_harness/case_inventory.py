@@ -217,11 +217,71 @@ def _implementation_map() -> dict[str, dict[str, Any]]:
     }
 
 
+def _load_verification_overlay(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load case_id -> {status, ...} from a patch JSON or existing inventory."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(payload.get("cases"), list):
+        overlay: dict[str, dict[str, Any]] = {}
+        for row in payload["cases"]:
+            cid = row.get("id")
+            status = row.get("verificationStatus")
+            if cid and status and status != "NOT_VERIFIED":
+                overlay[cid] = {
+                    "status": status,
+                    "verifiedAt": row.get("verifiedAt"),
+                    "runReportPath": row.get("runReportPath"),
+                    "runStatus": row.get("runStatus"),
+                }
+        return overlay
+    if isinstance(payload.get("overlay"), dict):
+        return dict(payload["overlay"])
+    if all(isinstance(v, (str, dict)) for v in payload.values()):
+        overlay = {}
+        for cid, value in payload.items():
+            if isinstance(value, str):
+                overlay[cid] = {"status": value}
+            elif isinstance(value, dict) and value.get("status"):
+                overlay[cid] = value
+        return overlay
+    return {}
+
+
+def verification_overlay_from_run(case_results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Map automation case summaries to verification overlay entries."""
+    overlay: dict[str, dict[str, Any]] = {}
+    for row in case_results:
+        cid = row.get("caseId") or row.get("id")
+        if not cid:
+            continue
+        run_status = row.get("status", "UNKNOWN")
+        if run_status == "PASS":
+            vstatus = "VERIFIED"
+        elif run_status == "FAIL":
+            vstatus = "VERIFIED_FAIL"
+        elif run_status in {"BLOCKED", "TIMEOUT", "ERROR"}:
+            vstatus = "VERIFIED_BLOCKED"
+        else:
+            continue
+        overlay[cid] = {
+            "status": vstatus,
+            "runStatus": run_status,
+            "runReportPath": row.get("reportPath"),
+            "cleanupStatus": row.get("cleanupStatus"),
+        }
+    return overlay
+
+
 def build_inventory(
     repo_root: Path,
     *,
     implemented: dict[str, dict[str, Any]] | None = None,
     expected_total: int = 419,
+    verification_overlay: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     from ua_test_harness.case_fidelity import resolve_implementation_status
 
@@ -235,6 +295,8 @@ def build_inventory(
 
     cases: list[dict[str, Any]] = []
     status_counts = Counter()
+    verification_counts = Counter()
+    overlay = verification_overlay or {}
     for row in sorted(rows, key=lambda item: item["id"]):
         impl = implementation.get(row["id"])
         cid = row["id"]
@@ -243,15 +305,23 @@ def build_inventory(
         fidelity = "STRICT" if status == "IMPLEMENTED" else (
             "OBSERVED_ONLY" if status == "PARTIAL" else "NONE"
         )
-        cases.append(
-            {
-                **row,
-                "implementationStatus": status,
-                "fidelityTier": fidelity,
-                "implementation": impl,
-                "verificationStatus": "NOT_VERIFIED",
-            }
-        )
+        vinfo = overlay.get(cid) or {}
+        vstatus = vinfo.get("status", "NOT_VERIFIED")
+        verification_counts[vstatus] += 1
+        case_row = {
+            **row,
+            "implementationStatus": status,
+            "fidelityTier": fidelity,
+            "implementation": impl,
+            "verificationStatus": vstatus,
+        }
+        if vinfo.get("verifiedAt"):
+            case_row["verifiedAt"] = vinfo["verifiedAt"]
+        if vinfo.get("runReportPath"):
+            case_row["runReportPath"] = vinfo["runReportPath"]
+        if vinfo.get("runStatus"):
+            case_row["runStatus"] = vinfo["runStatus"]
+        cases.append(case_row)
 
     document_count = len(cases)
     strict_count = status_counts["IMPLEMENTED"]
@@ -271,6 +341,10 @@ def build_inventory(
         "documentWarnings": warning_count,
         "orphanImplementations": len(orphan_implementations),
         "structureOk": document_count == expected_total and not duplicates and not malformed,
+        "verified": verification_counts.get("VERIFIED", 0),
+        "verifiedFail": verification_counts.get("VERIFIED_FAIL", 0),
+        "verifiedBlocked": verification_counts.get("VERIFIED_BLOCKED", 0),
+        "notVerified": verification_counts.get("NOT_VERIFIED", 0),
     }
     return {
         "schemaVersion": 3,
@@ -307,9 +381,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--expected-total", type=int, default=419)
     parser.add_argument("--strict-structure", action="store_true")
+    parser.add_argument(
+        "--verification-overlay",
+        default="",
+        help="JSON patch / existing inventory to preserve verificationStatus",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    report = build_inventory(Path(args.repo_root), expected_total=args.expected_total)
+    overlay_path = Path(args.verification_overlay).expanduser() if args.verification_overlay else None
+    overlay = _load_verification_overlay(overlay_path) if overlay_path else {}
+    report = build_inventory(
+        Path(args.repo_root),
+        expected_total=args.expected_total,
+        verification_overlay=overlay,
+    )
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -320,6 +405,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         f"implemented={summary['implemented']} "
         f"partial={summary['partial']} "
         f"unimplemented={summary['unimplemented']} "
+        f"verified={summary.get('verified', 0)} "
+        f"verifiedFail={summary.get('verifiedFail', 0)} "
         f"coverage={summary['coveragePercent']}%"
     )
     failures = structural_failures(report)

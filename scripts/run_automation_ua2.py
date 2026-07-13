@@ -566,7 +566,40 @@ def main() -> int:
         encoding="utf-8",
     )
 
+    _write_verification_overlay(out_dir, summary)
+
     return 0 if summary["status"] == "PASS" else 1
+
+
+def _write_verification_overlay(out_dir: Path, summary: dict[str, Any]) -> None:
+    """Persist verification patch and refresh docs/case-inventory.json."""
+    from datetime import datetime, timezone
+    from ua_test_harness.case_inventory import (
+        _load_verification_overlay,
+        build_inventory,
+        verification_overlay_from_run,
+    )
+
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    new_overlay = verification_overlay_from_run(summary.get("caseResults") or [])
+    for info in new_overlay.values():
+        info["verifiedAt"] = stamp
+
+    docs_inventory = REPO_ROOT / "docs" / "case-inventory.json"
+    merged = _load_verification_overlay(docs_inventory)
+    merged.update(new_overlay)
+
+    patch_path = out_dir / "verification-overlay.json"
+    patch_path.write_text(json.dumps({"overlay": merged}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    report = build_inventory(REPO_ROOT, verification_overlay=merged)
+    docs_inventory.parent.mkdir(parents=True, exist_ok=True)
+    docs_inventory.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(
+        f"verification overlay written: {patch_path} "
+        f"verified={report['summary'].get('verified', 0)} "
+        f"verifiedFail={report['summary'].get('verifiedFail', 0)}"
+    )
 
 
 if __name__ == "__main__":

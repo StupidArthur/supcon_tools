@@ -294,3 +294,57 @@
 - `coveragePercent` 67.06% → **72.55%**
 
 **单测**: `pytest ua_test_harness/unit_tests` **185 passed**
+
+---
+
+## 规模/时长缩减审计（任务 B）
+
+> 原则：能还原 doc 规模的还原；不能的**必须登记**，禁止静默缩减。  
+> 审计方式：静态代码 grep + doc 对照（`ua_test_gui/doc/test_cases/*.md`）。
+
+| Case ID | doc 要求 | 实现实际 | 代码位置 | 缩减理由 | 可否还原 |
+|---------|----------|----------|----------|----------|----------|
+| **UA-2-3-014** | Excel 导入 **10 行** | 造数 `min(10,3)=3` 条 tag 后导入 | `ua2_import_runtime.py` L54 | 导入夹具按最小行数建 tag，未按 10 行 Excel 全量造数 | 可：扩 `_make_tags` 到 10 |
+| **UA-2-3-032** | browse+batchAdd **100 条**完整性 | `min(100,20)=20` 条 | `ua2_import_runtime.py` L261 | mock 未注册节点池上限约 20，不足 100 时 OBSERVED | 受限：需扩 mock 节点或分批 |
+| **UA-2-5-015** | 批量移动 **10 个**位号 | `min(3,10)=3` 个 | `ua2_group_runtime.py` L205 | 分组移动回归用最小批量验证逻辑 | 可：改为 `range(10)` |
+| **UA-2-5-016** | 移动到 Root（单/少量位号） | 同路径 **3 个**位号（非 014 分支） | `ua2_group_runtime.py` L205 | 与 015 共用批量造数分支，非 doc 要求的单点移动 | 可：016 单独 `range(1)` |
+| **UA-1-3-03** | **5 轮**断开-重连时延统计 | `range(3)` 三轮 + `note: reduced_3_rounds_for_impl` | `ua1_precise.py` L167-178 | 每轮含 mock 停启+轮询，5 轮真跑耗时过长 | 可：env 窗口允许时改 5 |
+| **UA-1-3-07** | 停止 mock 等待 **120s** 后恢复 | `sleep(30)` + `long_disconnect_sec: 30` | `ua1_precise.py` L113-121 | 长断线探索，120s 阻塞 overnight CLI | 可：参数化 `disconnect_sec` |
+| **UA-2-1-087** | frequency=1，运行 **30s** 采样 | duration=**30s**（对齐） | `ua2_precise.py` L687-703 | — | **已对齐** |
+| **UA-2-1-088** | frequency=5 效果探索 | duration=**60s**（doc 未写死秒数） | `ua2_precise.py` L690 | 探索采样窗口取 60s | 可酌情延长 |
+| **UA-2-1-089** | frequency=30 效果探索 | duration=**120s** | `ua2_precise.py` L690 | 低频需更长窗口才有历史 | 可酌情延长 |
+| **UA-2-1-100** | needPush 关闭后历史/RT 行为 | RT 采样 **5 次×2s**（非 30s 历史窗） | `ua2_precise.py` L874-879 | 与 099 分支区分，缩短 RT 轮询 | 探索类，可保留 |
+| **UA-2-1-112** | 批量 1/10/100/**上限/上限+1** | 仅测 `[1,10,100]` 三档 | `ua2_precise.py` L1097-1113 | 上限探测需 mock 节点池+接口上限摸底 | 受限：需节点池与 API 上限 |
+| **UA-3-5-001** | 单点位号延迟分布 | `measure_rt_samples` **30 次**采样 | `ua3_precise.py` L222 | doc 未规定采样次数；30 为基线 | 可增采样 |
+| **UA-3-5-002/004/006** | 单请求 **100** 位号 RT | `measure_rt_batch count=100` | `ua3_runtime.py` L233-237 | — | **已对齐** |
+| **UA-3-6-001** | 并发**逐级递增**读 | 固定 `workers=5, requests=20` | `ua3_runtime.py` L256 + `ua3_precise.py` L251 | 探索基线：固定并发档而非递增阶梯 | 可：实现 workers 阶梯 |
+| **UA-3-6-002** | DB 并发递增 | 固定 `workers=10, requests=30` | `ua3_runtime.py` L258 | 同上 | 可：实现递增 |
+| **UA-3-6-003** | 批大小**递增** | 单次 `batch=10` 固定批 | `ua3_runtime.py` L260 + `ua3_extra.py` L544 | 未做多档 batch 递增探测 | 可：循环 batch 列表 |
+| **UA-3-6-015** | 持续负载+短时过载后 **30min** 恢复 | **50 并发读 + sleep(5)** 冒烟；`shortened_overload_probe_not_30min` | `ua3_extra.py` L727-744 | 30min 长稳不适合单次 CLI case 超时 | **不可**在默认 case 超时内还原 |
+| **UA-3-6-007** | 批量写探索 | `write_batch count=10` | `ua3_runtime.py` L268 | doc 未写死条数 | 可扩 |
+| **UA-2-4-002/021** | 批量软删/物理删 **10 条** | `range(10)` | `ua2_recycle_runtime.py` | — | **已对齐**（批次 8 修正） |
+| **UA-2-1-105** | browse **10 节点** batchAdd | `pick_unused_nodes(..., 10)` | `ua2_precise.py` batch | — | **已对齐** |
+
+**登记结论**：上表 15 项存在明确缩减或简化；其中 4 项已与 doc 对齐；其余保留实现并在此登记，后续 env 窗口允许时优先还原「可」项。
+
+---
+
+## 批次 16 — talk-main 任务 B + D + E (2026-07-13)
+
+**任务 B**：新增 §规模/时长缩减审计（上表），不静默缩减。
+
+**任务 D**：`docs/overnight-report.md` UA-3 路由改为 `ua3_runtime`；inventory 改为 304/115/72.55%。
+
+**任务 E**：env 可用时 `scripts/run_automation_ua2.py` 真跑 UA-2 高保真首批 16 条 → 更新 `docs/case-inventory.json` 的 `verificationStatus`（PASS→`VERIFIED`，产品 FAIL→`VERIFIED_FAIL` 保留）。
+
+**任务 E 真跑结果**（`output/automation_ua2_20260713_100136/`，耗时 ~153s）:
+- env: `env.json` 可达；types mock 18965 + empty mock 18967；共享 baseline provision OK
+- **15 PASS → VERIFIED**；**1 FAIL → VERIFIED_FAIL**（`UA-2-1-019`，产品 bug 保留）
+- `docs/case-inventory.json` summary: `verified=15 verifiedFail=1 notVerified=403`
+- runner exit 1（因 1 条 FAIL，符合纪律：不吞 FAIL）
+
+**代码支撑**:
+- `case_inventory.py` 新增 `--verification-overlay` + `verification_overlay_from_run`
+- `run_automation_ua2.py` 批次结束写 `verification-overlay.json` 并刷新 `docs/case-inventory.json`
+- 单测 `test_verification_overlay.py` +2
+

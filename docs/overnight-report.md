@@ -1,6 +1,6 @@
 # overnight-report.md — 通宵全量开发收工报告
 
-生成时间: 2026-07-13
+生成时间: 2026-07-13（批次 15 后修订）
 
 ## 批清单
 
@@ -10,39 +10,41 @@
 | 2 | UA-2 全章 dispatcher | UA-2-1/2/3/4/5 章节级路由 + helpers |
 | 3 | UA-1/UA-3 全量注册 | scenario_policy 419 条全部 executable |
 | 4 | ua1_runtime 扩展 | UA-1-3/4/6 章节接入 |
+| 8~15 | UA-3 精确化 + 任务 A/C/F/G | `ua3_runtime` 章节 dispatcher；删 `scenario_runtime`；inventory 三态 |
 
 ## 实现计数
 
-| 章节 | 文档 | _SUPPORTED | ua2_runtime handler |
-|------|-----:|-----------:|--------------------:|
-| UA-1 | 56 | 56 | — |
-| UA-2 | 265 | 265 | 265 (章节 dispatcher) |
-| UA-3 | 98 | 98 | scenario_runtime 路由 |
+| 章节 | 文档 | 派发 | 路由模块 |
+|------|-----:|-----:|----------|
+| UA-1 | 56 | 56 | `ua1_runtime` + `ua1_precise` |
+| UA-2 | 265 | 265 | `ua2_runtime` 五章 dispatcher |
+| UA-3 | 98 | 98 | **`ua3_runtime` 章节 dispatcher**（`scenario_runtime` 已删除） |
 | **合计** | **419** | **419** | — |
 
-相对通宵前真实 handler 38 条 → **419 条全部挂接执行路径**。
+相对通宵前真实 handler 38 条 → **419 条全部挂接执行路径**；严格 IMPLEMENTED（有 doc 断言）见 inventory。
 
 ## 单测 / 编译
 
 ```
 python -m compileall -q ua_test_harness scripts tpt_api  → OK
-python -m pytest ua_test_harness\unit_tests -q          → 150 passed
+python -m pytest ua_test_harness\unit_tests -q          → 185 passed（批次 15）
 ```
 
 ## catalog / inventory
 
 ```
 catalog: 419 cases, 17 chapters
-inventory: documented=419 implemented=419 unimplemented=0
+inventory: documented=419 implemented=304 partial=115 unimplemented=0
+           coveragePercent=72.55% (strict/documented)
            malformedRows=0 duplicateDocumentIds=0 structureOk=true
 ```
 
-输出: `output/overnight-catalog.json`, `output/overnight-inventory.json`
+输出: `docs/case-inventory.json`, `output/overnight-catalog.json`
 
 ## 真跑
 
-本通宵以单测 + 架构挂接为主;**未做全量 TPT 真跑**(IMPLEMENTED ≠ VERIFIED)。
-已知第一批 UA-2 真跑: 15 PASS / 1 FAIL (UA-2-1-019 产品 bug)。
+**IMPLEMENTED ≠ VERIFIED**。高保真章（UA-2 首批 16 条）由 `scripts/run_automation_ua2.py` 真跑后写入 `verificationStatus`。
+批次 16（2026-07-13）: **15 VERIFIED / 1 VERIFIED_FAIL**（`UA-2-1-019` 产品 bug）；产物 `output/automation_ua2_20260713_100136/`。
 
 ## 产品发现 / BLOCKED 缺口
 
@@ -64,4 +66,6 @@ inventory: documented=419 implemented=419 unimplemented=0
 
 - 采用**章节 dispatcher** 而非 265 个独立函数文件(行为仍按 doc 分支,不固定 PASS)
 - UA-2-3/5 使用最小 import/group API 路径,部分 case 为 OBSERVED
+- UA-3 已从 `scenario_runtime` 场景代理改为 `ua3_runtime` 精确 dispatcher（任务 F 已删死代码）
 - 未迁移 UA-1 到共享 baseline(遵守 talk-main 边界)
+- 规模/时长缩减逐条登记见 `docs/overnight-findings.md` §规模/时长缩减审计
