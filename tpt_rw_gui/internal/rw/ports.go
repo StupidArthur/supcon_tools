@@ -25,6 +25,8 @@ type ClientPort interface {
 	// ListGroupTagsRaw 是空关键字 / 单 tagName 名查询时的退路:
 	// 走 /tag-group/get (GroupID="0"),响应结构是 tagInfoList.records[],与 queryWithQuality 不同。
 	// GroupID="0"=根分组。可在弹窗 input 不输入任何关键字时拉取整组下所有位号。
+	// 注意:/tag-group/get 不支持 DS 过滤,platform 会返回所有数据源的位号。
+	// service 层在 q.DSID 非 nil 时,在客户端按 tag.DSID 过滤(参见 Service.ListTags)。
 	ListGroupTagsRaw(groupID, tagName string, tagType, page, pageSize int) (json.RawMessage, error)
 }
 

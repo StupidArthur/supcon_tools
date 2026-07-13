@@ -48,6 +48,14 @@ func (s *Service) ListDataSources(ctx context.Context) ([]DataSource, error) {
 //	响应结构与 queryWithQuality 不同(tagInfoList.records[]),由 parseGroupTagsResponse 单独解。
 // 选这条退路是因为:实平台 queryWithQuality 在 tagName="" 路径上不返 records
 // (或返 pageinfo dict),导致用户不输入任何关键字就显示 "已加载 0 条"。
+//
+// 空关键字路径下,/tag-group/get 端点不接受 DSID 参数,平台会返回所有数据源的位号。
+// 当 q.DSID 非 nil 时,service 层在客户端按 tag.DSID == *q.DSID 过滤,避免用户选到
+// 不属于当前选中数据源的位号。
+//
+// 注意:空关键字路径下 q.TagType=0 会被底层 tpt_api.ListGroupTags 改写为 TagTypeOnce
+// (只查一次位号),与 QueryTagsWithQuality 路径的"0=不过滤"语义不同。这是共享代码层
+// 行为,本任务不修。
 func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
 	if q.GroupID == "" {
 		q.GroupID = tptapi.GroupRoot
@@ -67,7 +75,20 @@ func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
 		if err != nil {
 			return nil, MapError(err)
 		}
-		return parseGroupTagsResponse(raw)
+		tags, err := parseGroupTagsResponse(raw)
+		if err != nil {
+			return nil, err
+		}
+		if q.DSID != nil {
+			filtered := make([]Tag, 0, len(tags))
+			for _, t := range tags {
+				if t.DSID == *q.DSID {
+					filtered = append(filtered, t)
+				}
+			}
+			tags = filtered
+		}
+		return tags, nil
 	}
 	raw, err := s.client.QueryTagsWithQuality(q.DSID, q.GroupID, q.Keyword, "",
 		q.TagType, q.Page, q.PageSize, q.Sort)
@@ -290,9 +311,10 @@ func (s *Service) ReadHistory(ctx context.Context, q HistoryQuery) ([]HistoryRow
 	if err != nil {
 		return nil, MapError(err)
 	}
-	// /getHistoryValue(IPage):records:{tagName:{list:[],total:...},...}
-	// /getHistoryValueFromDB(content): records array of [tag, value, ts, qcode]
-	// 用一种兼容方式:优先尝试 records 数组,失败再试 map 形式。
+	// /getHistoryValue(page): IPage {"records": [...], "total": N, "current":..., "size":..., "pages":...}
+	// /getHistoryValueFromDB(fromdb): {"tagName": {"list": [...], "total": N, ...}}
+	// 路由策略:parseHistoryRecords 优先吃 IPage(包含 records 键)与裸数组两种形态;
+	// 都不是再交 parseHistoryMap 吃 fromdb 的 map[tagName] 形态。
 	if rows, ok := parseHistoryRecords(raw); ok {
 		return rows, nil
 	}
@@ -302,16 +324,15 @@ func (s *Service) ReadHistory(ctx context.Context, q HistoryQuery) ([]HistoryRow
 	return nil, MapError(fmt.Errorf("历史值响应结构无法识别: %s", truncateForErr(raw, 200)))
 }
 
-func parseHistoryRecords(raw json.RawMessage) ([]HistoryRow, bool) {
-	var rows []struct {
-		TagName  string          `json:"tagName"`
-		TagValue json.RawMessage `json:"tagValue"`
-		AppTime  string          `json:"appTime"`
-		Quality  int             `json:"quality"`
-	}
-	if err := json.Unmarshal(raw, &rows); err != nil || len(rows) == 0 {
-		return nil, false
-	}
+// histPoint 历史点内部形态,共用于 IPage.records[] 与裸数组两种包装。
+type histPoint struct {
+	TagName  string          `json:"tagName"`
+	TagValue json.RawMessage `json:"tagValue"`
+	AppTime  string          `json:"appTime"`
+	Quality  int             `json:"quality"`
+}
+
+func toHistoryRows(rows []histPoint) []HistoryRow {
 	out := make([]HistoryRow, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, HistoryRow{
@@ -319,29 +340,79 @@ func parseHistoryRecords(raw json.RawMessage) ([]HistoryRow, bool) {
 			AppTime: r.AppTime, Quality: r.Quality,
 		})
 	}
-	return out, true
+	return out
 }
 
-// parseHistoryMap 处理 /getHistoryValue IPage (records map[tagName]{list,total}) 形式。
-func parseHistoryMap(raw json.RawMessage) ([]HistoryRow, bool) {
-	var resp struct {
-		Records map[string]struct {
-			List []struct {
-				Value    json.RawMessage `json:"value"`
-				TagTime  string          `json:"tagTime"`
-				AppTime  string          `json:"appTime"`
-				Quality  int             `json:"quality"`
-			} `json:"list"`
-		} `json:"records"`
-	}
-	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Records) == 0 {
+// parseHistoryRecords 解析 /getHistoryValue 的 IPage 响应。
+// 优先级:
+//  1. IPage {"records": [...]}  — 真实契约
+//  2. 裸数组 [...]               — 向后兼容(老实现 / 其它代理)
+//
+// records 为空数组或 null 视为"成功 + 0 条",仍返回 ([], true),不退回 map 解析器,
+// 避免 fromdb 形态在解析器间反复兜底。
+func parseHistoryRecords(raw json.RawMessage) ([]HistoryRow, bool) {
+	s := bytes.TrimSpace(raw)
+	if len(s) == 0 {
 		return nil, false
 	}
-	var out []HistoryRow
-	for name, slot := range resp.Records {
+
+	// 形态 1:IPage {"records": [...]}
+	if s[0] == '{' {
+		var probe map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &probe); err != nil {
+			return nil, false
+		}
+		if _, ok := probe["records"]; ok {
+			var page struct {
+				Records []histPoint `json:"records"`
+			}
+			if err := json.Unmarshal(raw, &page); err != nil {
+				return nil, false
+			}
+			return toHistoryRows(page.Records), true
+		}
+		// 不是 IPage 形态,交给 map 解析器。
+		return nil, false
+	}
+
+	// 形态 2:裸数组(向后兼容)
+	if s[0] == '[' {
+		var rows []histPoint
+		if err := json.Unmarshal(raw, &rows); err != nil {
+			return nil, false
+		}
+		return toHistoryRows(rows), true
+	}
+
+	return nil, false
+}
+
+// parseHistoryMap 解析 /getHistoryValueFromDB 的 {tagName: {list, total, ...}} 响应。
+// 真实契约无 records 包装、字段为 tagValue(不是 value);空 map 视为"成功 + 0 条"。
+func parseHistoryMap(raw json.RawMessage) ([]HistoryRow, bool) {
+	s := bytes.TrimSpace(raw)
+	if len(s) == 0 {
+		return nil, false
+	}
+	if s[0] != '{' {
+		return nil, false
+	}
+	var resp map[string]struct {
+		List []struct {
+			TagValue json.RawMessage `json:"tagValue"`
+			TagTime  string          `json:"tagTime"`
+			AppTime  string          `json:"appTime"`
+			Quality  int             `json:"quality"`
+		} `json:"list"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, false
+	}
+	out := make([]HistoryRow, 0)
+	for name, slot := range resp {
 		for _, p := range slot.List {
 			out = append(out, HistoryRow{
-				TagName: name, Value: p.Value,
+				TagName: name, Value: p.TagValue,
 				AppTime: firstNonEmpty(p.AppTime, p.TagTime),
 				Quality: p.Quality,
 			})

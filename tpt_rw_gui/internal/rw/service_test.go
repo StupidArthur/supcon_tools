@@ -13,12 +13,14 @@ import (
 
 // fakeClient 实现 ClientPort,产出固定 fixture 数据。
 type fakeClient struct {
-	mu      sync.Mutex
-	dsList  []tptapi.DsInfo
-	rtList  map[string][]tptapi.RtValuePoint
-	rawHist json.RawMessage
-	histMode Mode
-	calls   int
+	mu        sync.Mutex
+	dsList    []tptapi.DsInfo
+	rtList    map[string][]tptapi.RtValuePoint
+	rawHist   json.RawMessage // 兜底;优先看 histRecs / histMap
+	histRecs  json.RawMessage // /getHistoryValue(IPage) 响应
+	histMap   json.RawMessage // /getHistoryValueFromDB 响应
+	histMode  Mode
+	calls     int
 }
 
 func (f *fakeClient) GetAllDsInfo() ([]tptapi.DsInfo, error) {
@@ -62,6 +64,9 @@ func (f *fakeClient) GetHistoryValue(_ []string, _ string, _ string,
 	defer f.mu.Unlock()
 	f.histMode = ModePage
 	f.calls++
+	if len(f.histRecs) > 0 {
+		return f.histRecs, nil
+	}
 	return f.rawHist, nil
 }
 
@@ -71,6 +76,9 @@ func (f *fakeClient) GetHistoryValueFromDB(_ []string, _ string, _ string,
 	defer f.mu.Unlock()
 	f.histMode = ModeFromDB
 	f.calls++
+	if len(f.histMap) > 0 {
+		return f.histMap, nil
+	}
 	return f.rawHist, nil
 }
 
@@ -286,9 +294,13 @@ func TestWriteValues_WithReadback_Succeeds(t *testing.T) {
 }
 
 func TestReadHistory_RouteByMode(t *testing.T) {
-	histRecords := json.RawMessage(`[{"tagName":"a","tagValue":1.0,"appTime":"2026-07-13 00:00:00","quality":0}]`)
-	fc := &fakeClient{rawHist: histRecords}
+	// page 模式真实契约:IPage { records: [...], total, current, size, pages }
+	pageRaw := json.RawMessage(`{"records":[{"tagName":"a","tagValue":1,"appTime":"2026-07-13 00:00:00","quality":0}],"total":1,"current":1,"size":10,"pages":1}`)
+	// fromdb 模式真实契约:{ tagName: { list: [...], total } }(无 records 包装,字段 tagValue)
+	fromdbRaw := json.RawMessage(`{"a":{"list":[{"tagName":"a","tagValue":1,"appTime":"2026-07-13 00:00:00","quality":0}],"total":1}}`)
+	fc := &fakeClient{histRecs: pageRaw, histMap: fromdbRaw}
 	s := NewService(fc)
+
 	got, err := s.ReadHistory(context.Background(), HistoryQuery{
 		TagNames: []string{"a"}, BegTime: "2026-07-01 00:00:00", EndTime: "2026-07-13 23:59:59",
 		Mode: ModePage,
@@ -297,18 +309,28 @@ func TestReadHistory_RouteByMode(t *testing.T) {
 		t.Fatalf("ReadHistory page: %v", err)
 	}
 	if len(got) != 1 || got[0].TagName != "a" {
-		t.Fatalf("want 1 history row, got %+v", got)
+		t.Fatalf("page want 1 history row tag=a, got %+v", got)
+	}
+	if string(got[0].Value) != "1" {
+		t.Fatalf("page want value 1, got %s", string(got[0].Value))
 	}
 	if fc.histMode != ModePage {
 		t.Fatalf("mode want page, got %q", fc.histMode)
 	}
+
 	// 切到 FromDB
-	_, err = s.ReadHistory(context.Background(), HistoryQuery{
+	got, err = s.ReadHistory(context.Background(), HistoryQuery{
 		TagNames: []string{"a"}, BegTime: "2026-07-01 00:00:00", EndTime: "2026-07-13 23:59:59",
 		Mode: ModeFromDB,
 	})
 	if err != nil {
 		t.Fatalf("ReadHistory fromdb: %v", err)
+	}
+	if len(got) != 1 || got[0].TagName != "a" {
+		t.Fatalf("fromdb want 1 history row tag=a, got %+v", got)
+	}
+	if string(got[0].Value) != "1" {
+		t.Fatalf("fromdb want value 1, got %s", string(got[0].Value))
 	}
 	if fc.histMode != ModeFromDB {
 		t.Fatalf("mode want fromdb, got %q", fc.histMode)
@@ -376,5 +398,197 @@ func TestMapError_OtherCode_NotData(t *testing.T) {
 	got := MapError(e)
 	if got.Kind == KindData {
 		t.Fatalf("A0400 不应被识别为 data")
+	}
+}
+
+// 空关键字 + DSID 非 nil:应在客户端按 DSID 过滤,/tag-group/get 返回的 dsId 不匹配的位号丢弃。
+func TestListTags_EmptyKeyword_FiltersByDSID(t *testing.T) {
+	fc := &rawClient{
+		resp: json.RawMessage(`{"tagInfoList":{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":1,"dsId":9,"dataTypeName":"","groupName":"Root"},{"id":11,"tagName":"b.y","tagBaseName":"1_b.y","dataType":11,"tagType":1,"dsId":20,"dataTypeName":"","groupName":"Root"}]}}`),
+	}
+	s := NewService(fc)
+	dsID := 9
+	got, err := s.ListTags(context.Background(), TagListQuery{Keyword: "", GroupID: "0", DSID: &dsID})
+	if err != nil {
+		t.Fatalf("empty-keyword DSID filter: %v", err)
+	}
+	if fc.groupTagsCalls != 1 {
+		t.Fatalf("want 1 groupTags call, got %d (queryCalls=%d)", fc.groupTagsCalls, fc.queryCalls)
+	}
+	if fc.queryCalls != 0 {
+		t.Fatalf("want 0 queryWithQuality calls when keyword empty, got %d", fc.queryCalls)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 tag after DSID filter, got %+v", got)
+	}
+	if got[0].Name != "a.x" {
+		t.Fatalf("want tagName=a.x, got %q", got[0].Name)
+	}
+	if got[0].DSID != 9 {
+		t.Fatalf("want dsId=9, got %d", got[0].DSID)
+	}
+}
+
+// 空关键字 + DSID 为 nil:不过滤,返回全部。
+func TestListTags_EmptyKeyword_NilDSID_NoFilter(t *testing.T) {
+	fc := &rawClient{
+		resp: json.RawMessage(`{"tagInfoList":{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":1,"dsId":9,"dataTypeName":"","groupName":"Root"},{"id":11,"tagName":"b.y","tagBaseName":"1_b.y","dataType":11,"tagType":1,"dsId":20,"dataTypeName":"","groupName":"Root"}]}}`),
+	}
+	s := NewService(fc)
+	got, err := s.ListTags(context.Background(), TagListQuery{Keyword: "", GroupID: "0", DSID: nil})
+	if err != nil {
+		t.Fatalf("empty-keyword nil DSID: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 tags (no filter), got %+v", got)
+	}
+	if got[0].Name != "a.x" || got[1].Name != "b.y" {
+		t.Fatalf("want a.x, b.y, got %+v", got)
+	}
+}
+
+// 空关键字 + DSID 命中 0 条:返回空切片,不是 nil,不是错误。
+func TestListTags_EmptyKeyword_DSID_NoMatch_Empty(t *testing.T) {
+	fc := &rawClient{
+		resp: json.RawMessage(`{"tagInfoList":{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":1,"dsId":9,"dataTypeName":"","groupName":"Root"},{"id":11,"tagName":"b.y","tagBaseName":"1_b.y","dataType":11,"tagType":1,"dsId":20,"dataTypeName":"","groupName":"Root"}]}}`),
+	}
+	s := NewService(fc)
+	dsID := 999
+	got, err := s.ListTags(context.Background(), TagListQuery{Keyword: "", GroupID: "0", DSID: &dsID})
+	if err != nil {
+		t.Fatalf("empty-keyword DSID no-match: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("want 0 tags (no match), got %+v", got)
+	}
+}
+
+// fromdb 空结果:map 有 key 但 list 为空,应返回空数组(非 nil)、不报错。
+func TestReadHistory_FromDB_EmptyResult(t *testing.T) {
+	emptyMap := json.RawMessage(`{"a":{"list":[],"total":0}}`)
+	fc := &fakeClient{histMap: emptyMap}
+	s := NewService(fc)
+	got, err := s.ReadHistory(context.Background(), HistoryQuery{
+		TagNames: []string{"a"}, BegTime: "2026-07-01 00:00:00", EndTime: "2026-07-13 23:59:59",
+		Mode: ModeFromDB,
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory fromdb empty: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("want non-nil empty slice, got nil")
+	}
+	if len(got) != 0 {
+		t.Fatalf("want 0 rows, got %+v", got)
+	}
+}
+
+// IPage records 为空数组:应返回空数组(非 nil)、不报错。
+func TestReadHistory_Page_EmptyResult(t *testing.T) {
+	emptyIPage := json.RawMessage(`{"records":[],"total":0,"current":1,"size":10,"pages":0}`)
+	fc := &fakeClient{histRecs: emptyIPage}
+	s := NewService(fc)
+	got, err := s.ReadHistory(context.Background(), HistoryQuery{
+		TagNames: []string{"a"}, BegTime: "2026-07-01 00:00:00", EndTime: "2026-07-13 23:59:59",
+		Mode: ModePage,
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory page empty: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("want non-nil empty slice, got nil")
+	}
+	if len(got) != 0 {
+		t.Fatalf("want 0 rows, got %+v", got)
+	}
+}
+
+// IPage records=null:同样视为"成功 + 0 条",不退回 map 解析器。
+func TestReadHistory_Page_RecordsNull_EmptyResult(t *testing.T) {
+	nullIPage := json.RawMessage(`{"records":null,"total":0,"current":1,"size":10,"pages":0}`)
+	fc := &fakeClient{histRecs: nullIPage}
+	s := NewService(fc)
+	got, err := s.ReadHistory(context.Background(), HistoryQuery{
+		TagNames: []string{"a"}, BegTime: "2026-07-01 00:00:00", EndTime: "2026-07-13 23:59:59",
+		Mode: ModePage,
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory page null records: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Fatalf("want empty slice, got %+v (len=%d)", got, len(got))
+	}
+}
+
+// fromdb 真实契约:多 tag + 每 tag 多点;验证 list 嵌套 + 多 key 累加 + tagValue 字段名。
+func TestReadHistory_FromDB_RealContract(t *testing.T) {
+	fromdbRaw := json.RawMessage(`{
+		"demo.t_double": {"list":[
+			{"tagName":"demo.t_double","tagValue":7.5,"appTime":"2026-07-13 12:00:01","quality":0},
+			{"tagName":"demo.t_double","tagValue":7.6,"appTime":"2026-07-13 12:00:02","quality":0}
+		],"total":2,"pageNum":1,"pageSize":100,"totalPage":1},
+		"demo.t_int": {"list":[
+			{"tagName":"demo.t_int","tagValue":42,"appTime":"2026-07-13 12:00:01","quality":0}
+		],"total":1,"pageNum":1,"pageSize":100,"totalPage":1}
+	}`)
+	fc := &fakeClient{histMap: fromdbRaw}
+	s := NewService(fc)
+	got, err := s.ReadHistory(context.Background(), HistoryQuery{
+		TagNames: []string{"demo.t_double", "demo.t_int"},
+		Mode:     ModeFromDB,
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory fromdb real: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("want 3 rows (2+1), got %d: %+v", len(got), got)
+	}
+	// 验证每条 row 的 TagName 与 Value
+	want := map[string]string{
+		"7.5": "demo.t_double",
+		"7.6": "demo.t_double",
+		"42":  "demo.t_int",
+	}
+	for _, r := range got {
+		expName, ok := want[string(r.Value)]
+		if !ok {
+			t.Fatalf("unexpected row value=%s tagName=%s", string(r.Value), r.TagName)
+		}
+		if r.TagName != expName {
+			t.Fatalf("value=%s: want tagName=%s, got %s", string(r.Value), expName, r.TagName)
+		}
+	}
+	if got[0].AppTime == "" {
+		t.Fatalf("want non-empty appTime, got empty (row=%+v)", got[0])
+	}
+}
+
+// page 真实契约:IPage records[] + tagValue 字段名(不是 value)。
+// 显式验证旧字段名 "value" 不会被误读。
+func TestReadHistory_Page_RealContract(t *testing.T) {
+	pageRaw := json.RawMessage(`{
+		"records":[
+			{"tagName":"demo.t_double","tagValue":3.14,"appTime":"2026-07-13 12:00:00","quality":0,"dataType":11,"dsId":9,"isSuccess":true},
+			{"tagName":"demo.t_int","tagValue":100,"appTime":"2026-07-13 12:00:00","quality":0,"dataType":4,"dsId":9,"isSuccess":true}
+		],
+		"total":2,"current":1,"size":10,"pages":1
+	}`)
+	fc := &fakeClient{histRecs: pageRaw}
+	s := NewService(fc)
+	got, err := s.ReadHistory(context.Background(), HistoryQuery{
+		TagNames: []string{"demo.t_double", "demo.t_int"},
+		Mode:     ModePage,
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory page real: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 rows, got %d: %+v", len(got), got)
+	}
+	if got[0].TagName != "demo.t_double" || string(got[0].Value) != "3.14" {
+		t.Fatalf("row[0] want demo.t_double=3.14, got %s=%s", got[0].TagName, string(got[0].Value))
+	}
+	if got[1].TagName != "demo.t_int" || string(got[1].Value) != "100" {
+		t.Fatalf("row[1] want demo.t_int=100, got %s=%s", got[1].TagName, string(got[1].Value))
 	}
 }

@@ -22,6 +22,9 @@ import (
 
 // fakeServer 模拟 TPT 后端,只应答本测试用例涉及的端点。
 // 全部走 00000 + 一些 fixture 数据。
+// 历史值端点对齐 tpt_api/datahub.py 真实契约:
+//   - /getHistoryValueFromDB(content): {"tagName": {"list": [...], "total": N}}
+//   - /getHistoryValue(content): IPage {"records": [...], "total":N, "current":N, "size":N, "pages":N}
 func fakeServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -39,7 +42,9 @@ func fakeServer(t *testing.T) *httptest.Server {
 		case strings.HasSuffix(r.URL.Path, "/tag-value/writeTagValues"):
 			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{},"isSuccess":true}`))
 		case strings.HasSuffix(r.URL.Path, "/tag-value/getHistoryValueFromDB"):
-			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":[{"tagName":"demo.t_double","tagValue":7.5,"appTime":"2026-07-13 12:00:01","quality":0}],"isSuccess":true}`))
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"demo.t_double":{"list":[{"tagName":"demo.t_double","tagValue":7.5,"appTime":"2026-07-13 12:00:01","quality":0}],"total":1,"pageNum":1,"pageSize":100,"totalPage":1}},"isSuccess":true}`))
+		case strings.HasSuffix(r.URL.Path, "/tag-value/getHistoryValue"):
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"records":[{"tagName":"demo.t_double","tagValue":7.5,"appTime":"2026-07-13 12:00:01","quality":0,"dataType":11,"dsId":9,"isSuccess":true}],"total":1,"current":1,"size":10,"pages":1},"isSuccess":true}`))
 		default:
 			_, _ = w.Write([]byte(`{"code":"A0999","msg":"unhandled ` + r.URL.Path + `"}`))
 		}
@@ -109,7 +114,7 @@ func TestIntegration_EndToEnd(t *testing.T) {
 		t.Fatalf("WriteValues readback want 7.5, got %+v", res.Readback)
 	}
 
-	// 5. ReadHistory fromdb
+	// 5. ReadHistory fromdb  — 真实契约:{tagName:{list:[{tagValue,appTime,quality}],total}}
 	hist, err := b.ReadHistory(bindings.ReadHistoryRequestDTO{
 		TagNames: []string{"demo.t_double"},
 		BegTime:  "2026-07-13 00:00:00",
@@ -117,10 +122,100 @@ func TestIntegration_EndToEnd(t *testing.T) {
 		Mode:     "fromdb",
 	})
 	if err != nil {
-		t.Fatalf("ReadHistory: %v", err)
+		t.Fatalf("ReadHistory fromdb: %v", err)
 	}
 	if len(hist) != 1 || hist[0].TagName != "demo.t_double" || hist[0].Value != "7.5" {
-		t.Fatalf("ReadHistory want 1 row 7.5, got %+v", hist)
+		t.Fatalf("ReadHistory fromdb want 1 row tag=demo.t_double value=7.5, got %+v", hist)
+	}
+	if hist[0].AppTime != "2026-07-13 12:00:01" {
+		t.Fatalf("ReadHistory fromdb want appTime 2026-07-13 12:00:01, got %q", hist[0].AppTime)
+	}
+
+	// 6. ReadHistory page  — 真实契约:IPage {records:[{tagValue,appTime,quality,...}],total,current,size,pages}
+	histPage, err := b.ReadHistory(bindings.ReadHistoryRequestDTO{
+		TagNames: []string{"demo.t_double"},
+		BegTime:  "2026-07-13 00:00:00",
+		EndTime:  "2026-07-13 23:59:59",
+		Mode:     "page",
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory page: %v", err)
+	}
+	if len(histPage) != 1 || histPage[0].TagName != "demo.t_double" || histPage[0].Value != "7.5" {
+		t.Fatalf("ReadHistory page want 1 row tag=demo.t_double value=7.5, got %+v", histPage)
+	}
+	if histPage[0].AppTime != "2026-07-13 12:00:01" {
+		t.Fatalf("ReadHistory page want appTime 2026-07-13 12:00:01, got %q", histPage[0].AppTime)
+	}
+}
+
+// TestIntegration_ReadHistory_Page_Empty:IPage records=[] 在真实 http 响应下应解析为 0 行、不报错。
+func TestIntegration_ReadHistory_Page_Empty(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/login"):
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"token":"eyJ.eyJ.signature"},"isSuccess":true}`))
+		case strings.HasSuffix(r.URL.Path, "/tag-value/getHistoryValue"):
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"records":[],"total":0,"current":1,"size":10,"pages":0},"isSuccess":true}`))
+		default:
+			_, _ = w.Write([]byte(`{"code":"A0999","msg":"unhandled ` + r.URL.Path + `"}`))
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	b := makeBindings(t, srv.URL)
+	hist, err := b.ReadHistory(bindings.ReadHistoryRequestDTO{
+		TagNames: []string{"demo.t_double"},
+		BegTime:  "2026-07-13 00:00:00",
+		EndTime:  "2026-07-13 23:59:59",
+		Mode:     "page",
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory page empty: %v", err)
+	}
+	if hist == nil {
+		t.Fatalf("want non-nil empty slice, got nil")
+	}
+	if len(hist) != 0 {
+		t.Fatalf("want 0 rows, got %d: %+v", len(hist), hist)
+	}
+}
+
+// TestIntegration_ReadHistory_FromDB_Empty:fromdb map 有 key 但 list=[] 在真实 http 响应下应解析为 0 行、不报错。
+func TestIntegration_ReadHistory_FromDB_Empty(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/login"):
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"token":"eyJ.eyJ.signature"},"isSuccess":true}`))
+		case strings.HasSuffix(r.URL.Path, "/tag-value/getHistoryValueFromDB"):
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"demo.t_double":{"list":[],"total":0,"pageNum":1,"pageSize":100,"totalPage":0}},"isSuccess":true}`))
+		default:
+			_, _ = w.Write([]byte(`{"code":"A0999","msg":"unhandled ` + r.URL.Path + `"}`))
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	b := makeBindings(t, srv.URL)
+	hist, err := b.ReadHistory(bindings.ReadHistoryRequestDTO{
+		TagNames: []string{"demo.t_double"},
+		BegTime:  "2026-07-13 00:00:00",
+		EndTime:  "2026-07-13 23:59:59",
+		Mode:     "fromdb",
+	})
+	if err != nil {
+		t.Fatalf("ReadHistory fromdb empty: %v", err)
+	}
+	if hist == nil {
+		t.Fatalf("want non-nil empty slice, got nil")
+	}
+	if len(hist) != 0 {
+		t.Fatalf("want 0 rows, got %d: %+v", len(hist), hist)
 	}
 }
 
