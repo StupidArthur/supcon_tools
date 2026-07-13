@@ -856,3 +856,105 @@
 **结果**: PASS=17 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
 
 **产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-3-chapter-UA-3-1 (2026-07-13 16:22)
+
+**产物**: `output/automation_ua2_ua31_20260713_161852`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-1", "strictPoolSize": 14, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 14, "selectedCases": ["UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-008", "UA-3-1-011", "UA-3-1-013", "UA-3-1-014", "UA-3-1-015", "UA-3-1-016", "UA-3-1-018", "UA-3-1-019"], "remainingAfterBatch": 0}
+**结果**: PASS=5 FAIL=8 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-002`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-003`: assert: [value_stable] expected=38.0 actual=44.0
+  - step `None`: [value_stable] expected=38.0 actual=44.0
+- `UA-3-1-004`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-005`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-006`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-008`: assert: getRTValue timeout for ua_case_ua2_UA_3_1_008_ua2_UA_3_1_0_81_683100
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_1_008_ua2_UA_3_1_0_81_683100
+- `UA-3-1-018`: assert: getRTValue timeout for ua_case_ua2_UA_3_1_018_ua2_UA_3_1_0_18a_235600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_1_018_ua2_UA_3_1_0_18a_235600
+
+---
+
+## 真跑批次 — UA-3-chapter-UA-3-2 (2026-07-13 16:30)
+
+**产物**: `output/automation_ua2_ua32_20260713_162235`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-2", "strictPoolSize": 15, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 15, "selectedCases": ["UA-3-2-001", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-006", "UA-3-2-007", "UA-3-2-008", "UA-3-2-009", "UA-3-2-012", "UA-3-2-013", "UA-3-2-014", "UA-3-2-019", "UA-3-2-020", "UA-3-2-021"], "remainingAfterBatch": 0}
+**结果**: PASS=4 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-2-002`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_002_ua2_UA_3_2_0_002_644400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_002_ua2_UA_3_2_0_002_644400
+- `UA-3-2-003`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_003_ua2_UA_3_2_0_003_790300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_003_ua2_UA_3_2_0_003_790300
+- `UA-3-2-004`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_004_ua2_UA_3_2_0_004a_948700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_004_ua2_UA_3_2_0_004a_948700
+- `UA-3-2-005`: assert: [rt_values_change] not true.
+  - step `None`: [rt_values_change] not true.
+- `UA-3-2-008`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_008_ua2_UA_3_2_0_008_613900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_008_ua2_UA_3_2_0_008_613900
+- `UA-3-2-012`: assert: [has_quality] not true.
+  - step `None`: [has_quality] not true.
+- `UA-3-2-013`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_013_ua2_UA_3_2_0_013_171400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_013_ua2_UA_3_2_0_013_171400
+- `UA-3-2-019`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_019_ua2_UA_3_2_0_019_532400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_019_ua2_UA_3_2_0_019_532400
+
+---
+
+## 真跑批次 — UA-3-chapter-UA-3-3 (2026-07-13 16:30)
+
+**产物**: `output/automation_ua2_ua33_20260713_163030`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-3", "strictPoolSize": 16, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 16, "selectedCases": ["UA-3-3-001", "UA-3-3-002", "UA-3-3-003", "UA-3-3-004", "UA-3-3-005", "UA-3-3-006", "UA-3-3-007", "UA-3-3-009", "UA-3-3-010", "UA-3-3-011", "UA-3-3-012", "UA-3-3-013", "UA-3-3-015", "UA-3-3-017", "UA-3-3-018", "UA-3-3-019"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**环境 BLOCKED**: `TptAPIError: [500] [网关异常]服务[data-hub-v2-2]不可用:可能原因[1.服务未注册 2.服务被下线(授权过期/检测异常)]` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-3-chapter-UA-3-4 (2026-07-13 16:30)
+
+**产物**: `output/automation_ua2_ua34_20260713_163039`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-4", "strictPoolSize": 7, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 7, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-4-007", "UA-3-4-008"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**环境 BLOCKED**: `TptAPIError: [500] [网关异常]服务[data-hub-v2-2]不可用:可能原因[1.服务未注册 2.服务被下线(授权过期/检测异常)]` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-3-chapter-UA-3-3-rerun (2026-07-13 16:33)
+
+**产物**: `output/automation_ua2_ua33_20260713_163208`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-3", "strictPoolSize": 16, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 16, "selectedCases": ["UA-3-3-001", "UA-3-3-002", "UA-3-3-003", "UA-3-3-004", "UA-3-3-005", "UA-3-3-006", "UA-3-3-007", "UA-3-3-009", "UA-3-3-010", "UA-3-3-011", "UA-3-3-012", "UA-3-3-013", "UA-3-3-015", "UA-3-3-017", "UA-3-3-018", "UA-3-3-019"], "remainingAfterBatch": 0}
+**结果**: PASS=11 FAIL=1 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-3-003`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+
+---
+
+## 真跑批次 — UA-3-chapter-UA-3-4-rerun (2026-07-13 16:34)
+
+**产物**: `output/automation_ua2_ua34_20260713_163334`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-4", "strictPoolSize": 7, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 7, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-4-007", "UA-3-4-008"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL**: 无
