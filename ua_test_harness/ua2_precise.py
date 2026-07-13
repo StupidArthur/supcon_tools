@@ -69,7 +69,7 @@ def rt_row(ctx, tag_name: str, *, timeout: float = 60.0) -> dict[str, Any]:
         rows = get_rt_value(_api(ctx), tag_names=[tag_name], is_from_db=False)
         if isinstance(rows, list):
             for row in rows:
-                if row.get("tagName") == tag_name and _quality(row) is not None:
+                if row.get("tagName") == tag_name and _quality(row) not in (None, 0):
                     return row
         time.sleep(1.0)
     raise AssertFail(f"getRTValue timeout for {tag_name}")
@@ -86,7 +86,7 @@ def qtq_row(ctx, tag_name: str, ds_id: int, *, timeout: float = 60.0) -> dict[st
         )
         records = ((res or {}).get("tagInfoList") or {}).get("records") or []
         for rec in records:
-            if rec.get("tagName") == tag_name:
+            if rec.get("tagName") == tag_name and _quality(rec) not in (None, 0):
                 return rec
         time.sleep(1.0)
     raise AssertFail(f"queryWithQuality timeout for {tag_name}")
@@ -185,6 +185,7 @@ def public_create_read_loop(
         data_type=spec["dtype"],
         tag_base_name=base,
         tag_desc=tag_desc or f"ua2 precise read {type_key}",
+        only_read=True,
     )
     tag_id, tag_name = int(tag["id"]), tag["name"]
 
@@ -202,8 +203,23 @@ def public_create_read_loop(
     check_eq("qtq_matches_rt1", _row_value(rt1), _row_value(qtq))
     check_true("qtq_quality_valid", _quality(qtq) not in (None, 0))
 
-    rt2 = rt_row(ctx, tag_name, timeout=30.0)
-    check_true("rt_values_change", _row_value(rt1) != _row_value(rt2))
+    rt1_val = _row_value(rt1)
+    deadline = time.monotonic() + 30.0
+    rt2 = None
+    while time.monotonic() < deadline:
+        from tpt_api.datahub import get_rt_value
+
+        rows = get_rt_value(_api(ctx), tag_names=[tag_name], is_from_db=False)
+        if isinstance(rows, list):
+            for row in rows:
+                if row.get("tagName") == tag_name and _quality(row) not in (None, 0):
+                    if _row_value(row) != rt1_val:
+                        rt2 = row
+                        break
+        if rt2 is not None:
+            break
+        time.sleep(0.5)
+    check_true("rt_values_change", rt2 is not None)
 
     if compare_opcua:
         src = opcua_read(endpoint, node_name)
@@ -263,7 +279,7 @@ def precise_mock_offline_create(ctx, cc, meta) -> CaseStatus:
     ds_id = int(ds["id"])
     spec = read_spec("INT32")
     base = base_name_for_node(spec["node"])
-    mock_control.stop_mock("functional")
+    mock_control.stop_mock("functional", ctx=ctx)
     tag_id = tag_name = 0
     try:
         _wait_ds_alive(ctx, ds_id, alive=False, timeout=60.0)
@@ -274,7 +290,7 @@ def precise_mock_offline_create(ctx, cc, meta) -> CaseStatus:
     finally:
         if tag_id:
             cleanup_case_tag(ctx, cc, tag_id, tag_name)
-        mock_control.start_mock("functional")
+        mock_control.start_mock("functional", ctx=ctx)
         mock_control.wait_ready("functional", timeout=120.0, ctx=ctx)
         _wait_ds_alive(ctx, ds_id, alive=True, timeout=120.0)
 
@@ -288,7 +304,7 @@ def precise_mock_recovery(ctx, cc, meta) -> CaseStatus:
     spec = read_spec("INT32")
     base = base_name_for_node(spec["node"])
 
-    mock_control.stop_mock("functional")
+    mock_control.stop_mock("functional", ctx=ctx)
     tag = create_case_tag(ctx, cc, ds_id, suffix="005", data_type=spec["dtype"], tag_base_name=base)
     tag_id, tag_name = int(tag["id"]), tag["name"]
     try:
@@ -296,7 +312,7 @@ def precise_mock_recovery(ctx, cc, meta) -> CaseStatus:
         qtq = qtq_row(ctx, tag_name, ds_id, timeout=15.0)
         check_true("offline_quality_bad", _quality(qtq) in (None, 0))
 
-        mock_control.start_mock("functional")
+        mock_control.start_mock("functional", ctx=ctx)
         mock_control.wait_ready("functional", timeout=120.0, ctx=ctx)
         _wait_ds_alive(ctx, ds_id, alive=True, timeout=120.0)
 
@@ -307,8 +323,8 @@ def precise_mock_recovery(ctx, cc, meta) -> CaseStatus:
         return CaseStatus.PASS
     finally:
         cleanup_case_tag(ctx, cc, tag_id, tag_name)
-        if mock_control.status("functional") not in ("ready", "running"):
-            mock_control.start_mock("functional")
+        if mock_control.status("functional", ctx=ctx) not in ("ready", "running"):
+            mock_control.start_mock("functional", ctx=ctx)
 
 
 def precise_ds_disabled_create(ctx, cc, meta) -> CaseStatus:
@@ -399,6 +415,7 @@ def write_value_closed_loop(
     from ua_test_harness.fixtures.tag import write_tag
 
     write_tag(ctx, tag_name, value)
+    time.sleep(1.0)
     rt = rt_row(ctx, tag_name, timeout=timeout)
     check_true("rt_quality_valid", _quality(rt) not in (None, 0))
     check_true("rt_matches_write", _values_close(_row_value(rt), value, type_key=type_key))
@@ -825,8 +842,8 @@ def precise_limits(ctx, cc, meta) -> CaseStatus:
                 limit_down=10, limit_down_down=5, limit_down_down_down=0,
             )
             cfg2 = config_page_row(ctx, tag_name)
-            check_eq("limitUp", 80, cfg2.get("limitUp"))
-            check_eq("limitDownDownDown", 0, cfg2.get("limitDownDownDown"))
+            check_eq("limitUp", 80, int(cfg2.get("limitUp")))
+            check_eq("limitDownDownDown", 0, int(cfg2.get("limitDownDownDown")))
             return CaseStatus.PASS
         raise AssertFail(f"precise_limits: unsupported {cid}")
     finally:

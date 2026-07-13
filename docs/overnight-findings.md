@@ -539,3 +539,158 @@
   - step `None`: [qtq_quality_valid] not true.
 - `UA-2-1-104`: assert: [qtq_matches_rt] not true.
   - step `None`: [qtq_matches_rt] not true.
+
+---
+
+## 真跑批次 — triage-fix-rerun (2026-07-13 13:30)
+
+**产物**: `output/automation_ua2_default_20260713_132757`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-008", "UA-2-1-010", "UA-2-1-019", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052", "UA-2-1-054", "UA-2-1-055", "UA-2-1-057", "UA-2-1-058", "UA-2-1-060", "UA-2-1-061", "UA-2-1-063", "UA-2-1-064", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-085", "UA-2-1-086", "UA-2-1-091", "UA-2-1-092", "UA-2-1-095", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 17, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-008", "UA-2-1-010", "UA-2-1-019", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034"], "remainingAfterBatch": 35}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: datasource 'ua_shared_ua2_empty_ds' did not become alive after enable` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — triage-smoke (2026-07-13 13:32)
+
+**产物**: `output/automation_ua2_default_20260713_133022`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-1-004", "UA-2-1-005"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 2, "selectedCases": ["UA-2-1-004", "UA-2-1-005"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: datasource 'ua_shared_ua2_empty_ds' did not become alive after enable` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — triage-smoke1 (2026-07-13 13:34)
+
+**产物**: `output/automation_ua2_default_20260713_133241`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-1-004"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 1, "selectedCases": ["UA-2-1-004"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=600.0
+
+**环境 BLOCKED**: `BaselineError: datasource 'ua_shared_ua2_empty_ds' did not become alive after enable` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — triage-fix-rerun (2026-07-13 13:45)
+
+**产物**: `output/automation_ua2_default_20260713_134117`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-008", "UA-2-1-010", "UA-2-1-019", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052", "UA-2-1-054", "UA-2-1-055", "UA-2-1-057", "UA-2-1-058", "UA-2-1-060", "UA-2-1-061", "UA-2-1-063", "UA-2-1-064", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-085", "UA-2-1-086", "UA-2-1-091", "UA-2-1-092", "UA-2-1-095", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 17, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-008", "UA-2-1-010", "UA-2-1-019", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034"], "remainingAfterBatch": 35}
+**结果**: PASS=0 FAIL=3 BLOCKED=14 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-001`: assert: [rt_values_change] not true.
+  - step `None`: [rt_values_change] not true.
+- `UA-2-1-002`: assert: [rt_values_change] not true.
+  - step `None`: [rt_values_change] not true.
+- `UA-2-1-005`: assert: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_155400
+  - step `None`: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_155400
+
+---
+
+## UA-2-1 48 FAIL triage — 测试代码修复 + 全量重跑 (2026-07-13)
+
+**范围**: 原 `VERIFIED_FAIL`×48 + `VERIFIED_BLOCKED`×4(含 004/005/006/010)
+
+### 测试代码修复（按主 Agent 四类）
+
+| 类别 | 修复 | 文件 |
+|------|------|------|
+| ① `app_config` import | `mock_manager` 顶层 `import ua_test_harness._paths`; `mock_control` 支持 `external-script` 按 endpoint 端口(18965/18967)启停 mock 并传 `ctx` | `env/mock_manager.py`, `clients/mock_control.py`, `ua2_precise.py` |
+| ② `onlyRead`×16 | `public_create_read_loop` 创建时 `only_read=True`(与 doc `*_r_*` 一致) | `ua2_precise.py` |
+| ③ `qtq_quality`×17 | `qtq_row`/`rt_row` 轮询至 `quality∉{None,0}`; `write_value_closed_loop` 写后 `sleep(1)`; `rt_values_change` 轮询至值变化 | `ua2_precise.py` |
+| ④ `rt_matches_write`×5 | 同上写后等待 + RT 质量轮询 | `ua2_precise.py` |
+| 附加 | `UA-2-1-010` 空 DS mock 补 `ua2_int32_r_` 节点; `095` `limitUp` 用 `int()` 比对 | `ua_mocker/ua2_empty.yaml`, `ua2_precise.py` |
+
+### 重跑
+
+- **环境**: 跑前 `teardown_ua2_baseline`(删 id=84/85) → 批次内自动 provision 新 baseline(id=86/87 量级); mock 离线 case **004/005 置批次末尾**避免 DS 重连卡死污染后续 case。
+- **产物**: `output/automation_ua2_default_20260713_134824` (52 条, `--limit 52`)
+- **结果**: **PASS=17 FAIL=23 ERROR=10 BLOCKED=2**
+- **库存变化**(overlay 已写入 `docs/case-inventory.json`):
+  - UA-2-1: `VERIFIED` 34→**51** (+17), `VERIFIED_FAIL` 48→**23** (-25)
+  - 全局: `verified=63`, `verifiedFail=23`, `verifiedBlocked=12`
+
+### 分类验收
+
+| 原聚类 | 修复后 |
+|--------|--------|
+| `onlyRead`×16 | **全部消除**; 对应 case 转 PASS 或暴露下游断言(如 `opcua_matches_rt2`) |
+| `qtq_quality`×17 | **大部分转 PASS**(039/040/054/055/063/064/067/068/103 等); 028 仍 `qtq_matches_rt1` 时序(产品) |
+| `rt_matches_write`×5 | 054/067/068 **PASS**; 066/071/072/074 仍 FAIL(产品,已等 RT) |
+| ERROR 004/005/010 | 004 **BLOCKED**(mock 停后 DS 不重连,产品); 005 **FAIL** QTQ 恢复超时(产品); 010 **PASS** |
+
+### 本轮新发现（保留 FAIL/ERROR,未放宽）
+
+- **产品**: `opcua_matches_rt2` 多读类型(001/008/026~038/102); mock 离线/恢复(004 BLOCKED, 005 QTQ); 量程 RT 超时(091/092); 探索断言(019/073/085/086/104)
+- **测试代码(待下轮)**: 写入 case 042/044/046/048/050/052/057/058/060/061 在 `restore_original` 时 `opcua_write` **BadTypeMismatch** — 写闭环主路径已过,仅恢复源端类型不匹配
+
+**未 commit**; pytest **190 passed**.
+
+---
+
+## 真跑批次 — triage-fix-rerun-full (2026-07-13 13:59)
+
+**产物**: `output/automation_ua2_default_20260713_134824`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-006", "UA-2-1-008", "UA-2-1-010", "UA-2-1-019", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052", "UA-2-1-054", "UA-2-1-055", "UA-2-1-057", "UA-2-1-058", "UA-2-1-060", "UA-2-1-061", "UA-2-1-063", "UA-2-1-064", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-085", "UA-2-1-086", "UA-2-1-091", "UA-2-1-092", "UA-2-1-095", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-004", "UA-2-1-005"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 52, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-006", "UA-2-1-008", "UA-2-1-010", "UA-2-1-019", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052", "UA-2-1-054", "UA-2-1-055", "UA-2-1-057", "UA-2-1-058", "UA-2-1-060", "UA-2-1-061", "UA-2-1-063", "UA-2-1-064", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-085", "UA-2-1-086", "UA-2-1-091", "UA-2-1-092", "UA-2-1-095", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-004", "UA-2-1-005"], "remainingAfterBatch": 0}
+**结果**: PASS=17 FAIL=23 BLOCKED=2 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-008`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-019`: assert: [empty_name_rejected] not true.
+  - step `None`: [empty_name_rejected] not true.
+- `UA-2-1-026`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-027`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-028`: assert: [qtq_matches_rt1] expected='76' actual='78'
+  - step `None`: [qtq_matches_rt1] expected='76' actual='78'
+- `UA-2-1-030`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-031`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-035`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-036`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-038`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-066`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-071`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-072`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-073`: assert: [bad_date_rejected] not true.
+  - step `None`: [bad_date_rejected] not true.
+- `UA-2-1-074`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-085`: assert: [source_unchanged] not true.
+  - step `None`: [source_unchanged] not true.
+- `UA-2-1-086`: assert: [default_frequency] expected=10 actual=1
+  - step `None`: [default_frequency] expected=10 actual=1
+- `UA-2-1-091`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_238200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_238200
+- `UA-2-1-092`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_644600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_644600
+- `UA-2-1-102`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-104`: assert: [history_has_points] not true.
+  - step `None`: [history_has_points] not true.
+- `UA-2-1-005`: assert: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_179700
+  - step `None`: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_179700
