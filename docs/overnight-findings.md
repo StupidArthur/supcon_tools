@@ -846,3 +846,13 @@
   - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_14200
 - `UA-2-3-028`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_854400
   - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_854400
+
+---
+
+## 真跑批次 — UA-2-5-chapter-run (2026-07-13 16:09)
+
+**产物**: `output/automation_ua2_ua25_20260713_160805`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-5", "strictPoolSize": 18, "excludedPartial": [], "skippedVerified": [], "limitApplied": 27, "selectedCases": ["UA-2-5-001", "UA-2-5-002", "UA-2-5-003", "UA-2-5-004", "UA-2-5-005", "UA-2-5-009", "UA-2-5-010", "UA-2-5-011", "UA-2-5-014", "UA-2-5-015", "UA-2-5-016", "UA-2-5-018", "UA-2-5-022", "UA-2-5-023", "UA-2-5-024", "UA-2-5-025", "UA-2-5-026", "UA-2-5-027"], "remainingAfterBatch": 0}
+**结果**: PASS=17 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL**: 无
