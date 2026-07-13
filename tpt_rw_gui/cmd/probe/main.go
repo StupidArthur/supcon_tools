@@ -335,6 +335,7 @@ func runFull(cli *tptapi.TptClient, _ []tptapi.DsInfo, dsID int, tagName string)
 
 	// AddTag 试一下
 	newTagName := fmt.Sprintf("probe_diag_%d", time.Now().Unix())
+	created := false
 	fmt.Printf("\n[AddTag] 注册 %q\n", newTagName)
 	addErr := cli.AddTag(tptapi.AddTagParams{
 		TagName: newTagName, TagBaseName: newTagName,
@@ -345,7 +346,21 @@ func runFull(cli *tptapi.TptClient, _ []tptapi.DsInfo, dsID int, tagName string)
 		fmt.Printf("  失败: %T %v\n\n", addErr, addErr)
 	} else {
 		fmt.Println("  OK")
+		created = true
 	}
+
+	// 清理:函数退出时删掉创建的位号
+	defer func() {
+		if !created {
+			return
+		}
+		fmt.Printf("\n[Cleanup] 删除 %q\n", newTagName)
+		if _, err := cli.DeleteTagsByName([]string{newTagName}); err != nil {
+			fmt.Printf("  清理失败: %v\n", err)
+		} else {
+			fmt.Println("  OK(已软删到回收站)")
+		}
+	}()
 
 	// WriteTagValues
 	fmt.Printf("\n[WriteTagValues] 写 %q = 42.5\n", newTagName)

@@ -27,6 +27,9 @@ func NewService(client ClientPort) *Service {
 
 // ListDataSources 拉全部数据源。空表返回 nil,len=0。
 func (s *Service) ListDataSources(ctx context.Context) ([]DataSource, error) {
+	if ctx.Err() != nil {
+		return nil, &PublicError{Message: "操作已取消", Kind: "input"}
+	}
 	srcs, err := s.client.GetAllDsInfo()
 	if err != nil {
 		return nil, MapError(err)
@@ -57,6 +60,9 @@ func (s *Service) ListDataSources(ctx context.Context) ([]DataSource, error) {
 // (只查一次位号),与 QueryTagsWithQuality 路径的"0=不过滤"语义不同。这是共享代码层
 // 行为,本任务不修。
 func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
+	if ctx.Err() != nil {
+		return nil, &PublicError{Message: "操作已取消", Kind: "input"}
+	}
 	if q.GroupID == "" {
 		q.GroupID = tptapi.GroupRoot
 	}
@@ -216,6 +222,9 @@ func parseQueryWithQualityResponse(raw json.RawMessage) ([]Tag, error) {
 
 // ReadRealtime 按 tag 名列表读实时值。
 func (s *Service) ReadRealtime(ctx context.Context, tagNames []string) ([]RTValue, error) {
+	if ctx.Err() != nil {
+		return nil, &PublicError{Message: "操作已取消", Kind: "input"}
+	}
 	if len(tagNames) == 0 {
 		return []RTValue{}, nil
 	}
@@ -239,6 +248,9 @@ func (s *Service) ReadRealtime(ctx context.Context, tagNames []string) ([]RTValu
 //
 // Fails 来自平台响应 failMsg(写失败)和回读中 IsSuccess=false / 无数据的点。
 func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResult, error) {
+	if ctx.Err() != nil {
+		return nil, &PublicError{Message: "操作已取消", Kind: "input"}
+	}
 	if len(req.Values) == 0 {
 		return &WriteResult{}, MapError(fmt.Errorf("values 不能为空"))
 	}
@@ -266,7 +278,16 @@ func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResu
 		return res, nil
 	}
 	// 同步等待,简单可靠。GUI 用户一次操作大概等得起 1s。
-	time.Sleep(req.ReadbackDelay)
+	select {
+	case <-ctx.Done():
+		// 取消:写入已完成,但回读被取消。返回已有结果 + readback 取消标记。
+		if res.Fails == nil {
+			res.Fails = make(map[string]string)
+		}
+		res.Fails["readback"] = "已取消: " + ctx.Err().Error()
+		return res, nil
+	case <-time.After(req.ReadbackDelay):
+	}
 	tagNames := req.ReadbackTagNames
 	if len(tagNames) == 0 {
 		tagNames = make([]string, 0, len(req.Values))
@@ -306,6 +327,9 @@ func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResu
 
 // ReadHistory 按 q.Mode 路由到 /getHistoryValue 或 /getHistoryValueFromDB。
 func (s *Service) ReadHistory(ctx context.Context, q HistoryQuery) ([]HistoryRow, error) {
+	if ctx.Err() != nil {
+		return nil, &PublicError{Message: "操作已取消", Kind: "input"}
+	}
 	if len(q.TagNames) == 0 {
 		return []HistoryRow{}, nil
 	}
