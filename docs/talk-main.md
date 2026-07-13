@@ -69,3 +69,28 @@
 
 ---
 **一句话**: 决策已定(保留 ua3_runtime + 清死代码;inventory 加 PARTIAL)。先做任务 G 建立 PARTIAL 基线,再任务 A 把回归类 OBSERVED 改真实断言(FAIL 保留),F/C/B/D 跟进。**不许 commit,改完回报我验收。**
+
+---
+
+# tpt_rw_gui 接手派单(2026-07-13,用户授权解冻本子项目)
+
+> 用户授权 `tpt_rw_gui` 解冻(独立工具,不受 ua_test_gui 冻结约束)。
+> 项目现状:Wails v2 + Go + React/TS 桌面工具,验证 GUI->TPT DataHub->下游数据源读写链路。已有 EXE + 31 Go 测试,但**全目录 untracked(未进 Git)**,且核心链路正确性未闭环。
+> 详细探索报告见会话记录。P0 问题:历史解析契约错、Logout 不清 client、登出后轮询不停、写失败报成功、无 Git 基线。
+
+## 派单顺序
+1. **Agent F(先做)- 工程基线**:Git baseline + README 漂移修复 + 版本漂移登记。其他任务可审计的前提。
+2. Agent A - 历史值契约修复(对齐 tpt_api 真实契约)。
+3. Agent B - Session/Logout/auth 闭环。
+4. Agent C - 写值结果真实性(保留 failMsg,前端消费 WriteResult)。
+5. Agent D - 位号选择契约(空关键字 DS 过滤)。
+6. Agent E - 前端轮询状态机(logout 停轮询、防重叠、Toast 限流)。
+
+A/B/C/D/E 在 F 完成后可并行(依赖少)。
+
+## 通用纪律(tpt_rw_gui 子 Agent)
+- **不许 commit。** 改完 -> 自验 -> 回报 -> 主 Agent 验收+commit。
+- 复用 `tpt_api/go`(本地 replace `../tpt_api/go`);不碰 `review3`/`data_factory_server`。
+- 不提交 `*.exe`/`build/`/`dist/`/`node_modules/`/`env.json`/密码/token/真实 IP。
+- 禁止 `git reset --hard`/`clean -fd`/`checkout .`/`stash`;不 `git add .`(只 add 明确文件)。
+- 改 tpt_api 共享代码前必须评估对 UA 测试的影响,问主 Agent。

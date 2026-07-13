@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "tpt_rw_gui",
+  "outputfilename": "tpt_rw_gui",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "stupidArthur",
+    "email": "yuzc@zju.edu.cn"
+  }
+}

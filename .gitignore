@@ -76,3 +76,7 @@ env.json
 *.pem
 *.key
 secrets.*
+
+# ===== tpt_rw_gui =====
+# Wails 每次构建重写此 hash,不追踪。
+tpt_rw_gui/frontend/package.json.md5

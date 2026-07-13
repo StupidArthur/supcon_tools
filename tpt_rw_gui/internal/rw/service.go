@@ -1,0 +1,366 @@
+package rw
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/yzc/tpt_api"
+)
+
+// Service 业务能力:登录后做 "登录态下的 TPT 值读写" 业务用例。
+//
+// 设计要点:
+//   - 通过 SessionPort 拿到 *tptapi.TptClient(Service.Client() 返回,内置 token 续期)。
+//   - 所有调用都做绑定,遇到 *tptapi.TptAPIError / 其它错误时统一翻译成 *PublicError。
+//   - 写值回读为可选 + 延时,默认 1s(平台实测 ~1s RT 反映,~4s 历史落库,见 tpt_api/README.md)。
+type Service struct {
+	client ClientPort
+}
+
+// NewService 创建 rw.Service。client 由 container 注入(真实 = *tptapi.TptClient)。
+func NewService(client ClientPort) *Service {
+	return &Service{client: client}
+}
+
+// ListDataSources 拉全部数据源。空表返回 nil,len=0。
+func (s *Service) ListDataSources(ctx context.Context) ([]DataSource, error) {
+	srcs, err := s.client.GetAllDsInfo()
+	if err != nil {
+		return nil, MapError(err)
+	}
+	out := make([]DataSource, 0, len(srcs))
+	for _, d := range srcs {
+		out = append(out, DataSource{
+			ID: d.ID, Name: d.DsName, URL: d.DsTarUrl,
+			Type: d.DsType, SubType: d.DsSubType,
+			Alive: d.Alive, DsStatus: d.DsStatus,
+		})
+	}
+	return out, nil
+}
+
+// ListTags 经 queryWithQuality 拉位号(含实时值)。
+// 当 Keyword 为空时改走 /tag-group/get(endpoint ListGroupTags),
+//
+//	响应结构与 queryWithQuality 不同(tagInfoList.records[]),由 parseGroupTagsResponse 单独解。
+// 选这条退路是因为:实平台 queryWithQuality 在 tagName="" 路径上不返 records
+// (或返 pageinfo dict),导致用户不输入任何关键字就显示 "已加载 0 条"。
+func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
+	if q.GroupID == "" {
+		q.GroupID = tptapi.GroupRoot
+	}
+	if q.Page == 0 {
+		q.Page = 1
+	}
+	if q.PageSize == 0 {
+		q.PageSize = 200
+	}
+	if q.Sort == "" {
+		q.Sort = "-createTime"
+	}
+	if q.Keyword == "" {
+		// 走 /tag-group/get 空关键字路径
+		raw, err := s.client.ListGroupTagsRaw(q.GroupID, "", q.TagType, q.Page, q.PageSize)
+		if err != nil {
+			return nil, MapError(err)
+		}
+		return parseGroupTagsResponse(raw)
+	}
+	raw, err := s.client.QueryTagsWithQuality(q.DSID, q.GroupID, q.Keyword, "",
+		q.TagType, q.Page, q.PageSize, q.Sort)
+	if err != nil {
+		return nil, MapError(err)
+	}
+	return parseQueryWithQualityResponse(raw)
+}
+
+// parseGroupTagsResponse 解 /tag-group/get 的响应。
+// 兼容 queryWithQuality 的所有形态 + /tag-group/get 特有的 tagInfoList.records。
+// 即使 /tag-group/get 在不同平台上吐不同形态也能兜底。
+func parseGroupTagsResponse(raw json.RawMessage) ([]Tag, error) {
+	s := bytes.TrimSpace(raw)
+	if len(s) == 0 || string(s) == "null" {
+		return []Tag{}, nil
+	}
+
+	// 形态:裸数组
+	if s[0] == '[' {
+		var bare []Tag
+		if err := json.Unmarshal(raw, &bare); err != nil {
+			return nil, MapError(fmt.Errorf("groupTags 解析失败(裸数组): %w", err))
+		}
+		if bare == nil {
+			bare = []Tag{}
+		}
+		return bare, nil
+	}
+
+	// 形态:dict,尝试 records/data/list/tagInfoList.records 四个键
+	if s[0] == '{' {
+		var wrapped struct {
+			TagInfoList struct {
+				Records []Tag `json:"records"`
+			} `json:"tagInfoList"`
+			Records []Tag `json:"records"`
+			Data    []Tag `json:"data"`
+			List    []Tag `json:"list"`
+		}
+		if err := json.Unmarshal(raw, &wrapped); err != nil {
+			return nil, MapError(fmt.Errorf("groupTags 解析失败(dict): %w", err))
+		}
+		switch {
+		case len(wrapped.TagInfoList.Records) > 0:
+			return wrapped.TagInfoList.Records, nil
+		case len(wrapped.Records) > 0:
+			return wrapped.Records, nil
+		case len(wrapped.Data) > 0:
+			return wrapped.Data, nil
+		case len(wrapped.List) > 0:
+			return wrapped.List, nil
+		}
+		return []Tag{}, nil
+	}
+
+	return nil, MapError(fmt.Errorf("groupTags 响应首字符异常: %s", truncateForErr(raw, 80)))
+}
+
+// parseQueryWithQualityResponse 解 queryWithQuality 三种已知形态,失败给出可读错误。
+//
+// 形态 1:裸数组 [{...},{...}]                       (常见真实环境与 fixture 都可能给出)
+// 形态 2:{"records":[{"...":...},{...}]}             (Python 端对齐参考: ua2_query_runtime.py:185)
+// 形态 3:{"data":[{"...":...},{...}]}                (同字段别名)
+//
+// **重要**:**不要**先用 `Unmarshal(target=struct)` 后看 `Records != nil` 兜底 ——
+//
+//	未知字段被忽略、Records 留为 nil slice,看上去"成功 + 0 条"会让你误以为无数据;
+//	然后回退到 `Unmarshal(target=[]Tag)` 时,object 又与目标切片不兼容,会报
+//	"cannot unmarshal object into Go slice of type"。真平台响应就是这种 dict-but-no-records
+//	的情况。
+//
+// 改为按 raw 首字符严格路由:首字符 `[` 走裸数组,首字符 `{` 走 dict(尝试 records/data/list 三个键),
+//否则判空,真正失败时给出"json: invalid character ..." 而不是后来那次伪成功的覆盖。
+func parseQueryWithQualityResponse(raw json.RawMessage) ([]Tag, error) {
+	s := bytes.TrimSpace(raw)
+	if len(s) == 0 || string(s) == "null" {
+		return []Tag{}, nil
+	}
+
+	// 形态 1:裸数组
+	if s[0] == '[' {
+		var bare []Tag
+		if err := json.Unmarshal(raw, &bare); err != nil {
+			return nil, MapError(fmt.Errorf("queryWithQuality 解析失败(裸数组): %w", err))
+		}
+		if bare == nil {
+			bare = []Tag{}
+		}
+		return bare, nil
+	}
+
+	// 形态 2 / 3:dict,尝试常见字段
+	if s[0] == '{' {
+		for _, key := range []string{"records", "data", "list"} {
+			var wrapped struct {
+				Records []Tag `json:"records"`
+				Data    []Tag `json:"data"`
+				List    []Tag `json:"list"`
+			}
+			if err := json.Unmarshal(raw, &wrapped); err != nil {
+				return nil, MapError(fmt.Errorf("queryWithQuality 解析失败(dict): %w", err))
+			}
+			switch key {
+			case "records":
+				if wrapped.Records != nil {
+					return wrapped.Records, nil
+				}
+			case "data":
+				if wrapped.Data != nil {
+					return wrapped.Data, nil
+				}
+			case "list":
+				if wrapped.List != nil {
+					return wrapped.List, nil
+				}
+			}
+		}
+		// 没有命中任一字段 → 平台确实返回了空列表(dict 但所有 keys 缺失)
+		return []Tag{}, nil
+	}
+
+	return nil, MapError(fmt.Errorf("queryWithQuality 响应首字符既不是 [ 也不是 { : %s", truncateForErr(raw, 80)))
+}
+
+// ReadRealtime 按 tag 名列表读实时值。
+func (s *Service) ReadRealtime(ctx context.Context, tagNames []string) ([]RTValue, error) {
+	if len(tagNames) == 0 {
+		return []RTValue{}, nil
+	}
+	pts, err := s.client.GetRTValue(tagNames)
+	if err != nil {
+		return nil, MapError(err)
+	}
+	out := make([]RTValue, 0, len(pts))
+	for _, p := range pts {
+		out = append(out, RTValue{
+			TagName: p.TagName, Value: p.TagValue,
+			TagTime: p.TagTime, AppTime: p.AppTime,
+			Quality: p.Quality, DataType: p.DataType, DSID: p.DsID,
+			IsSuccess: p.IsSuccess, Message: p.Message,
+		})
+	}
+	return out, nil
+}
+
+// WriteValues 写值 + 可选 ~1s 回读。
+//
+// 回读 = 等 req.ReadbackDelay(默认 1s)后,调 ReadRealtime(req.ReadbackTagNames 或 Values 键集)。
+// Fails 来自回读中 IsSuccess=false 或无数据的点。
+func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResult, error) {
+	if len(req.Values) == 0 {
+		return &WriteResult{}, MapError(fmt.Errorf("values 不能为空"))
+	}
+	if err := s.client.WriteTagValues(req.Values); err != nil {
+		return nil, MapError(err)
+	}
+	if req.ReadbackDelay <= 0 {
+		return &WriteResult{}, nil
+	}
+	// 同步等待,简单可靠。GUI 用户一次操作大概等得起 1s。
+	time.Sleep(req.ReadbackDelay)
+	tagNames := req.ReadbackTagNames
+	if len(tagNames) == 0 {
+		tagNames = make([]string, 0, len(req.Values))
+		for k := range req.Values {
+			tagNames = append(tagNames, k)
+		}
+	}
+	pts, err := s.client.GetRTValue(tagNames)
+	if err != nil {
+		// 回读失败,不算写失败,把 readback 部分返回 errors 即可。
+		return &WriteResult{Fails: map[string]string{"readback": err.Error()}}, nil
+	}
+	res := &WriteResult{Readback: make([]RTValue, 0, len(pts))}
+	fails := map[string]string{}
+	for _, p := range pts {
+		res.Readback = append(res.Readback, RTValue{
+			TagName: p.TagName, Value: p.TagValue,
+			TagTime: p.TagTime, AppTime: p.AppTime,
+			Quality: p.Quality, DataType: p.DataType, DSID: p.DsID,
+			IsSuccess: p.IsSuccess, Message: p.Message,
+		})
+		if !p.IsSuccess {
+			fails[p.TagName] = p.Message
+		}
+	}
+	if len(fails) > 0 {
+		res.Fails = fails
+	}
+	// "Written" 是所有 key 的并集(平台写接口成功时不返回 tag 列表)
+	res.Written = tagNames
+	return res, nil
+}
+
+// ReadHistory 按 q.Mode 路由到 /getHistoryValue 或 /getHistoryValueFromDB。
+func (s *Service) ReadHistory(ctx context.Context, q HistoryQuery) ([]HistoryRow, error) {
+	if len(q.TagNames) == 0 {
+		return []HistoryRow{}, nil
+	}
+	if q.Sort == "" {
+		q.Sort = "-appTime"
+	}
+	if q.Page == 0 {
+		q.Page = 1
+	}
+	if q.PageSize == 0 {
+		q.PageSize = 200
+	}
+	var raw json.RawMessage
+	var err error
+	if q.Mode == ModeFromDB {
+		raw, err = s.client.GetHistoryValueFromDB(q.TagNames, q.BegTime, q.EndTime,
+			q.IsSource, q.NumberToString, q.Page, q.PageSize, q.Sort)
+	} else {
+		raw, err = s.client.GetHistoryValue(q.TagNames, q.BegTime, q.EndTime,
+			q.Interval, q.IsSecond, q.IsSource, q.Offset, q.Option,
+			q.Page, q.PageSize, q.Sort)
+	}
+	if err != nil {
+		return nil, MapError(err)
+	}
+	// /getHistoryValue(IPage):records:{tagName:{list:[],total:...},...}
+	// /getHistoryValueFromDB(content): records array of [tag, value, ts, qcode]
+	// 用一种兼容方式:优先尝试 records 数组,失败再试 map 形式。
+	if rows, ok := parseHistoryRecords(raw); ok {
+		return rows, nil
+	}
+	if pts, ok := parseHistoryMap(raw); ok {
+		return pts, nil
+	}
+	return nil, MapError(fmt.Errorf("历史值响应结构无法识别: %s", truncateForErr(raw, 200)))
+}
+
+func parseHistoryRecords(raw json.RawMessage) ([]HistoryRow, bool) {
+	var rows []struct {
+		TagName  string          `json:"tagName"`
+		TagValue json.RawMessage `json:"tagValue"`
+		AppTime  string          `json:"appTime"`
+		Quality  int             `json:"quality"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil || len(rows) == 0 {
+		return nil, false
+	}
+	out := make([]HistoryRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, HistoryRow{
+			TagName: r.TagName, Value: r.TagValue,
+			AppTime: r.AppTime, Quality: r.Quality,
+		})
+	}
+	return out, true
+}
+
+// parseHistoryMap 处理 /getHistoryValue IPage (records map[tagName]{list,total}) 形式。
+func parseHistoryMap(raw json.RawMessage) ([]HistoryRow, bool) {
+	var resp struct {
+		Records map[string]struct {
+			List []struct {
+				Value    json.RawMessage `json:"value"`
+				TagTime  string          `json:"tagTime"`
+				AppTime  string          `json:"appTime"`
+				Quality  int             `json:"quality"`
+			} `json:"list"`
+		} `json:"records"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Records) == 0 {
+		return nil, false
+	}
+	var out []HistoryRow
+	for name, slot := range resp.Records {
+		for _, p := range slot.List {
+			out = append(out, HistoryRow{
+				TagName: name, Value: p.Value,
+				AppTime: firstNonEmpty(p.AppTime, p.TagTime),
+				Quality: p.Quality,
+			})
+		}
+	}
+	return out, true
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func truncateForErr(raw json.RawMessage, n int) string {
+	s := string(raw)
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
