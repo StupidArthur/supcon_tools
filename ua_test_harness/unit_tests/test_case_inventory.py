@@ -100,6 +100,9 @@ def test_build_inventory_marks_implemented_and_missing(tmp_path: Path) -> None:
     )
     assert report["summary"]["documented"] == 2
     assert report["summary"]["implemented"] == 1
+    assert report["summary"]["partial"] == 0
     assert report["summary"]["unimplemented"] == 1
+    assert report["cases"][0]["implementationStatus"] == "IMPLEMENTED"
+    assert report["cases"][1]["implementationStatus"] == "UNIMPLEMENTED"
     assert report["summary"]["structureOk"] is True
     assert structural_failures(report) == []

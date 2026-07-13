@@ -2,7 +2,7 @@
 
 验证整个 UA-2 资源重构的端到端不变量:
 - catalog 仍 419 条,UA-2 265 条。
-- case_inventory 结构 OK(documented=419, implemented=419, unimplemented=0,
+- case_inventory 结构 OK(documented=419, implemented+partial=419, unimplemented=0,
   malformedRows=0, duplicateDocumentIds=0)。
 - 265 个 UA-2 handler 全部在派发表里且可派发。
 - 三个 UA-2 runtime 模块不再依赖 ua2_common.prepare_datasource(状态检查:
@@ -61,8 +61,9 @@ def test_inventory_structure_ok():
     report = build_inventory(REPO_ROOT, expected_total=419)
     s = report["summary"]
     assert s["documented"] == 419, s
-    assert s["implemented"] == 419, s
+    assert s["implemented"] + s["partial"] == 419, s
     assert s["unimplemented"] == 0, s
+    assert s["partial"] > 0, s
     assert s["duplicateDocumentIds"] == 0, s
     assert s["malformedRows"] == 0, s
     assert s["structureOk"] is True, s

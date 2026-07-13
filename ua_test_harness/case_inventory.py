@@ -223,6 +223,8 @@ def build_inventory(
     implemented: dict[str, dict[str, Any]] | None = None,
     expected_total: int = 419,
 ) -> dict[str, Any]:
+    from ua_test_harness.case_fidelity import resolve_implementation_status
+
     repo_root = repo_root.resolve()
     rows, malformed = load_documented_cases(repo_root)
     implementation = implemented if implemented is not None else _implementation_map()
@@ -232,26 +234,38 @@ def build_inventory(
     orphan_implementations = sorted(set(implementation) - documented_ids)
 
     cases: list[dict[str, Any]] = []
+    status_counts = Counter()
     for row in sorted(rows, key=lambda item: item["id"]):
         impl = implementation.get(row["id"])
+        cid = row["id"]
+        status = resolve_implementation_status(cid, has_dispatch=impl is not None)
+        status_counts[status] += 1
+        fidelity = "STRICT" if status == "IMPLEMENTED" else (
+            "OBSERVED_ONLY" if status == "PARTIAL" else "NONE"
+        )
         cases.append(
             {
                 **row,
-                "implementationStatus": "IMPLEMENTED" if impl else "UNIMPLEMENTED",
+                "implementationStatus": status,
+                "fidelityTier": fidelity,
                 "implementation": impl,
                 "verificationStatus": "NOT_VERIFIED",
             }
         )
 
-    implemented_count = sum(1 for row in cases if row["implementationStatus"] == "IMPLEMENTED")
     document_count = len(cases)
+    strict_count = status_counts["IMPLEMENTED"]
+    partial_count = status_counts["PARTIAL"]
+    unimpl_count = status_counts["UNIMPLEMENTED"]
     warning_count = sum(len(row.get("documentWarnings") or []) for row in cases)
     summary = {
         "expectedTotal": expected_total,
         "documented": document_count,
-        "implemented": implemented_count,
-        "unimplemented": document_count - implemented_count,
-        "coveragePercent": round((implemented_count / document_count * 100.0), 2) if document_count else 0.0,
+        "implemented": strict_count,
+        "partial": partial_count,
+        "unimplemented": unimpl_count,
+        "dispatched": strict_count + partial_count,
+        "coveragePercent": round((strict_count / document_count * 100.0), 2) if document_count else 0.0,
         "duplicateDocumentIds": len(duplicates),
         "malformedRows": len(malformed),
         "documentWarnings": warning_count,
@@ -259,7 +273,7 @@ def build_inventory(
         "structureOk": document_count == expected_total and not duplicates and not malformed,
     }
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "generatedAt": _now(),
         "repoRoot": str(repo_root),
         "summary": summary,
@@ -304,6 +318,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "case inventory written: "
         f"{output} documented={summary['documented']} "
         f"implemented={summary['implemented']} "
+        f"partial={summary['partial']} "
         f"unimplemented={summary['unimplemented']} "
         f"coverage={summary['coveragePercent']}%"
     )

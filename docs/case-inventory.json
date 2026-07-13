@@ -1,13 +1,15 @@
 {
-  "schemaVersion": 2,
-  "generatedAt": "2026-07-13T00:38:58Z",
+  "schemaVersion": 3,
+  "generatedAt": "2026-07-13T01:19:14Z",
   "repoRoot": "F:\\github\\supcon_tools",
   "summary": {
     "expectedTotal": 419,
     "documented": 419,
-    "implemented": 419,
+    "implemented": 246,
+    "partial": 173,
     "unimplemented": 0,
-    "coveragePercent": 100.0,
+    "dispatched": 419,
+    "coveragePercent": 58.71,
     "duplicateDocumentIds": 0,
     "malformedRows": 0,
     "documentWarnings": 1,
@@ -34,6 +36,7 @@
       "docLine": 11,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 66,
@@ -61,6 +64,7 @@
       "docLine": 12,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 91,
@@ -88,6 +92,7 @@
       "docLine": 13,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 116,
@@ -115,6 +120,7 @@
       "docLine": 21,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 145,
@@ -141,7 +147,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 22,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 176,
@@ -169,7 +176,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 30,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 208,
@@ -197,7 +205,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 31,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 233,
@@ -225,7 +234,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 32,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 258,
@@ -253,7 +263,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 40,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 282,
@@ -281,7 +292,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 41,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 308,
@@ -309,7 +321,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-1.md",
       "docLine": 42,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 335,
@@ -338,6 +351,7 @@
       "docLine": 50,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
         "lineno": 361,
@@ -365,6 +379,7 @@
       "docLine": 11,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -394,6 +409,7 @@
       "docLine": 12,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -422,7 +438,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-2.md",
       "docLine": 13,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -451,7 +468,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-2.md",
       "docLine": 21,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -480,7 +498,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-2.md",
       "docLine": 22,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -510,6 +529,7 @@
       "docLine": 30,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -539,6 +559,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -568,6 +589,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -597,6 +619,7 @@
       "docLine": 11,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -626,6 +649,7 @@
       "docLine": 19,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -655,6 +679,7 @@
       "docLine": 20,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -684,6 +709,7 @@
       "docLine": 28,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -713,6 +739,7 @@
       "docLine": 29,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -742,6 +769,7 @@
       "docLine": 30,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -771,6 +799,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -800,6 +829,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -829,6 +859,7 @@
       "docLine": 9,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -858,6 +889,7 @@
       "docLine": 10,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -887,6 +919,7 @@
       "docLine": 11,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -916,6 +949,7 @@
       "docLine": 12,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -945,6 +979,7 @@
       "docLine": 13,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -974,6 +1009,7 @@
       "docLine": 14,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1003,6 +1039,7 @@
       "docLine": 11,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1031,7 +1068,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 12,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1060,7 +1098,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 13,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1089,7 +1128,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 14,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1118,7 +1158,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 22,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1147,7 +1188,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1177,6 +1219,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1205,7 +1248,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 32,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1234,7 +1278,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-1-5.md",
       "docLine": 33,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1264,6 +1309,7 @@
       "docLine": 11,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1293,6 +1339,7 @@
       "docLine": 12,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1322,6 +1369,7 @@
       "docLine": 13,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1351,6 +1399,7 @@
       "docLine": 21,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1380,6 +1429,7 @@
       "docLine": 22,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1409,6 +1459,7 @@
       "docLine": 23,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1438,6 +1489,7 @@
       "docLine": 24,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1467,6 +1519,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1496,6 +1549,7 @@
       "docLine": 33,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1525,6 +1579,7 @@
       "docLine": 41,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1554,6 +1609,7 @@
       "docLine": 42,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1583,6 +1639,7 @@
       "docLine": 43,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1612,6 +1669,7 @@
       "docLine": 44,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1641,6 +1699,7 @@
       "docLine": 60,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1670,6 +1729,7 @@
       "docLine": 68,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1699,6 +1759,7 @@
       "docLine": 69,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1728,6 +1789,7 @@
       "docLine": 70,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1757,6 +1819,7 @@
       "docLine": 71,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1786,6 +1849,7 @@
       "docLine": 72,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1815,6 +1879,7 @@
       "docLine": 73,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1844,6 +1909,7 @@
       "docLine": 81,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1873,6 +1939,7 @@
       "docLine": 82,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1902,6 +1969,7 @@
       "docLine": 83,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1930,7 +1998,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 84,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1959,7 +2028,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 85,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -1989,6 +2059,7 @@
       "docLine": 86,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2017,7 +2088,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 87,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2046,7 +2118,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 88,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2076,6 +2149,7 @@
       "docLine": 96,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2105,6 +2179,7 @@
       "docLine": 97,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2134,6 +2209,7 @@
       "docLine": 98,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2163,6 +2239,7 @@
       "docLine": 99,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2191,7 +2268,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 100,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2221,6 +2299,7 @@
       "docLine": 101,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2250,6 +2329,7 @@
       "docLine": 102,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2278,7 +2358,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 103,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2307,7 +2388,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 104,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2336,7 +2418,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 105,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2366,6 +2449,7 @@
       "docLine": 123,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2395,6 +2479,7 @@
       "docLine": 124,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2424,6 +2509,7 @@
       "docLine": 125,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2453,6 +2539,7 @@
       "docLine": 126,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2482,6 +2569,7 @@
       "docLine": 127,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2511,6 +2599,7 @@
       "docLine": 128,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2540,6 +2629,7 @@
       "docLine": 129,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2569,6 +2659,7 @@
       "docLine": 130,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2598,6 +2689,7 @@
       "docLine": 131,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2627,6 +2719,7 @@
       "docLine": 132,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2656,6 +2749,7 @@
       "docLine": 133,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2685,6 +2779,7 @@
       "docLine": 134,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2714,6 +2809,7 @@
       "docLine": 135,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2743,6 +2839,7 @@
       "docLine": 145,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2772,6 +2869,7 @@
       "docLine": 146,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2800,7 +2898,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 147,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2830,6 +2929,7 @@
       "docLine": 153,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2858,7 +2958,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 154,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2888,6 +2989,7 @@
       "docLine": 155,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2916,7 +3018,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 156,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2946,6 +3049,7 @@
       "docLine": 157,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -2974,7 +3078,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 158,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3004,6 +3109,7 @@
       "docLine": 159,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3032,7 +3138,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 160,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3062,6 +3169,7 @@
       "docLine": 161,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3090,7 +3198,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 162,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3120,6 +3229,7 @@
       "docLine": 163,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3148,7 +3258,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 164,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3178,6 +3289,7 @@
       "docLine": 165,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3207,6 +3319,7 @@
       "docLine": 166,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3235,7 +3348,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 167,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3265,6 +3379,7 @@
       "docLine": 168,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3294,6 +3409,7 @@
       "docLine": 169,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3322,7 +3438,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 170,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3352,6 +3469,7 @@
       "docLine": 176,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3381,6 +3499,7 @@
       "docLine": 177,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3409,7 +3528,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 178,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3439,6 +3559,7 @@
       "docLine": 179,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3468,6 +3589,7 @@
       "docLine": 180,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3496,7 +3618,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 181,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3526,6 +3649,7 @@
       "docLine": 187,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3555,6 +3679,7 @@
       "docLine": 188,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3584,6 +3709,7 @@
       "docLine": 189,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3612,7 +3738,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 190,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3641,7 +3768,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 191,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3671,6 +3799,7 @@
       "docLine": 197,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3700,6 +3829,7 @@
       "docLine": 198,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3729,6 +3859,7 @@
       "docLine": 199,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3758,6 +3889,7 @@
       "docLine": 200,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3786,7 +3918,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 201,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3816,6 +3949,7 @@
       "docLine": 209,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3845,6 +3979,7 @@
       "docLine": 210,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3874,6 +4009,7 @@
       "docLine": 211,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3903,6 +4039,7 @@
       "docLine": 212,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3932,6 +4069,7 @@
       "docLine": 213,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3960,7 +4098,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 214,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -3990,6 +4129,7 @@
       "docLine": 222,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4018,7 +4158,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 223,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4048,6 +4189,7 @@
       "docLine": 224,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4076,7 +4218,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 225,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4106,6 +4249,7 @@
       "docLine": 235,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4134,7 +4278,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 236,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4163,7 +4308,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 237,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4192,7 +4338,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 238,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4221,7 +4368,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 239,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4251,6 +4399,7 @@
       "docLine": 247,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4280,6 +4429,7 @@
       "docLine": 248,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4308,7 +4458,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 249,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4337,7 +4488,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 250,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4367,6 +4519,7 @@
       "docLine": 251,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4395,7 +4548,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 252,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4424,7 +4578,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 253,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4454,6 +4609,7 @@
       "docLine": 267,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4482,7 +4638,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 268,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4511,7 +4668,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 269,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4540,7 +4698,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 270,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4569,7 +4728,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 280,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4599,6 +4759,7 @@
       "docLine": 281,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4627,7 +4788,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 282,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4657,6 +4819,7 @@
       "docLine": 292,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4686,6 +4849,7 @@
       "docLine": 293,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4715,6 +4879,7 @@
       "docLine": 294,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4744,6 +4909,7 @@
       "docLine": 295,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4772,7 +4938,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 296,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4801,7 +4968,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 297,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4830,7 +4998,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 298,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4859,7 +5028,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-1.md",
       "docLine": 299,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4889,6 +5059,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4918,6 +5089,7 @@
       "docLine": 33,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4947,6 +5119,7 @@
       "docLine": 34,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -4976,6 +5149,7 @@
       "docLine": 35,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5005,6 +5179,7 @@
       "docLine": 36,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5034,6 +5209,7 @@
       "docLine": 44,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5062,7 +5238,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 45,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5092,6 +5269,7 @@
       "docLine": 46,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5120,7 +5298,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 47,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5149,7 +5328,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 48,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5179,6 +5359,7 @@
       "docLine": 49,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5208,6 +5389,7 @@
       "docLine": 57,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5236,7 +5418,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 58,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5266,6 +5449,7 @@
       "docLine": 59,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5295,6 +5479,7 @@
       "docLine": 60,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5324,6 +5509,7 @@
       "docLine": 61,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5353,6 +5539,7 @@
       "docLine": 69,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5382,6 +5569,7 @@
       "docLine": 70,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5411,6 +5599,7 @@
       "docLine": 71,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5440,6 +5629,7 @@
       "docLine": 72,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5468,7 +5658,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 73,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5497,7 +5688,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 74,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5526,7 +5718,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 75,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5555,7 +5748,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 76,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5584,7 +5778,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 77,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5614,6 +5809,7 @@
       "docLine": 85,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5643,6 +5839,7 @@
       "docLine": 86,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5672,6 +5869,7 @@
       "docLine": 87,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5701,6 +5899,7 @@
       "docLine": 88,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5730,6 +5929,7 @@
       "docLine": 89,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5759,6 +5959,7 @@
       "docLine": 90,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5788,6 +5989,7 @@
       "docLine": 91,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5817,6 +6019,7 @@
       "docLine": 99,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5846,6 +6049,7 @@
       "docLine": 100,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5875,6 +6079,7 @@
       "docLine": 101,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5904,6 +6109,7 @@
       "docLine": 102,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5932,7 +6138,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 103,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5961,7 +6168,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 104,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -5991,6 +6199,7 @@
       "docLine": 105,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6019,7 +6228,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 106,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6049,6 +6259,7 @@
       "docLine": 114,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6078,6 +6289,7 @@
       "docLine": 115,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6106,7 +6318,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 116,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6135,7 +6348,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 117,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6165,6 +6379,7 @@
       "docLine": 118,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6193,7 +6408,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 119,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6222,7 +6438,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 120,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6252,6 +6469,7 @@
       "docLine": 121,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6280,7 +6498,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 129,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6309,7 +6528,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 130,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6338,7 +6558,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 131,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6367,7 +6588,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 132,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6396,7 +6618,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 133,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6425,7 +6648,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 134,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6454,7 +6678,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 135,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6483,7 +6708,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 143,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6512,7 +6738,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 144,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6541,7 +6768,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 145,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6570,7 +6798,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 146,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6599,7 +6828,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 147,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6628,7 +6858,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 148,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6657,7 +6888,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 149,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6686,7 +6918,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 150,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6715,7 +6948,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 151,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6744,7 +6978,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 159,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6773,7 +7008,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 160,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6802,7 +7038,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-2.md",
       "docLine": 161,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6832,6 +7069,7 @@
       "docLine": 19,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6861,6 +7099,7 @@
       "docLine": 20,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6890,6 +7129,7 @@
       "docLine": 21,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6919,6 +7159,7 @@
       "docLine": 22,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6947,7 +7188,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -6977,6 +7219,7 @@
       "docLine": 24,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7006,6 +7249,7 @@
       "docLine": 25,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7034,7 +7278,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 26,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7064,6 +7309,7 @@
       "docLine": 27,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7093,6 +7339,7 @@
       "docLine": 28,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7122,6 +7369,7 @@
       "docLine": 29,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7150,7 +7398,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 30,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7180,6 +7429,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7209,6 +7459,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7238,6 +7489,7 @@
       "docLine": 33,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7267,6 +7519,7 @@
       "docLine": 34,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7296,6 +7549,7 @@
       "docLine": 35,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7324,7 +7578,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 36,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7354,6 +7609,7 @@
       "docLine": 37,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7383,6 +7639,7 @@
       "docLine": 38,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7412,6 +7669,7 @@
       "docLine": 39,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7440,7 +7698,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 40,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7469,7 +7728,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 41,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7498,7 +7758,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 42,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7528,6 +7789,7 @@
       "docLine": 43,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7557,6 +7819,7 @@
       "docLine": 44,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7585,7 +7848,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 45,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7615,6 +7879,7 @@
       "docLine": 46,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7644,6 +7909,7 @@
       "docLine": 47,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7673,6 +7939,7 @@
       "docLine": 48,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7702,6 +7969,7 @@
       "docLine": 49,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7730,7 +7998,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-3.md",
       "docLine": 50,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7760,6 +8029,7 @@
       "docLine": 15,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7789,6 +8059,7 @@
       "docLine": 16,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7818,6 +8089,7 @@
       "docLine": 17,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7847,6 +8119,7 @@
       "docLine": 18,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7875,7 +8148,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 19,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7904,7 +8178,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 20,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7933,7 +8208,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 21,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7962,7 +8238,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 22,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -7992,6 +8269,7 @@
       "docLine": 23,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8021,6 +8299,7 @@
       "docLine": 24,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8049,7 +8328,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 25,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8078,7 +8358,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 26,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8108,6 +8389,7 @@
       "docLine": 27,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8137,6 +8419,7 @@
       "docLine": 28,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8166,6 +8449,7 @@
       "docLine": 29,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8195,6 +8479,7 @@
       "docLine": 30,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8224,6 +8509,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8252,7 +8538,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 32,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8281,7 +8568,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 33,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8311,6 +8599,7 @@
       "docLine": 34,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8340,6 +8629,7 @@
       "docLine": 35,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8368,7 +8658,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 36,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8397,7 +8688,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 37,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8427,6 +8719,7 @@
       "docLine": 38,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8455,7 +8748,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 39,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8485,6 +8779,7 @@
       "docLine": 40,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8513,7 +8808,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-4.md",
       "docLine": 41,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8543,6 +8839,7 @@
       "docLine": 16,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8572,6 +8869,7 @@
       "docLine": 17,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8601,6 +8899,7 @@
       "docLine": 18,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8630,6 +8929,7 @@
       "docLine": 19,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8659,6 +8959,7 @@
       "docLine": 20,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8687,7 +8988,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 21,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8716,7 +9018,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 22,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8745,7 +9048,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8775,6 +9079,7 @@
       "docLine": 24,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8804,6 +9109,7 @@
       "docLine": 25,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8833,6 +9139,7 @@
       "docLine": 26,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8861,7 +9168,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 27,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8890,7 +9198,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 28,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8920,6 +9229,7 @@
       "docLine": 29,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8949,6 +9259,7 @@
       "docLine": 30,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -8978,6 +9289,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9006,7 +9318,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 32,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9036,6 +9349,7 @@
       "docLine": 33,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9064,7 +9378,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 34,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9093,7 +9408,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 35,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9122,7 +9438,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-2-5.md",
       "docLine": 36,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9152,6 +9469,7 @@
       "docLine": 37,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9181,6 +9499,7 @@
       "docLine": 38,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9210,6 +9529,7 @@
       "docLine": 39,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9239,6 +9559,7 @@
       "docLine": 40,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9268,6 +9589,7 @@
       "docLine": 41,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9297,6 +9619,7 @@
       "docLine": 42,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9325,7 +9648,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 17,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
         "lineno": 19,
@@ -9354,7 +9678,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 18,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9383,7 +9708,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 19,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9412,7 +9738,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 20,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_13_types.py",
         "lineno": 25,
@@ -9442,6 +9769,7 @@
       "docLine": 21,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9471,6 +9799,7 @@
       "docLine": 22,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9499,7 +9828,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9528,7 +9858,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 24,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9557,7 +9888,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 25,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9586,7 +9918,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 26,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9616,6 +9949,7 @@
       "docLine": 27,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9644,7 +9978,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 28,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9674,6 +10009,7 @@
       "docLine": 29,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9703,6 +10039,7 @@
       "docLine": 30,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9732,6 +10069,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9761,6 +10099,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9789,7 +10128,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 33,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9819,6 +10159,7 @@
       "docLine": 34,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9848,6 +10189,7 @@
       "docLine": 35,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9876,7 +10218,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-1.md",
       "docLine": 36,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9905,7 +10248,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 14,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
         "lineno": 54,
@@ -9934,6 +10278,7 @@
       "docLine": 15,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9963,6 +10308,7 @@
       "docLine": 16,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -9992,6 +10338,7 @@
       "docLine": 17,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10021,6 +10368,7 @@
       "docLine": 18,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10050,6 +10398,7 @@
       "docLine": 19,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10079,6 +10428,7 @@
       "docLine": 20,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10108,6 +10458,7 @@
       "docLine": 21,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10137,6 +10488,7 @@
       "docLine": 22,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10165,7 +10517,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10194,7 +10547,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 24,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10224,6 +10578,7 @@
       "docLine": 25,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
         "lineno": 91,
@@ -10253,6 +10608,7 @@
       "docLine": 26,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10282,6 +10638,7 @@
       "docLine": 27,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10310,7 +10667,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 28,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10339,7 +10697,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 29,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10368,7 +10727,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 30,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10397,7 +10757,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-2.md",
       "docLine": 31,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10427,6 +10788,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10456,6 +10818,7 @@
       "docLine": 33,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10485,6 +10848,7 @@
       "docLine": 34,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10514,6 +10878,7 @@
       "docLine": 14,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
         "lineno": 128,
@@ -10542,6 +10907,7 @@
       "docLine": 15,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10571,6 +10937,7 @@
       "docLine": 16,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10600,6 +10967,7 @@
       "docLine": 17,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10629,6 +10997,7 @@
       "docLine": 18,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10658,6 +11027,7 @@
       "docLine": 19,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10687,6 +11057,7 @@
       "docLine": 20,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10715,7 +11086,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 21,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10745,6 +11117,7 @@
       "docLine": 22,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10774,6 +11147,7 @@
       "docLine": 23,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10803,6 +11177,7 @@
       "docLine": 24,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10831,7 +11206,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 25,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10860,7 +11236,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 26,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10889,7 +11266,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 27,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10919,6 +11297,7 @@
       "docLine": 28,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10947,7 +11326,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 29,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -10977,6 +11357,7 @@
       "docLine": 30,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11006,6 +11387,7 @@
       "docLine": 31,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11035,6 +11417,7 @@
       "docLine": 32,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11063,7 +11446,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 33,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11092,7 +11476,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 34,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11121,7 +11506,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-3.md",
       "docLine": 35,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11151,6 +11537,7 @@
       "docLine": 13,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
         "lineno": 169,
@@ -11179,6 +11566,7 @@
       "docLine": 14,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11208,6 +11596,7 @@
       "docLine": 15,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11237,6 +11626,7 @@
       "docLine": 16,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11266,6 +11656,7 @@
       "docLine": 17,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11294,7 +11685,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-4.md",
       "docLine": 18,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11323,7 +11715,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-4.md",
       "docLine": 19,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11355,6 +11748,7 @@
         "row has 5 cells but header has 6; missing trailing cells padded"
       ],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11383,7 +11777,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 16,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
         "lineno": 201,
@@ -11412,7 +11807,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 17,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11441,7 +11837,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 18,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11470,7 +11867,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 19,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11499,7 +11897,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 20,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11528,7 +11927,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 21,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11557,7 +11957,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 22,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11586,7 +11987,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11615,7 +12017,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 24,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11644,7 +12047,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 25,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11673,7 +12077,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 26,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11702,7 +12107,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-5.md",
       "docLine": 27,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11732,6 +12138,7 @@
       "docLine": 18,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11761,6 +12168,7 @@
       "docLine": 19,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11789,7 +12197,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 20,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11819,6 +12228,7 @@
       "docLine": 21,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11848,6 +12258,7 @@
       "docLine": 22,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11876,7 +12287,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 23,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11906,6 +12318,7 @@
       "docLine": 24,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11934,7 +12347,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 25,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11963,7 +12377,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 26,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -11993,6 +12408,7 @@
       "docLine": 27,
       "documentWarnings": [],
       "implementationStatus": "IMPLEMENTED",
+      "fidelityTier": "STRICT",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -12021,7 +12437,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 28,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -12050,7 +12467,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 29,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -12079,7 +12497,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 30,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -12108,7 +12527,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 31,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
@@ -12137,7 +12557,8 @@
       "docPath": "ua_test_gui/doc/test_cases/UA-3-6.md",
       "docLine": 32,
       "documentWarnings": [],
-      "implementationStatus": "IMPLEMENTED",
+      "implementationStatus": "PARTIAL",
+      "fidelityTier": "OBSERVED_ONLY",
       "implementation": {
         "filePath": "ua_test_harness\\tests\\zz_documented_cases.py",
         "lineno": 71,
