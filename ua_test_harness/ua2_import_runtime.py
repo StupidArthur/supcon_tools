@@ -35,8 +35,38 @@ def _blocked(ctx, meta, reason: str) -> CaseStatus:
     return CaseStatus.BLOCKED
 
 
-def _make_tags(ctx, cc, ds_id: int, count: int) -> list[dict]:
-    return [create_case_tag(ctx, cc, ds_id, suffix=f"t{i}") for i in range(count)]
+def _make_tags(ctx, cc, ds_id: int, count: int, *, type_key: str = "INT32") -> list[dict]:
+    """创建绑定 ua2_types.yaml *_r_* 节点的可采集位号(导出前需 RT 有效)。"""
+    from ua_test_harness.ua2_fixture_map import base_name_for_node, read_spec
+
+    spec = read_spec(type_key)
+    base = base_name_for_node(spec["node"])
+    return [
+        create_case_tag(
+            ctx, cc, ds_id,
+            suffix=f"t{i}",
+            data_type=spec["dtype"],
+            tag_base_name=base,
+            only_read=True,
+        )
+        for i in range(count)
+    ]
+
+
+def _make_collectible_tag(ctx, cc, ds_id: int, *, suffix: str) -> dict:
+    """单条可采集位号(跨源/空 DS 等场景复用)。"""
+    from ua_test_harness.ua2_fixture_map import base_name_for_node, read_spec
+
+    spec = read_spec("INT32")
+    tag = create_case_tag(
+        ctx, cc, ds_id,
+        suffix=suffix,
+        data_type=spec["dtype"],
+        tag_base_name=base_name_for_node(spec["node"]),
+        only_read=True,
+    )
+    wait_collectible(ctx, tag["name"])
+    return tag
 
 
 def dispatch_ua2_3(ctx, cc, meta) -> CaseStatus:
@@ -68,9 +98,8 @@ def dispatch_ua2_3(ctx, cc, meta) -> CaseStatus:
 
         if num == 3:
             empty = require_shared_datasource(ctx, "empty")
-            t2 = create_case_tag(ctx, cc, int(empty["id"]), suffix="3b")
+            t2 = _make_collectible_tag(ctx, cc, int(empty["id"]), suffix="3b")
             tags.append(t2)
-            wait_collectible(ctx, t2["name"])
             _, rows = export_to_temp(ctx, [int(tags[0]["id"]), int(t2["id"])], suffix=cid)
             assert_export_rows(rows, min_rows=3)
             return CaseStatus.PASS
@@ -220,6 +249,7 @@ def dispatch_ua2_3(ctx, cc, meta) -> CaseStatus:
             import_file(ctx, path, conflict_strategy=1)
             after = exact(active_rows(ctx, tagName=tname), "tagName", tname)[0]
             check_eq("unit_in_config", "Hz", after.get("unit"))
+            wait_collectible(ctx, tname)
             return CaseStatus.PASS
 
         if num in {22, 23, 24, 25, 26, 27}:

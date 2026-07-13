@@ -805,3 +805,44 @@
   - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_026_ua2_UA_2_3_0_t0_812400
 - `UA-2-3-028`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_736000
   - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_736000
+
+---
+
+## UA-2-3 RT timeout triage — 测试代码修复 (2026-07-13)
+
+**根因(测试代码)**：`_make_tags` 未绑定 `ua2_types.yaml` 的 `ua2_int32_r_1`（`tag_base_name` 默认为 `2_{name}`），`wait_collectible` 永远等不到 RT。
+
+**修复**（`ua2_import_runtime.py`）：
+- `_make_tags`：`tag_base_name=base_name_for_node(ua2_int32_r_1)` + `only_read=True`
+- `_make_collectible_tag`：空 DS 跨源 case(003) 复用同一绑定
+- `021`：覆盖导入后补 `wait_collectible`
+
+**重跑**：`output/automation_ua2_default_20260713_152721` — 21 条中 **15 PASS**（原 21 FAIL 回收 16 条）
+
+**产品 FAIL 保留**（绑节点 + `wait_collectible` 60s 仍超时/异常）：
+| Case | 分类 | 原因 |
+|------|------|------|
+| 008 | 产品 | `update_tag` 改配置后 RT 60s 仍无有效值 |
+| 021 | 产品 | 覆盖导入后 RT 60s 仍无有效值 |
+| 028 | 产品 | `update_tag` 往返后 RT 60s 仍无有效值 |
+| 009 | 产品/API | `update_tag` 六档限值报 `The limit hierarchy is not supported` → VERIFIED_BLOCKED |
+
+**说明**：004/011 本轮 **OBSERVED**（探索预期），但 overlay 不收录 OBSERVED，库存仍残留首轮 RT timeout 的 VERIFIED_FAIL（非本轮真跑结果）。
+
+**UA-2-3 库存**：VERIFIED **19**，VERIFIED_FAIL **5**，VERIFIED_BLOCKED **1**；STRICT NOT_VERIFIED **0**
+
+---
+
+## 真跑批次 — ua23-rt-triage-rerun (2026-07-13 15:31)
+
+**产物**: `output/automation_ua2_default_20260713_152721`
+**选择**: {"selectionMode": "cases", "requested": ["UA-2-3-001", "UA-2-3-002", "UA-2-3-003", "UA-2-3-004", "UA-2-3-005", "UA-2-3-006", "UA-2-3-007", "UA-2-3-008", "UA-2-3-009", "UA-2-3-011", "UA-2-3-013", "UA-2-3-014", "UA-2-3-015", "UA-2-3-016", "UA-2-3-017", "UA-2-3-019", "UA-2-3-020", "UA-2-3-021", "UA-2-3-025", "UA-2-3-026", "UA-2-3-028"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 21, "selectedCases": ["UA-2-3-001", "UA-2-3-002", "UA-2-3-003", "UA-2-3-004", "UA-2-3-005", "UA-2-3-006", "UA-2-3-007", "UA-2-3-008", "UA-2-3-009", "UA-2-3-011", "UA-2-3-013", "UA-2-3-014", "UA-2-3-015", "UA-2-3-016", "UA-2-3-017", "UA-2-3-019", "UA-2-3-020", "UA-2-3-021", "UA-2-3-025", "UA-2-3-026", "UA-2-3-028"], "remainingAfterBatch": 0}
+**结果**: PASS=15 FAIL=3 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-3-008`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_951700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_951700
+- `UA-2-3-021`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_14200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_14200
+- `UA-2-3-028`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_854400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_854400
