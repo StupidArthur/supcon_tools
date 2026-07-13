@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "generatedAt": "2026-07-13T08:57:04Z",
+  "generatedAt": "2026-07-13T10:18:11Z",
   "repoRoot": "F:\\github\\supcon_tools",
   "summary": {
     "expectedTotal": 419,
@@ -15,10 +15,10 @@
     "documentWarnings": 1,
     "orphanImplementations": 0,
     "structureOk": true,
-    "verified": 189,
-    "verifiedFail": 45,
-    "verifiedBlocked": 16,
-    "notVerified": 169
+    "verified": 200,
+    "verifiedFail": 72,
+    "verifiedBlocked": 22,
+    "notVerified": 125
   },
   "duplicates": [],
   "malformed": [],
@@ -50,7 +50,10 @@
           "datasource"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-01\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-02",
@@ -78,7 +81,10 @@
           "datasource"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-02\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-03",
@@ -106,7 +112,10 @@
           "datasource"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-03\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-04",
@@ -134,7 +143,10 @@
           "datasource"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-04\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-05",
@@ -163,7 +175,10 @@
           "reconnect"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-05\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-06",
@@ -192,7 +207,10 @@
           "auth"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-06\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-07",
@@ -221,7 +239,10 @@
           "auth"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-07\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-08",
@@ -250,7 +271,10 @@
           "auth"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-08\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-09",
@@ -365,7 +389,10 @@
           "datasource"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:12:44Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-12\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-2-01",
@@ -395,7 +422,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-01\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-02",
@@ -425,7 +455,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-02\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-03",
@@ -455,7 +488,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-03\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-04",
@@ -545,7 +581,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-06\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-07",
@@ -575,7 +614,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-07\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-08",
@@ -605,7 +647,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-08\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-01",
@@ -635,7 +680,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-01\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-02",
@@ -665,7 +713,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-02\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-03",
@@ -695,7 +746,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-03\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-04",
@@ -725,7 +779,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-04\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-05",
@@ -755,7 +812,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-05\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-06",
@@ -785,7 +845,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-06\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-07",
@@ -815,7 +878,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-07\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-3-08",
@@ -845,7 +911,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-3-08\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-4-01",
@@ -875,7 +944,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-4-01\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-1-4-02",
@@ -905,7 +977,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-4-02\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-1-4-03",
@@ -935,7 +1010,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-4-03\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-1-4-04",
@@ -965,7 +1043,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-4-04\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-1-4-05",
@@ -995,7 +1076,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-4-05\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-1-4-06",
@@ -1025,7 +1109,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-4-06\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-1-5-01",
@@ -1055,7 +1142,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-5-01\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-5-02",
@@ -1235,7 +1325,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-5-07\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-5-08",
@@ -1325,7 +1418,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-01\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-02",
@@ -1355,7 +1451,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-02\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-03",
@@ -1385,7 +1484,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-03\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-04",
@@ -1415,7 +1517,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-04\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-05",
@@ -1445,7 +1550,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-05\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-06",
@@ -1475,7 +1583,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-06\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-07",
@@ -1505,7 +1616,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-07\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-08",
@@ -1535,7 +1649,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-08\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-09",
@@ -1565,7 +1682,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-09\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-10",
@@ -1595,7 +1715,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-10\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-11",
@@ -1625,7 +1748,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-11\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-12",
@@ -1655,7 +1781,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-12\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-13",
@@ -1685,7 +1814,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-13T10:18:11Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-6-13\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-001",

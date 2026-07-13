@@ -16,7 +16,7 @@ from ua_test_harness.context import RunContext
 
 _REPO = Path(__file__).resolve().parents[2]
 _MOCK_DIR = _REPO / "ua_mocker"
-_YAML_BY_PORT = {18965: "ua2_types.yaml", 18967: "ua2_empty.yaml"}
+_YAML_BY_PORT = {18960: "smoke.yaml", 18965: "ua2_types.yaml", 18967: "ua2_empty.yaml"}
 _DEFAULT_PORTS = {
     "functional": 18960,
     "reconnect": 18961,

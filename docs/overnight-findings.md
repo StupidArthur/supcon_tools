@@ -1059,3 +1059,91 @@
 **结果**: PASS=0 FAIL=0 BLOCKED=6 TIMEOUT=0 chapterTimeoutSec=7200.0
 
 **产品 FAIL**: 无
+
+---
+
+## 真跑批次 — ua1-ch1-pilot (2026-07-13 18:12)
+
+**产物**: `output/automation_ua2_ua11_20260713_181113`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-1", "strictPoolSize": 9, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 9, "selectedCases": ["UA-1-1-01", "UA-1-1-02", "UA-1-1-03", "UA-1-1-04", "UA-1-1-05", "UA-1-1-06", "UA-1-1-07", "UA-1-1-08", "UA-1-1-12"], "remainingAfterBatch": 0}
+**结果**: PASS=9 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — ua1-ch2-6-plus-partial (2026-07-13 18:18)
+
+**产物**: `output/automation_ua2_default_20260713_181317`
+**选择**: {"selectionMode": "cases", "requested": ["UA-1-2-01", "UA-1-2-02", "UA-1-2-03", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08", "UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08", "UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06", "UA-1-5-01", "UA-1-5-07", "UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13", "UA-1-1-09", "UA-1-1-10", "UA-1-1-11", "UA-1-2-04", "UA-1-2-05", "UA-1-5-02", "UA-1-5-03", "UA-1-5-04", "UA-1-5-05", "UA-1-5-06", "UA-1-5-08", "UA-1-5-09"], "excludedPartial": ["UA-1-1-09", "UA-1-1-10", "UA-1-1-11", "UA-1-2-04", "UA-1-2-05", "UA-1-5-02", "UA-1-5-03", "UA-1-5-04", "UA-1-5-05", "UA-1-5-06", "UA-1-5-08", "UA-1-5-09"], "skippedVerified": [], "limitApplied": 47, "selectedCases": ["UA-1-2-01", "UA-1-2-02", "UA-1-2-03", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08", "UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08", "UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06", "UA-1-5-01", "UA-1-5-07", "UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=27 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=28800.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-2-01`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_846300 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_846300 timeout after 30.0s; last=None
+- `UA-1-2-02`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_778400 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_778400 timeout after 30.0s; last=None
+- `UA-1-2-03`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_390300 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_390300 timeout after 30.0s; last=None
+- `UA-1-2-06`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_199900 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_199900 timeout after 30.0s; last=None
+- `UA-1-2-07`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_264900 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_264900 timeout after 30.0s; last=None
+- `UA-1-2-08`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_426500 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_426500 timeout after 30.0s; last=None
+- `UA-1-3-01`: assert: automation datasource name must use an owned prefix: 'ua1_3_1'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_1'
+- `UA-1-3-02`: assert: automation datasource name must use an owned prefix: 'ua1_3_2'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_2'
+- `UA-1-3-03`: assert: automation datasource name must use an owned prefix: 'ua1_3_3'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_3'
+- `UA-1-3-04`: assert: automation datasource name must use an owned prefix: 'ua1_3_4'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_4'
+- `UA-1-3-05`: assert: automation datasource name must use an owned prefix: 'ua1_3_5'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_5'
+- `UA-1-3-06`: assert: automation datasource name must use an owned prefix: 'ua1_3_6'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_6'
+- `UA-1-3-07`: assert: automation datasource name must use an owned prefix: 'ua1_3_7'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_7'
+- `UA-1-3-08`: assert: automation datasource name must use an owned prefix: 'ua1_3_8'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_3_8'
+- `UA-1-6-01`: assert: automation datasource name must use an owned prefix: 'ua1_6_1'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_1'
+- `UA-1-6-02`: assert: automation datasource name must use an owned prefix: 'ua1_6_2'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_2'
+- `UA-1-6-03`: assert: automation datasource name must use an owned prefix: 'ua1_6_3'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_3'
+- `UA-1-6-04`: assert: automation datasource name must use an owned prefix: 'ua1_6_4'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_4'
+- `UA-1-6-05`: assert: automation datasource name must use an owned prefix: 'ua1_6_5'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_5'
+- `UA-1-6-06`: assert: automation datasource name must use an owned prefix: 'ua1_6_6'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_6'
+- `UA-1-6-07`: assert: automation datasource name must use an owned prefix: 'ua1_6_7'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_7'
+- `UA-1-6-08`: assert: automation datasource name must use an owned prefix: 'ua1_6_8'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_8'
+- `UA-1-6-09`: assert: automation datasource name must use an owned prefix: 'ua1_6_9'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_9'
+- `UA-1-6-10`: assert: automation datasource name must use an owned prefix: 'ua1_6_10'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_10'
+- `UA-1-6-11`: assert: automation datasource name must use an owned prefix: 'ua1_6_11'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_11'
+- `UA-1-6-12`: assert: automation datasource name must use an owned prefix: 'ua1_6_12'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_12'
+- `UA-1-6-13`: assert: automation datasource name must use an owned prefix: 'ua1_6_13'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_6_13'
+
+**ERROR (6, harness/环境)**:
+- `UA-1-4-01~06`: `BaselineError` — `dual_ds_isolation` 依赖 `ua_shared_ua2_types_ds`(18965)，UA-1 runner 仅起 18960 functional mock，endpoint 不匹配
+
+**未执行 (12 PARTIAL)**:
+- `UA-1-1-09/10/11`, `UA-1-2-04/05`, `UA-1-5-02~06/08/09` — runner 默认仅 STRICT_IMPLEMENTED，本批 excludedPartial
+
+**UA-1 全章汇总 (44/56 已跑)**:
+- PASS=11 (UA-1-1×9 + UA-1-5-01/07)
+- FAIL=27 (UA-1-2×6 产品 rt_changed + UA-1-3×8 + UA-1-6×13 测试代码 ds 前缀)
+- ERROR=6 (UA-1-4 共享 baseline 与 18960 mock 冲突)
+- 未跑=12 PARTIAL
+
+---
