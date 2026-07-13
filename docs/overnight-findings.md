@@ -240,3 +240,32 @@
 **产品 FAIL**: 本批仅 mock 单测, 未真跑
 
 **修复**: `result_update_cases` 中 `058/059` 提前于通用 `create_case_tag`, 避免重复建 tag
+
+---
+
+## 批次 14 — talk-main 任务 A 第二批 + 任务 F (2026-07-13)
+
+**任务 A 范围**: UA-2-3/UA-1/UA-3-1/2/3/4 回归类 OBSERVED→断言
+
+**OBSERVED → 真实断言 (晋升 STRICT)**:
+- `UA-2-3-005/007/008/009/010`: 导出字段与配置/限值/13 类型逐行 `check_*`
+- `UA-1-1-05/06/07/08`: 连接恢复与鉴权路径已有 `check_*`(06 补 `alive_false_without_creds`)
+- `UA-1-2-03`: `history_frozen_on_disable`; 修复历史分支先于误 re-enable
+- `UA-3-1-008`: 同源独立频率 — 各位号 RT 可读 + 计数断言
+- `UA-3-3-012/013`: 类型不匹配/越界 — handler 已有 `check_*` 晋升 STRICT
+- `UA-3-4-007`: 空/未来历史窗口 `empty_past_window` / `empty_future_window`
+
+**保留 OBSERVED_ONLY (探索)**:
+- UA-2-3: `012/018/022~024/027/032`; UA-2-5 全章探索; UA-1-1 `09~11`; UA-3-1 `007/009/012/017/020` 等
+
+**任务 F — 清 UA-3 死代码**:
+- 删除 `scenario_runtime.py`
+- `scenario_policy.py` 移除 `_SHARED_SCENARIOS` / `_ua3_scenario_for` / `_execute_shared` 回退
+- 未知章节统一 `BLOCKED`
+
+**inventory 变化** (相对批次 13 `270/149`):
+- `IMPLEMENTED` 270 → **281** (+11)
+- `PARTIAL` 149 → **138** (-11)
+- `coveragePercent` 64.44% → **67.06%**
+
+**单测**: `compileall` OK；`pytest ua_test_harness/unit_tests` **181 passed**

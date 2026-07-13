@@ -50,7 +50,7 @@ def dispatch_ua2_3(ctx, cc, meta) -> CaseStatus:
     tags: list[dict] = []
 
     try:
-        if num <= 12 or num in {28} or (13 <= num <= 27):
+        if num != 10 and (num <= 12 or num in {28} or (13 <= num <= 27)):
             tags = _make_tags(ctx, cc, ds_id, 1 if num not in {2, 14, 29, 32} else min(10, 3))
             for t in tags:
                 wait_collectible(ctx, t["name"])
@@ -96,7 +96,75 @@ def dispatch_ua2_3(ctx, cc, meta) -> CaseStatus:
             check_eq("header_cols", 21, len(rows[0]))
             return CaseStatus.PASS
 
-        if num in {7, 8, 9, 10, 11, 12}:
+        if num in {7, 8, 9}:
+            from ua_test_harness.ua2_precise import config_page_row
+            from ua_test_harness.ua2_import_helpers import (
+                assert_export_config_fields,
+                assert_export_identity,
+                assert_export_limits,
+            )
+
+            tname = tags[0]["name"]
+            tid = int(tags[0]["id"])
+            if num == 8:
+                from tpt_api.datahub import update_tag
+                from tpt_api.types import DataTypes
+                cfg0 = exact(active_rows(ctx, tagName=tname), "tagName", tname)[0]
+                update_tag(
+                    _api(ctx), tid, tag_name=tname,
+                    data_type=int(cfg0.get("dataType") or DataTypes["INT"]),
+                    ds_id=int(cfg0.get("dsId")),
+                    unit="kW", frequency=5, tag_desc="export_field_check",
+                    only_read=False, need_push=True,
+                )
+                wait_collectible(ctx, tname)
+            if num == 9:
+                from tpt_api.datahub import update_tag
+                from tpt_api.types import DataTypes
+                cfg0 = exact(active_rows(ctx, tagName=tname), "tagName", tname)[0]
+                update_tag(
+                    _api(ctx), tid, tag_name=tname,
+                    data_type=int(cfg0.get("dataType") or DataTypes["INT"]),
+                    ds_id=int(cfg0.get("dsId")),
+                    limit_up=100, limit_up_up=90, limit_up_up_up=80,
+                    limit_down=-100, limit_down_down=-90, limit_down_down_down=-80,
+                )
+                wait_collectible(ctx, tname)
+            _, rows = export_to_temp(ctx, [tid], suffix=cid)
+            cfg = config_page_row(ctx, tname)
+            assert_export_identity(rows, tname, ds_name=str(ds["name"]), cfg=cfg)
+            if num == 8:
+                assert_export_config_fields(rows, tname, cfg)
+            if num == 9:
+                assert_export_limits(rows, tname, cfg)
+            return CaseStatus.PASS
+
+        if num == 10:
+            from ua_test_harness.ua2_fixture_map import READ_NODES, base_name_for_node
+            from ua_test_harness.ua2_import_helpers import find_export_row, _str_cell
+
+            type_tags: list[dict] = []
+            try:
+                for i, (key, spec) in enumerate(READ_NODES.items()):
+                    t = create_case_tag(
+                        ctx, cc, ds_id, suffix=f"10{i:02d}",
+                        data_type=spec["dtype"],
+                        tag_base_name=base_name_for_node(spec["node"]),
+                    )
+                    type_tags.append(t)
+                    wait_collectible(ctx, t["name"])
+                ids = [int(t["id"]) for t in type_tags]
+                _, rows = export_to_temp(ctx, ids, suffix=cid)
+                check_eq("type_row_count", len(READ_NODES) + 1, len(rows))
+                for key, t in zip(READ_NODES.keys(), type_tags):
+                    er = find_export_row(rows, t["name"])
+                    check_true(f"type_export_{key}", _str_cell(er[5]) != "")
+                return CaseStatus.PASS
+            finally:
+                for t in type_tags:
+                    cleanup_case_tag(ctx, cc, int(t["id"]), t["name"])
+
+        if num in {11, 12}:
             _, rows = export_to_temp(ctx, [int(tags[0]["id"])], suffix=cid)
             ctx.bag[cid] = {"rows": len(rows), "sample": rows[1] if len(rows) > 1 else None}
             return CaseStatus.OBSERVED

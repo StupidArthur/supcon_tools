@@ -60,19 +60,14 @@ def test_known_blocked_still_registered():
 
 
 def test_execute_routes_ua3_not_shared_scenario(monkeypatch):
-    """UA-3 必须走 ua3_runtime,不能落回 scenario_runtime 冒烟。"""
-    called = {"ua3": 0, "shared": 0}
+    """UA-3 必须走 ua3_runtime,不能落回遗留共享场景。"""
+    called = {"ua3": 0}
 
     def fake_ua3(ctx, cc, meta):
         called["ua3"] += 1
         return CaseStatus.PASS
 
-    def fake_shared(ctx, cc, meta):
-        called["shared"] += 1
-        return CaseStatus.PASS
-
     monkeypatch.setattr("ua_test_harness.scenario_policy.execute_ua3_case", fake_ua3)
-    monkeypatch.setattr("ua_test_harness.scenario_policy._execute_shared", fake_shared)
 
     class _Ctx:
         class emitter:
@@ -87,4 +82,3 @@ def test_execute_routes_ua3_not_shared_scenario(monkeypatch):
     status = execute_documented_case(_Ctx(), _Cc(), meta)
     assert status == CaseStatus.PASS
     assert called["ua3"] == 1
-    assert called["shared"] == 0

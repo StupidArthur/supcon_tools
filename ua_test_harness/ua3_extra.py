@@ -47,8 +47,10 @@ def collect_multi_frequency(ctx, cc) -> CaseStatus:
             time.sleep(max(3, freq * 2))
             v2 = _row_value(rt_row(ctx, t["name"]))
             samples[t["name"]] = {"frequency": freq, "v1": v1, "v2": v2, "changed": v1 != v2}
+            check_true(f"rt_readable_{freq}", v1 is not None)
+        check_eq("independent_tag_count", 3, len(samples))
         ctx.bag["UA-3-1-008"] = samples
-        return CaseStatus.OBSERVED
+        return CaseStatus.PASS
     finally:
         for _, t in tags:
             cleanup_case_tag(ctx, cc, int(t["id"]), t["name"])
@@ -417,6 +419,10 @@ def history_empty_window(ctx, cc) -> CaseStatus:
         future_end = "2099-01-02 00:00:00"
         empty_past = get_history_value(_api(ctx), tag_names=[tag_name], beg_time=past_beg, end_time=past_end, page=1, page_size=10)
         empty_future = get_history_value(_api(ctx), tag_names=[tag_name], beg_time=future_beg, end_time=future_end, page=1, page_size=10)
+        past_recs = (empty_past or {}).get("records") or (empty_past or {}).get("data") or []
+        future_recs = (empty_future or {}).get("records") or (empty_future or {}).get("data") or []
+        check_eq("empty_past_window", 0, len(past_recs))
+        check_eq("empty_future_window", 0, len(future_recs))
         ctx.bag["UA-3-4-007"] = {"past": empty_past, "future": empty_future}
         return CaseStatus.PASS
     finally:

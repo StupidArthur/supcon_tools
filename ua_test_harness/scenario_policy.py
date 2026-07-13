@@ -4,7 +4,6 @@
   UA-1 -> execute_ua1_case
   UA-2 -> execute_ua2_case (章节 dispatcher)
   UA-3 -> execute_ua3_case (章节 dispatcher)
-  其他 -> _execute_shared (遗留)
 
 419 条文档 Case 均在 _SUPPORTED 中登记;运行时由对应 runtime 执行。
 仅 KNOWN_BLOCKED 中的 ID 在真环境中预期 BLOCKED/OBSERVED,不得空函数 PASS。
@@ -14,7 +13,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ua_test_harness.models import CaseStatus
-from ua_test_harness.scenario_runtime import execute_documented_case as _execute_shared
 from ua_test_harness.ua1_runtime import execute_ua1_case
 from ua_test_harness.ua2_registry import ua2_supported_sets
 from ua_test_harness.ua2_runtime import is_supported_ua2, execute_ua2_case
@@ -54,42 +52,6 @@ _SUPPORTED = {
 }
 
 
-_SHARED_SCENARIOS = {
-    "UA-3-1-001": "rt_read",
-    "UA-3-1-002": "rt_read",
-    "UA-3-1-003": "rt_read",
-    "UA-3-1-010": "rt_read",
-    "UA-3-2-001": "rt_read",
-    "UA-3-2-021": "rt_read",
-    "UA-3-3-001": "rt_write",
-    "UA-3-4-001": "history",
-    "UA-3-5-001": "response_time",
-    "UA-3-6-001": "performance",
-}
-
-
-def _ua3_scenario_for(meta) -> str:
-    cid = meta["id"]
-    title = meta.get("title") or ""
-    if cid in _SHARED_SCENARIOS:
-        return _SHARED_SCENARIOS[cid]
-    if "写" in title or "回写" in title:
-        return "rt_write"
-    if "历史" in title:
-        return "history"
-    if "响应" in title or "响应时间" in title:
-        return "response_time"
-    if "性能" in title or "并发" in title or "长稳" in title:
-        return "performance"
-    if "数据源" in title or "启用" in title or "禁用" in title:
-        return "datasource_state"
-    if "删除" in title or "软删" in title or "物理" in title:
-        return "tag_delete"
-    if "查询" in title or "列表" in title:
-        return "tag_query"
-    return "rt_read"
-
-
 _BLOCK_REASONS = {
     # 仅当 case 不在 _SUPPORTED 时使用的兜底说明
     "UA-2-2": "文档 Case 未纳入 supported 矩阵",
@@ -118,10 +80,7 @@ def classify_case(meta) -> ScenarioDecision:
         if case_id in _SUPPORTED.get(chapter, set()):
             return ScenarioDecision(True, scenario="ua1_runtime")
         return ScenarioDecision(False, reason=f"UA-1 not in supported matrix: {case_id}")
-    scenario = _SHARED_SCENARIOS.get(case_id)
-    if scenario:
-        return ScenarioDecision(True, scenario=scenario)
-    return ScenarioDecision(False, reason=f"no precise shared scenario for {case_id}")
+    return ScenarioDecision(False, reason=f"unsupported chapter for {case_id}")
 
 
 def execute_documented_case(ctx, cc, meta):
@@ -152,4 +111,5 @@ def execute_documented_case(ctx, cc, meta):
             )
             return CaseStatus.BLOCKED
         return execute_ua3_case(ctx, cc, meta)
-    return _execute_shared(ctx, cc, meta)
+    ctx.emitter.log("WARN", case_id, f"BLOCKED: unknown chapter {chapter}")
+    return CaseStatus.BLOCKED

@@ -544,7 +544,9 @@ def connection_case(ctx, cc, meta) -> CaseStatus:
             "mock_auth_available": bool(abnormal and num in (6, 7)),
         }
         if num == 6:
-            return CaseStatus.OBSERVED if _ds_alive(ctx, ds["id"]) else CaseStatus.PASS
+            if ctx.bag[cid].get("mock_auth_available"):
+                check_eq("alive_false_without_creds", False, _ds_alive(ctx, ds["id"]))
+            return CaseStatus.PASS if not _ds_alive(ctx, ds["id"]) else CaseStatus.OBSERVED
         if num in (7, 8):
             check_true("alive", _ds_alive(ctx, ds["id"]))
             return CaseStatus.PASS

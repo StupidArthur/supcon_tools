@@ -190,24 +190,8 @@ def _state(ctx, cc, meta):
         check_true("repeat_disable_stays_down", not bool((_row(ctx, ds["id"]) or {}).get("alive")))
         return CaseStatus.PASS
 
-    datasource.change_state(ctx, ds["id"], True)
-    check_true("reenable_alive", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
-    resumed = _wait_rt(ctx, tg["name"])
-    check_true("reenable_quality_good", _quality(resumed) not in (None, 0))
-    _wait_changed(ctx, tg["name"], _value(resumed))
-
-    if case_id == "UA-1-2-08":
-        datasource.change_state(ctx, ds["id"], False)
-        _wait_disabled(ctx, ds["id"])
-        datasource.change_state(ctx, ds["id"], True)
-        check_true("cycle_final_alive", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
-        final = _wait_rt(ctx, tg["name"])
-        _wait_changed(ctx, tg["name"], _value(final))
-        return CaseStatus.PASS
-
     if case_id in {"UA-1-2-03", "UA-1-2-04", "UA-1-2-05"}:
         from ua_test_harness.fixtures.history import HistoryFixtureFactory
-        from ua_test_harness.fixtures.tag import read_rt
 
         factory = HistoryFixtureFactory(ctx)
         try:
@@ -222,8 +206,9 @@ def _state(ctx, cc, meta):
             _wait_disabled(ctx, ds["id"])
             time.sleep(5)
             n_after = factory.verify_history(tg["name"], min_count=n_before)
+            check_eq("history_frozen_on_disable", n_before, n_after)
             ctx.bag[case_id] = {"before": n_before, "after_disable": n_after}
-            return CaseStatus.OBSERVED
+            return CaseStatus.PASS
 
         if case_id in {"UA-1-2-04", "UA-1-2-05"}:
             datasource.change_state(ctx, ds["id"], False)
@@ -238,6 +223,21 @@ def _state(ctx, cc, meta):
             except AssertFail as exc:
                 ctx.bag[case_id] = {"before": n_before, "history_check": str(exc)}
             return CaseStatus.OBSERVED
+
+    datasource.change_state(ctx, ds["id"], True)
+    check_true("reenable_alive", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
+    resumed = _wait_rt(ctx, tg["name"])
+    check_true("reenable_quality_good", _quality(resumed) not in (None, 0))
+    _wait_changed(ctx, tg["name"], _value(resumed))
+
+    if case_id == "UA-1-2-08":
+        datasource.change_state(ctx, ds["id"], False)
+        _wait_disabled(ctx, ds["id"])
+        datasource.change_state(ctx, ds["id"], True)
+        check_true("cycle_final_alive", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
+        final = _wait_rt(ctx, tg["name"])
+        _wait_changed(ctx, tg["name"], _value(final))
+        return CaseStatus.PASS
 
     return CaseStatus.PASS
 
