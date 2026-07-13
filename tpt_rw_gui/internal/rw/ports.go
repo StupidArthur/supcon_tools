@@ -15,7 +15,7 @@ type ClientPort interface {
 	QueryTagsWithQuality(dsID *int, groupID, tagName, tagBaseName string,
 		tagType, page, pageSize int, sort string) (json.RawMessage, error)
 	GetRTValue(tagNames []string) ([]tptapi.RtValuePoint, error)
-	WriteTagValues(values map[string]any) error
+	WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error)
 	GetHistoryValue(tagNames []string, begTime, endTime string,
 		interval int, isSecond, isSource bool, offset, option int,
 		page, pageSize int, sort string) (json.RawMessage, error)

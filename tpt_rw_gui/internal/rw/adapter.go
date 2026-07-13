@@ -52,12 +52,12 @@ func (a *TptClientAdapter) GetRTValue(tagNames []string) ([]tptapi.RtValuePoint,
 	return c.GetRTValue(tagNames)
 }
 
-func (a *TptClientAdapter) WriteTagValues(values map[string]any) error {
+func (a *TptClientAdapter) WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error) {
 	c := a.client()
 	if c == nil {
-		return &PublicError{Message: "未登录", Kind: "auth"}
+		return tptapi.WriteTagValuesResult{}, &PublicError{Message: "未登录", Kind: "auth"}
 	}
-	return c.WriteTagValues(values)
+	return c.WriteTagValuesWithResult(values)
 }
 
 func (a *TptClientAdapter) GetHistoryValue(tagNames []string, begTime, endTime string,

@@ -141,11 +141,21 @@ export function VerifyPanel({ disabled, onAuthError }: Props) {
     if (!tagName || writeVal === '' || writeBusy) return;
     setWriteBusy(true);
     try {
-      await rwApi.writeValues({
+      const res = await rwApi.writeValues({
         values: { [tagName]: writeVal },
         readbackDelayMs: 1000,
       });
-      toast.push({ kind: 'success', message: `已写入 ${tagName} = ${writeVal}` });
+      const failCount = res.fails ? Object.keys(res.fails).length : 0;
+      if (failCount > 0) {
+        const details = Object.entries(res.fails!)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; ');
+        toast.push({ kind: 'error', message: `写值失败: ${details}` });
+      } else if (res.readback && res.readback.length > 0 && res.readback[0].value !== writeVal) {
+        toast.push({ kind: 'error', message: `回读不一致: 写入 ${writeVal}, 回读 ${res.readback[0].value}` });
+      } else {
+        toast.push({ kind: 'success', message: `已写入 ${tagName} = ${writeVal}` });
+      }
     } catch (e) {
       if (isAuthError(e)) {
         onAuthError?.();

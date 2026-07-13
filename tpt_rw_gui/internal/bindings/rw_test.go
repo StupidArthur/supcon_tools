@@ -44,7 +44,7 @@ func (s *stubPort) GetRTValue(names []string) ([]tptapi.RtValuePoint, error) {
 	}
 	return out, nil
 }
-func (s *stubPort) WriteTagValues(values map[string]any) error {
+func (s *stubPort) WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.written == nil {
@@ -53,7 +53,7 @@ func (s *stubPort) WriteTagValues(values map[string]any) error {
 	for k, v := range values {
 		s.written[k] = v
 	}
-	return nil
+	return tptapi.WriteTagValuesResult{}, nil
 }
 func (s *stubPort) GetHistoryValue(_ []string, _, _ string, _ int, _, _ bool, _, _ int, _, _ int, _ string) (json.RawMessage, error) {
 	s.histMode = rw.ModePage
@@ -74,7 +74,9 @@ func (f *fakeAdapter) QueryTagsWithQuality(dsID *int, groupID, tagName, tagBaseN
 func (f *fakeAdapter) GetRTValue(tagNames []string) ([]tptapi.RtValuePoint, error) {
 	return f.p.GetRTValue(tagNames)
 }
-func (f *fakeAdapter) WriteTagValues(values map[string]any) error { return f.p.WriteTagValues(values) }
+func (f *fakeAdapter) WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error) {
+	return f.p.WriteTagValues(values)
+}
 func (f *fakeAdapter) GetHistoryValue(tagNames []string, begTime, endTime string, interval int, isSecond, isSource bool, offset, option int, page, pageSize int, sort string) (json.RawMessage, error) {
 	return f.p.GetHistoryValue(tagNames, begTime, endTime, interval, isSecond, isSource, offset, option, page, pageSize, sort)
 }
@@ -246,7 +248,7 @@ func (a *nonexistentAdapter) QueryTagsWithQuality(dsID *int, groupID, tagName, t
 func (a *nonexistentAdapter) GetRTValue(tagNames []string) ([]tptapi.RtValuePoint, error) {
 	return nil, &tptapi.TptAPIError{Code: "500", Msg: "Tag Dose Not Exist"}
 }
-func (a *nonexistentAdapter) WriteTagValues(values map[string]any) error {
+func (a *nonexistentAdapter) WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error) {
 	return a.stub.WriteTagValues(values)
 }
 func (a *nonexistentAdapter) GetHistoryValue(tagNames []string, begTime, endTime string, interval int, isSecond, isSource bool, offset, option int, page, pageSize int, sort string) (json.RawMessage, error) {

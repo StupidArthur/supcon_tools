@@ -195,3 +195,9 @@ type AddTagParams struct {
 	LimitDownDownDown *float64 // 低低低限
 	// NeedPush/IsVector 固定 true(对齐 python 默认),不暴露
 }
+
+// WriteTagValuesResult 平台 writeTagValues 响应。
+type WriteTagValuesResult struct {
+	TagNames []string          `json:"tagNames"` // 成功回写的位号名
+	FailMsg  map[string]string `json:"failMsg"`  // 失败位号及原因
+}

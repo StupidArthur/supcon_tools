@@ -102,12 +102,30 @@ func (c *TptClient) GetRTValue(tagNames []string) ([]RtValuePoint, error) {
 	return points, nil
 }
 
-// WriteTagValues 回写位号值(对齐 datahub.write_tag_values,wrap=true)。
+// WriteTagValues 回写位号值,仅返回 error。需要 failMsg 信息时用 WriteTagValuesWithResult。
 // values: {tagName: tagValue},tagValue 为 number/string/bool(any)。
 func (c *TptClient) WriteTagValues(values map[string]any) error {
-	body := map[string]any{"values": values}
-	_, err := c.request("POST", epWriteTagValues, body, true)
+	_, err := c.WriteTagValuesWithResult(values)
 	return err
+}
+
+// WriteTagValuesWithResult 回写位号值,返回平台响应(含成功位号名和失败原因)。
+// 平台返回 content: {"tagNames": ["成功位号"], "failMsg": {"失败位号": "原因"}, "msg": "..."}。
+// 解析失败不阻断(平台可能返回空对象),best-effort 返回空结果。
+func (c *TptClient) WriteTagValuesWithResult(values map[string]any) (WriteTagValuesResult, error) {
+	body := map[string]any{"values": values}
+	content, err := c.request("POST", epWriteTagValues, body, true)
+	if err != nil {
+		return WriteTagValuesResult{}, err
+	}
+	var result WriteTagValuesResult
+	if len(content) == 0 || string(content) == "null" {
+		return WriteTagValuesResult{}, nil
+	}
+	if err := json.Unmarshal(content, &result); err != nil {
+		return WriteTagValuesResult{}, nil
+	}
+	return result, nil
 }
 
 // GetAllDsInfo 翻页拉取所有数据源(对齐 datahub.get_all_ds_info)。

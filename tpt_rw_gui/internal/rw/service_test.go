@@ -21,6 +21,7 @@ type fakeClient struct {
 	histMap   json.RawMessage // /getHistoryValueFromDB 响应
 	histMode  Mode
 	calls     int
+	writeRes  tptapi.WriteTagValuesResult // 可选:WriteTagValues 返回值
 }
 
 func (f *fakeClient) GetAllDsInfo() ([]tptapi.DsInfo, error) {
@@ -51,11 +52,14 @@ func (f *fakeClient) GetRTValue(tagNames []string) ([]tptapi.RtValuePoint, error
 	return out, nil
 }
 
-func (f *fakeClient) WriteTagValues(values map[string]any) error {
+func (f *fakeClient) WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
-	return nil
+	if f.writeRes.TagNames != nil || f.writeRes.FailMsg != nil {
+		return f.writeRes, nil
+	}
+	return tptapi.WriteTagValuesResult{}, nil
 }
 
 func (f *fakeClient) GetHistoryValue(_ []string, _ string, _ string,
@@ -244,7 +248,9 @@ func (c *rawClient) QueryTagsWithQuality(dsID *int, groupID, tagName, tagBaseNam
 	return c.resp, nil
 }
 func (c *rawClient) GetRTValue(tagNames []string) ([]tptapi.RtValuePoint, error) { return nil, nil }
-func (c *rawClient) WriteTagValues(values map[string]any) error               { return nil }
+func (c *rawClient) WriteTagValues(values map[string]any) (tptapi.WriteTagValuesResult, error) {
+	return tptapi.WriteTagValuesResult{}, nil
+}
 func (c *rawClient) GetHistoryValue(_ []string, _ string, _ string,
 	_ int, _, _ bool, _, _ int, _, _ int, _ string) (json.RawMessage, error) {
 	return nil, nil
@@ -290,6 +296,76 @@ func TestWriteValues_WithReadback_Succeeds(t *testing.T) {
 	}
 	if res == nil || len(res.Readback) != 1 {
 		t.Fatalf("want 1 readback, got %+v", res)
+	}
+}
+
+// 平台 failMsg 报告失败位号 + 原因,前端看到 toast 红字而不是"已写入"。
+func TestWriteValues_PlatformFailMsg_ReturnsFails(t *testing.T) {
+	fc := &fakeClient{
+		writeRes: tptapi.WriteTagValuesResult{
+			TagNames: []string{"ok_tag"},
+			FailMsg:  map[string]string{"bad_tag": "readonly"},
+		},
+	}
+	s := NewService(fc)
+	res, err := s.WriteValues(context.Background(), WriteRequest{
+		Values:        map[string]any{"ok_tag": 1.0, "bad_tag": 2.0},
+		ReadbackDelay: 0, // 不回读,只验证平台响应填充
+	})
+	if err != nil {
+		t.Fatalf("WriteValues: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("want non-nil res")
+	}
+	if res.Fails == nil {
+		t.Fatalf("want Fails populated, got nil")
+	}
+	if msg, ok := res.Fails["bad_tag"]; !ok || msg != "readonly" {
+		t.Fatalf("want Fails[bad_tag]=readonly, got %+v", res.Fails)
+	}
+	found := false
+	for _, n := range res.Written {
+		if n == "ok_tag" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("want Written to contain ok_tag, got %+v", res.Written)
+	}
+}
+
+// 平台未返回 tagNames 也未返回 failMsg(成功响应),且无回读,Written 应兜底为 Values 键集。
+func TestWriteValues_NoReadback_NoFailMsg_UsesValuesKeys(t *testing.T) {
+	fc := &fakeClient{} // 默认空 WriteTagValuesResult
+	s := NewService(fc)
+	res, err := s.WriteValues(context.Background(), WriteRequest{
+		Values:        map[string]any{"demo.a": 1.0, "demo.b": 2.0},
+		ReadbackDelay: 0,
+	})
+	if err != nil {
+		t.Fatalf("WriteValues: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("want non-nil res")
+	}
+	if len(res.Fails) > 0 {
+		t.Fatalf("want empty Fails, got %+v", res.Fails)
+	}
+	if len(res.Written) != 2 {
+		t.Fatalf("want 2 Written entries, got %+v", res.Written)
+	}
+	want := map[string]bool{"demo.a": false, "demo.b": false}
+	for _, n := range res.Written {
+		if _, ok := want[n]; ok {
+			want[n] = true
+		}
+	}
+	for k, hit := range want {
+		if !hit {
+			t.Fatalf("Written missing %s, got %+v", k, res.Written)
+		}
 	}
 }
 

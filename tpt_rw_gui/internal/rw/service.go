@@ -237,17 +237,33 @@ func (s *Service) ReadRealtime(ctx context.Context, tagNames []string) ([]RTValu
 
 // WriteValues 写值 + 可选 ~1s 回读。
 //
-// 回读 = 等 req.ReadbackDelay(默认 1s)后,调 ReadRealtime(req.ReadbackTagNames 或 Values 键集)。
-// Fails 来自回读中 IsSuccess=false 或无数据的点。
+// Fails 来自平台响应 failMsg(写失败)和回读中 IsSuccess=false / 无数据的点。
 func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResult, error) {
 	if len(req.Values) == 0 {
 		return &WriteResult{}, MapError(fmt.Errorf("values 不能为空"))
 	}
-	if err := s.client.WriteTagValues(req.Values); err != nil {
+	writeRes, err := s.client.WriteTagValues(req.Values)
+	if err != nil {
 		return nil, MapError(err)
 	}
+	res := &WriteResult{
+		Written: writeRes.TagNames,
+	}
+	if len(writeRes.FailMsg) > 0 {
+		res.Fails = make(map[string]string, len(writeRes.FailMsg))
+		for k, v := range writeRes.FailMsg {
+			res.Fails[k] = v
+		}
+	}
 	if req.ReadbackDelay <= 0 {
-		return &WriteResult{}, nil
+		// 无回读:若平台未报 failMsg,Written 用 Values 的 key 集(平台成功时不一定返回 tagNames)
+		if len(res.Written) == 0 && len(res.Fails) == 0 {
+			res.Written = make([]string, 0, len(req.Values))
+			for k := range req.Values {
+				res.Written = append(res.Written, k)
+			}
+		}
+		return res, nil
 	}
 	// 同步等待,简单可靠。GUI 用户一次操作大概等得起 1s。
 	time.Sleep(req.ReadbackDelay)
@@ -260,11 +276,13 @@ func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResu
 	}
 	pts, err := s.client.GetRTValue(tagNames)
 	if err != nil {
-		// 回读失败,不算写失败,把 readback 部分返回 errors 即可。
-		return &WriteResult{Fails: map[string]string{"readback": err.Error()}}, nil
+		if res.Fails == nil {
+			res.Fails = make(map[string]string)
+		}
+		res.Fails["readback"] = err.Error()
+		return res, nil
 	}
-	res := &WriteResult{Readback: make([]RTValue, 0, len(pts))}
-	fails := map[string]string{}
+	res.Readback = make([]RTValue, 0, len(pts))
 	for _, p := range pts {
 		res.Readback = append(res.Readback, RTValue{
 			TagName: p.TagName, Value: p.TagValue,
@@ -273,14 +291,16 @@ func (s *Service) WriteValues(ctx context.Context, req WriteRequest) (*WriteResu
 			IsSuccess: p.IsSuccess, Message: p.Message,
 		})
 		if !p.IsSuccess {
-			fails[p.TagName] = p.Message
+			if res.Fails == nil {
+				res.Fails = make(map[string]string)
+			}
+			res.Fails[p.TagName] = p.Message
 		}
 	}
-	if len(fails) > 0 {
-		res.Fails = fails
+	// 若平台未返回 tagNames 且无 failMsg,用 Values key 集
+	if len(res.Written) == 0 && len(res.Fails) == 0 {
+		res.Written = tagNames
 	}
-	// "Written" 是所有 key 的并集(平台写接口成功时不返回 tag 列表)
-	res.Written = tagNames
 	return res, nil
 }
 
