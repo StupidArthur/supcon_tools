@@ -1147,3 +1147,173 @@
 - 未跑=12 PARTIAL
 
 ---
+
+---
+
+## 真跑批次 — ua1-ch3-ch6-rerun-ch4-blocked (2026-07-13 18:28)
+
+**产物**: `output/automation_ua2_default_20260713_182442`
+**选择**: {"selectionMode": "cases", "requested": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08", "UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13", "UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 27, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08", "UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13", "UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=6 TIMEOUT=0 chapterTimeoutSec=14400.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — ua1-ch3-ch6-rerun2 (2026-07-13 18:30)
+
+**产物**: `output/automation_ua2_default_20260713_182939`
+**选择**: {"selectionMode": "cases", "requested": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08", "UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13", "UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 27, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08", "UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13", "UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=21 BLOCKED=6 TIMEOUT=0 chapterTimeoutSec=14400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-01`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-02`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-03`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-04`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-05`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-06`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-07`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-08`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-01`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-02`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-03`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-04`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-05`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-06`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-07`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-08`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-09`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-10`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-11`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-12`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-6-13`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+
+---
+
+## 真跑批次 — ua1-ch3-rerun3 (2026-07-13 18:32)
+
+**产物**: `output/automation_ua2_ua13_20260713_183220`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 8, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — ua1-ch3-rerun4 (2026-07-13 18:34)
+
+**产物**: `output/automation_ua2_ua13_20260713_183340`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 8, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=7 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-02`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-03`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-04`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-05`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-06`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-07`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+- `UA-1-3-08`: assert: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+  - step `None`: datasource endpoint already exists; refusing to reuse/delete it: [{'id': 166, 'name': 'ua_auto_ua1_3_1', 'endpoint': 'opc.tcp://10.30.70.77:18960/ua_mocker/'}]
+
+---
+
+## 真跑批次 — UA-2 真跑 chapter (2026-07-13 18:37)
+
+**产物**: `output/automation_ua2_ua13_20260713_183656`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 8, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2700.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-01`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-02`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-03`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-04`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-05`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-06`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-07`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-08`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+
+---
+
+## 真跑批次 — UA-2 真跑 chapter (2026-07-13 18:39)
+
+**产物**: `output/automation_ua2_ua16_20260713_183801`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-6", "strictPoolSize": 13, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 12, "selectedCases": ["UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12"], "remainingAfterBatch": 1}
+**结果**: PASS=3 FAIL=2 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2700.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-6-05`: assert: getRTValue timeout for ua_case_ua2_UA_1_6_05_ua1_UA_1_6_0_65_360300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_6_05_ua1_UA_1_6_0_65_360300
+- `UA-1-6-06`: assert: [failed] not true.
+  - step `None`: [failed] not true.
+
+**ERROR triage** (harness/产品, 非前缀问题):
+- `UA-1-6-02`: `[A0001] The data source is not enabled or offline` — 枚举未连接 DS 位号
+- `UA-1-6-04`: `BadNodeIdUnknown` — testType=2 读源端实时值, smoke.yaml 节点映射
+- `UA-1-6-07`: `[A0001] The data source is not enabled or offline` — 读未连接 DS 位号
+- `UA-1-6-10`: `BadNodeIdUnknown` — 写可写位号, 节点不存在
+
+**OBSERVED** (探索类, 非回归 FAIL): UA-1-6-03 / 08 / 11
+
+**PASS**: UA-1-6-01 / 09 / 12
+
+---
+
+## 代码修复 — UA-1 DS 前缀 + UA-1-4 BLOCKED (2026-07-13 18:36~18:40)
+
+**修改文件**(未 commit):
+- `ua_test_harness/ua1_precise.py`: DS 名 `ua1_3_*`/`ua1_6_*` → `ua_auto_ua1_3_*`/`ua_auto_ua1_6_*`; 去掉 `finally` 中 `registry.pop` 跳过 LIFO; 修复 `registry.pop(k,None)` 语法
+- `ua_test_harness/ua1_runtime.py`: `_dispatch_ua1_4` 查 `known_blocked` 早退 BLOCKED
+- `ua_test_harness/known_blocked.py`: UA-1-4-01~06 登记 BLOCKED
+- `scripts/cleanup_ua2_resources.py`: UA-1 cleanup 支持 `--include-case-datasources` 删 `ua_auto_*` DS
+
+**前缀修复验收**:
+- 原 21 条 `automation datasource name must use an owned prefix` **全部消除**
+- 环境清理后批次内 **无 endpoint already exists** 冲突; per-case cleanup 全部 PASS
+
+**UA-1-4 BLOCKED** (上轮 `182939` 已验, 本轮保持):
+- UA-1-4-01~06 → BLOCKED=6
+- 理由: `UA-1-4 双源需 ua_shared_ua2_types_ds(18965)+empty_ds(18967); UA-1 runner 仅 18960 functional mock`
+
+**UA-1-3 重跑** (`output/automation_ua2_ua13_20260713_183656`):
+- PASS=0 FAIL=8 ERROR=0 — 全部 `[changing] not true` (**产品 FAIL**, RT 连续两次读值相同)
+
+**UA-1-6 重跑** (`output/automation_ua2_ua16_20260713_183801`):
+- PASS=3 OBSERVED=3 FAIL=2 ERROR=4 (UA-1-6-13 未入本批 limit=12)

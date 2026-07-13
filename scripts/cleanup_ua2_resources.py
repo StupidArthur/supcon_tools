@@ -75,21 +75,21 @@ def _collect_tag_ids(api, name_prefix: str) -> tuple[list[int], list[int]]:
     return active_ids, recycle_ids
 
 
-def _collect_case_ds_ids(api) -> list[int]:
+def _collect_case_ds_ids(api, *, name_prefix: str = CASE_DS_PREFIX) -> list[int]:
     from tpt_api.datahub import list_ds_info
 
     out: list[int] = []
     page = 1
     while True:
-        res = list_ds_info(api, page=page, page_size=500, data={"dsName": CASE_DS_PREFIX})
+        res = list_ds_info(api, page=page, page_size=500, data={"dsName": name_prefix})
         recs = (res or {}).get("records") or []
         if not recs:
             break
         out.extend(
             int(r["id"])
             for r in recs
-            if str(r.get("dsName", "")).startswith(CASE_DS_PREFIX)
-            or str(r.get("name", "")).startswith(CASE_DS_PREFIX)
+            if str(r.get("dsName", "")).startswith(name_prefix)
+            or str(r.get("name", "")).startswith(name_prefix)
         )
         if len(recs) < 500:
             break
@@ -123,7 +123,12 @@ def main() -> int:
 
     api = _login(ctx)
     active_ids, recycle_ids = _collect_tag_ids(api, args.prefix)
-    case_ds_ids = _collect_case_ds_ids(api) if args.include_case_datasources else []
+    ds_prefix = (
+        args.prefix
+        if args.include_case_datasources and args.prefix.startswith("ua_auto_")
+        else CASE_DS_PREFIX
+    )
+    case_ds_ids = _collect_case_ds_ids(api, name_prefix=ds_prefix) if args.include_case_datasources else []
 
     log: dict[str, Any] = {
         "prefix": args.prefix,
@@ -160,7 +165,7 @@ def main() -> int:
                 log["actions"].append(f"delete_case_ds_failed error={type(exc).__name__}: {exc}")
 
     post_active, post_recycle = _collect_tag_ids(api, args.prefix)
-    post_ds = _collect_case_ds_ids(api) if args.include_case_datasources else []
+    post_ds = _collect_case_ds_ids(api, name_prefix=ds_prefix) if args.include_case_datasources else []
     log["residualActive"] = len(post_active)
     log["residualRecycle"] = len(post_recycle)
     log["residualCaseDatasources"] = len(post_ds)

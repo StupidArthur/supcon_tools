@@ -58,7 +58,7 @@ def disconnect_metrics(ctx, cc, meta) -> CaseStatus:
 
     from ua_test_harness.clients.tpt_client import endpoint_for
     endpoint = ctx.config.mock.endpoints.functional or endpoint_for("functional", ctx)
-    ds = create_datasource(ctx, f"ua1_3_{num}", endpoint, registry=cc.registry)
+    ds = create_datasource(ctx, f"ua_auto_ua1_3_{num}", endpoint, registry=cc.registry)
     change_state(ctx, ds["id"], True)
     wait_alive(ctx, ds["id"], timeout=60.0)
     tag = create_tag(
@@ -178,9 +178,8 @@ def disconnect_metrics(ctx, cc, meta) -> CaseStatus:
             return CaseStatus.OBSERVED
 
         return CaseStatus.OBSERVED
-    finally:
-        cc.registry.pop(f"tag:{tag_name}", None)
-        cc.registry.pop(f"ds:{ds['name']}", None)
+    except AssertFail:
+        raise
 
 
 def dual_ds_isolation(ctx, cc, meta) -> CaseStatus:
@@ -279,7 +278,7 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
 
     from ua_test_harness.clients.tpt_client import endpoint_for
     endpoint = ctx.config.mock.endpoints.functional or endpoint_for("functional", ctx)
-    ds = create_datasource(ctx, f"ua1_6_{num}", endpoint, registry=cc.registry)
+    ds = create_datasource(ctx, f"ua_auto_ua1_6_{num}", endpoint, registry=cc.registry)
     change_state(ctx, ds["id"], True)
     wait_alive(ctx, ds["id"], timeout=60.0)
     ds_id = int(ds["id"])
@@ -389,8 +388,8 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
             return CaseStatus.OBSERVED
 
         return CaseStatus.OBSERVED
-    finally:
-        cc.registry.pop(f"ds:{ds['name']}", None)
+    except AssertFail:
+        raise
 
 
 def _unique(ctx, prefix: str) -> str:
@@ -583,8 +582,8 @@ def delete_matrix_case(ctx, cc, meta) -> CaseStatus:
         try:
             delete_ds_info(api, [ds["id"]])
             deleted = True
-            cc.registry.pop(f"ds:{ds['name']}", None)
-            cc.registry.pop(f"tag:{tg['name']}", None)
+            cc.registry.pop(f"ds:{ds['name']}")
+            cc.registry.pop(f"tag:{tg['name']}")
         except Exception as exc:
             err = str(exc)
         ctx.bag[cid] = {"deleted": deleted, "error": err}
@@ -597,7 +596,7 @@ def delete_matrix_case(ctx, cc, meta) -> CaseStatus:
         try:
             delete_ds_info(api, [ds["id"]])
             deleted = get_state(ctx, ds["id"]) is None
-            cc.registry.pop(f"ds:{ds['name']}", None)
+            cc.registry.pop(f"ds:{ds['name']}")
         except Exception as exc:
             err = str(exc)
         ctx.bag[cid] = {"deleted": deleted, "error": err}
@@ -636,7 +635,7 @@ def delete_matrix_case(ctx, cc, meta) -> CaseStatus:
             change_state(ctx, ds["id"], False)
             delete_ds_info(api, [ds["id"]])
             deleted = get_state(ctx, ds["id"]) is None
-            cc.registry.pop(f"ds:{ds['name']}", None)
+            cc.registry.pop(f"ds:{ds['name']}")
         except Exception as exc:
             err = str(exc)
         recycle_after = list_recycle_tags(api, page=1, page_size=50)
@@ -653,7 +652,7 @@ def delete_matrix_case(ctx, cc, meta) -> CaseStatus:
         change_state(ctx, ds["id"], False)
         try:
             delete_ds_info(api, [ds["id"]])
-            cc.registry.pop(f"ds:{ds['name']}", None)
+            cc.registry.pop(f"ds:{ds['name']}")
         except Exception:
             pass
         rebuilt = create_datasource(ctx, _unique(ctx, "ua1_5_06b"), endpoint, registry=cc.registry)
@@ -682,7 +681,7 @@ def delete_matrix_case(ctx, cc, meta) -> CaseStatus:
         )
         wait_tag_present(ctx, tg_b["name"])
         delete_ds_info(api, [ds_a["id"]])
-        cc.registry.pop(f"ds:{ds_a['name']}", None)
+        cc.registry.pop(f"ds:{ds_a['name']}")
         check_true("ds_b_alive", _ds_alive(ctx, ds_b["id"]))
         read_rt(ctx, tg_b["name"])
         return CaseStatus.PASS
@@ -700,7 +699,7 @@ def delete_matrix_case(ctx, cc, meta) -> CaseStatus:
         physical_delete_tag(ctx, int(tg["id"]))
         try:
             delete_ds_info(api, [ds["id"]])
-            cc.registry.pop(f"ds:{ds['name']}", None)
+            cc.registry.pop(f"ds:{ds['name']}")
         except Exception as exc:
             ctx.bag[cid] = {"delete_error": str(exc)}
             return CaseStatus.OBSERVED

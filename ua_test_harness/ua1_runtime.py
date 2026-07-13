@@ -280,8 +280,8 @@ def _delete(ctx, cc, meta):
         delete_tags_physical(_api(ctx), [tg["id"]])
         datasource.change_state(ctx, ds["id"], False)
         delete_ds_info(_api(ctx), [ds["id"]])
-        cc.registry.pop(f"tag:{tg['name']}", None)
-        cc.registry.pop(f"ds:{ds['name']}", None)
+        cc.registry.pop(f"tag:{tg['name']}")
+        cc.registry.pop(f"ds:{ds['name']}")
         check_true("deleted", _row(ctx, ds["id"]) is None)
         return CaseStatus.PASS
 
@@ -312,6 +312,12 @@ def _dispatch_ua1_3(ctx, cc, meta) -> CaseStatus:
 
 
 def _dispatch_ua1_4(ctx, cc, meta) -> CaseStatus:
+    from ua_test_harness.known_blocked import blocked_reason
+
+    reason = blocked_reason(meta["id"])
+    if reason:
+        ctx.bag[f"blocked_{meta['id']}"] = reason
+        return CaseStatus.BLOCKED
     from ua_test_harness.ua1_precise import dual_ds_isolation
     return dual_ds_isolation(ctx, cc, meta)
 
