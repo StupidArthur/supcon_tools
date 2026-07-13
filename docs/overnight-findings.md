@@ -711,3 +711,21 @@
 **结果**: PASS=10 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
 
 **产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2-2-chapter-run (2026-07-13 14:30)
+
+**产物**: `output/automation_ua2_ua22_20260713_142746`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-2", "strictPoolSize": 55, "excludedPartial": [], "skippedVerified": ["UA-2-2-004", "UA-2-2-005", "UA-2-2-008", "UA-2-2-011", "UA-2-2-015", "UA-2-2-016", "UA-2-2-019", "UA-2-2-033"], "limitApplied": 47, "selectedCases": ["UA-2-2-001", "UA-2-2-002", "UA-2-2-003", "UA-2-2-006", "UA-2-2-012", "UA-2-2-014", "UA-2-2-017", "UA-2-2-018", "UA-2-2-020", "UA-2-2-022", "UA-2-2-023", "UA-2-2-024", "UA-2-2-025", "UA-2-2-026", "UA-2-2-027", "UA-2-2-028", "UA-2-2-029", "UA-2-2-030", "UA-2-2-031", "UA-2-2-032", "UA-2-2-034", "UA-2-2-035", "UA-2-2-036", "UA-2-2-037", "UA-2-2-038", "UA-2-2-039", "UA-2-2-040", "UA-2-2-041", "UA-2-2-042", "UA-2-2-045", "UA-2-2-048", "UA-2-2-049", "UA-2-2-050", "UA-2-2-051", "UA-2-2-052", "UA-2-2-054", "UA-2-2-055", "UA-2-2-056", "UA-2-2-057", "UA-2-2-058", "UA-2-2-059", "UA-2-2-060", "UA-2-2-061", "UA-2-2-062", "UA-2-2-065", "UA-2-2-066", "UA-2-2-067"], "remainingAfterBatch": 0}
+**结果**: PASS=39 FAIL=4 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=10800.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-2-036`: assert: [quality_field] not true.
+  - step `None`: [quality_field] not true.
+- `UA-2-2-039`: assert: [tagTime_parseable] not true.
+  - step `None`: [tagTime_parseable] not true.
+- `UA-2-2-040`: assert: [value_stable] expected=5.0 actual=9.0
+  - step `None`: [value_stable] expected=5.0 actual=9.0
+- `UA-2-2-055`: assert: [no_dup_bases] expected=520 actual=26
+  - step `None`: [no_dup_bases] expected=520 actual=26
