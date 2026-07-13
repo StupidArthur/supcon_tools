@@ -141,8 +141,8 @@ def _connection(ctx, cc, meta):
 
     if case_id in {"UA-1-1-03", "UA-1-1-05", "UA-1-1-06", "UA-1-1-07", "UA-1-1-08",
                    "UA-1-1-09", "UA-1-1-10", "UA-1-1-11"}:
-        ctx.bag[f"ua1_1_{case_id}"] = "auth_or_recovery_needs_fixture"
-        return CaseStatus.BLOCKED
+        from ua_test_harness.ua1_precise import connection_case
+        return connection_case(ctx, cc, meta)
 
     endpoint = _endpoint(ctx)
     if case_id == "UA-1-1-01":
@@ -206,8 +206,38 @@ def _state(ctx, cc, meta):
         return CaseStatus.PASS
 
     if case_id in {"UA-1-2-03", "UA-1-2-04", "UA-1-2-05"}:
-        ctx.bag[f"ua1_2_{case_id}"] = "history_or_recovery_proxy"
-        return CaseStatus.OBSERVED
+        from ua_test_harness.fixtures.history import HistoryFixtureFactory
+        from ua_test_harness.fixtures.tag import read_rt
+
+        factory = HistoryFixtureFactory(ctx)
+        try:
+            factory.create_import_dataset(tg["name"], count=20)
+            n_before = factory.verify_history(tg["name"], min_count=10)
+        except AssertFail as exc:
+            ctx.bag[f"setup_failed_{case_id}"] = str(exc)
+            return CaseStatus.BLOCKED
+
+        if case_id == "UA-1-2-03":
+            datasource.change_state(ctx, ds["id"], False)
+            _wait_disabled(ctx, ds["id"])
+            time.sleep(5)
+            n_after = factory.verify_history(tg["name"], min_count=n_before)
+            ctx.bag[case_id] = {"before": n_before, "after_disable": n_after}
+            return CaseStatus.OBSERVED
+
+        if case_id in {"UA-1-2-04", "UA-1-2-05"}:
+            datasource.change_state(ctx, ds["id"], False)
+            _wait_disabled(ctx, ds["id"])
+            datasource.change_state(ctx, ds["id"], True)
+            check_true("reenable_alive", datasource.wait_alive(ctx, ds["id"], timeout=60.0))
+            _wait_rt(ctx, tg["name"])
+            time.sleep(5)
+            try:
+                n_after = factory.verify_history(tg["name"], min_count=n_before)
+                ctx.bag[case_id] = {"before": n_before, "after_reenable": n_after}
+            except AssertFail as exc:
+                ctx.bag[case_id] = {"before": n_before, "history_check": str(exc)}
+            return CaseStatus.OBSERVED
 
     return CaseStatus.PASS
 
@@ -236,6 +266,13 @@ def _delete(ctx, cc, meta):
         check_true("rebuilt_alive", bool((_row(ctx, rebuilt["id"]) or {}).get("alive")))
         _wait_rt(ctx, rebuilt_tag["name"])
         return CaseStatus.PASS
+
+    if case_id in {
+        "UA-1-5-02", "UA-1-5-03", "UA-1-5-04", "UA-1-5-05",
+        "UA-1-5-06", "UA-1-5-08", "UA-1-5-09",
+    }:
+        from ua_test_harness.ua1_precise import delete_matrix_case
+        return delete_matrix_case(ctx, cc, meta)
 
     if case_id.startswith("UA-1-5-"):
         ds, tg = _prepare(ctx, cc, with_tag=True, enabled=True)
@@ -270,20 +307,15 @@ def execute_ua1_case(ctx, cc, meta):
 
 
 def _dispatch_ua1_3(ctx, cc, meta) -> CaseStatus:
-    from ua_test_harness.scenario_runtime import _rt_read
-    ctx.bag[f"ua1_3_{meta['id']}"] = "uses_rt_read_proxy"
-    return _rt_read(ctx, cc, meta)
+    from ua_test_harness.ua1_precise import disconnect_metrics
+    return disconnect_metrics(ctx, cc, meta)
 
 
 def _dispatch_ua1_4(ctx, cc, meta) -> CaseStatus:
-    ctx.bag[f"blocked_{meta['id']}"] = "双源隔离夹具未就绪"
-    return CaseStatus.BLOCKED
+    from ua_test_harness.ua1_precise import dual_ds_isolation
+    return dual_ds_isolation(ctx, cc, meta)
 
 
 def _dispatch_ua1_6(ctx, cc, meta) -> CaseStatus:
-    from tpt_api.datahub import list_ds_info
-    ds, _ = _prepare(ctx, cc, with_tag=False)
-    page = list_ds_info(_api(ctx), page=1, page_size=10, data={"id": ds["id"]})
-    check_true("ds_info_visible", bool(page.get("records")))
-    ctx.bag[f"ua1_6_{meta['id']}"] = page
-    return CaseStatus.OBSERVED
+    from ua_test_harness.ua1_precise import test_ds_info_case
+    return test_ds_info_case(ctx, cc, meta)

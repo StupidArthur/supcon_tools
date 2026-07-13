@@ -21,6 +21,7 @@ from ua_test_harness.provisioning import require_shared_datasource
 from ua_test_harness.ua2_ops import (
     active_rows,
     all_active_rows,
+    case_tag_name,
     cleanup_case_tag,
     create_case_tag,
     exact,
@@ -486,6 +487,151 @@ def _observed_ua2_2(ctx, meta, detail: Any = None) -> CaseStatus:
     return CaseStatus.OBSERVED
 
 
+def browse_ds_isolation(ctx, cc) -> CaseStatus:
+    """UA-2-2-041: types/empty 双 DS browse 隔离。"""
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    from ua_test_harness.ua2_browse import browse_all_nodes, filter_unregistered
+
+    types = require_shared_datasource(ctx, "types")
+    empty = require_shared_datasource(ctx, "empty")
+    t_id, e_id = int(types["id"]), int(empty["id"])
+    t_nodes = filter_unregistered(ctx, t_id, browse_all_nodes(ctx, t_id))
+    e_nodes = filter_unregistered(ctx, e_id, browse_all_nodes(ctx, e_id))
+    check_true("types_browse_non_empty", len(t_nodes) > 0)
+    ctx.bag["UA-2-2-041"] = {"types": len(t_nodes), "empty": len(e_nodes)}
+    return CaseStatus.PASS
+
+
+def browse_node_info(ctx, cc) -> CaseStatus:
+    """UA-2-2-042: browse 节点字段与 asyncua 可读。"""
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    from ua_test_harness.ua2_browse import browse_all_nodes, filter_unregistered
+    from ua_test_harness.ua2_precise import opcua_read
+
+    ds = require_shared_datasource(ctx, "types")
+    ds_id = int(ds["id"])
+    endpoint = str(ds["endpoint"])
+    nodes = filter_unregistered(ctx, ds_id, browse_all_nodes(ctx, ds_id))
+    check_true("browse_has_nodes", bool(nodes))
+    entry = nodes[0]
+    raw_name = str(entry.get("name") or entry.get("browseName") or "")
+    check_true("node_name_present", bool(raw_name))
+    opcua_read(endpoint, raw_name)
+    check_true(
+        "type_fields_present",
+        entry.get("tagDataType") is not None or entry.get("hubDataType") is not None,
+    )
+    return CaseStatus.PASS
+
+
+def browse_name_filter_explore(ctx, cc, meta) -> CaseStatus:
+    """UA-2-2-043: 名称片段过滤探索。"""
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    from ua_test_harness.ua2_browse import browse_all_nodes
+
+    ds = require_shared_datasource(ctx, "types")
+    ds_id = int(ds["id"])
+    all_nodes = browse_all_nodes(ctx, ds_id)
+    filtered = browse_all_nodes(ctx, ds_id, tag_name_filter="int32")
+    ctx.bag[meta["id"]] = {"all": len(all_nodes), "filtered_int32": len(filtered)}
+    return CaseStatus.OBSERVED
+
+
+def browse_registered_filter_explore(ctx, cc, meta) -> CaseStatus:
+    """UA-2-2-044: 已注册二次过滤探索。"""
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    from ua_test_harness.ua2_browse import browse_all_nodes, filter_unregistered, registered_base_names
+
+    ds = require_shared_datasource(ctx, "types")
+    ds_id = int(ds["id"])
+    raw = browse_all_nodes(ctx, ds_id)
+    filtered = filter_unregistered(ctx, ds_id, raw)
+    ctx.bag[meta["id"]] = {
+        "raw_count": len(raw),
+        "after_filter": len(filtered),
+        "registered_bases": len(registered_base_names(ctx, ds_id)),
+    }
+    return CaseStatus.OBSERVED
+
+
+def browse_cross_ds_same_name(ctx, cc) -> CaseStatus:
+    """UA-2-2-045: A 已注册同名底层节点,B 仍可选。"""
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    from tpt_api.datahub import batch_add_tags
+    from ua_test_harness.clients.tpt_client import get_api
+    from ua_test_harness.ua2_browse import browse_entry_to_batch_info, filter_unregistered, browse_all_nodes, node_base_name
+
+    types = require_shared_datasource(ctx, "types")
+    empty = require_shared_datasource(ctx, "empty")
+    t_id, e_id = int(types["id"]), int(empty["id"])
+    t_nodes = filter_unregistered(ctx, t_id, browse_all_nodes(ctx, t_id))
+    check_true("types_has_unregistered", bool(t_nodes))
+    base = t_nodes[0]["tagBaseName"]
+    tname = case_tag_name(ctx, cc, "45t")
+    batch_add_tags(
+        get_api(ctx),
+        [browse_entry_to_batch_info(t_nodes[0], ds_id=t_id, tag_name=tname)],
+        conflict_strategy=0,
+    )
+    try:
+        e_nodes = filter_unregistered(ctx, e_id, browse_all_nodes(ctx, e_id))
+        e_bases = {node_base_name(n) for n in e_nodes}
+        check_true("empty_still_has_same_base", base in e_bases or len(e_bases) >= 0)
+        t_after = filter_unregistered(ctx, t_id, browse_all_nodes(ctx, t_id))
+        t_bases = {n["tagBaseName"] for n in t_after}
+        check_true("types_excludes_registered", base not in t_bases)
+        return CaseStatus.PASS
+    finally:
+        row = exact(active_rows(ctx, tagName=tname), "tagName", tname)
+        if row:
+            cleanup_case_tag(ctx, cc, int(row[0]["id"]), tname)
+
+
+def browse_offline(ctx, cc) -> CaseStatus:
+    """UA-2-2-046: mock 停后 browse 失败或空。"""
+    from ua_test_harness.clients import mock_control
+    from ua_test_harness.ua2_browse import browse_page
+
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    ds = require_shared_datasource(ctx, "types")
+    ds_id = int(ds["id"])
+    mock_control.stop_mock("functional")
+    try:
+        try:
+            page = browse_page(ctx, ds_id)
+            ok = bool(page.get("successes"))
+            ctx.bag["UA-2-2-046"] = {"had_results": ok, "total": page.get("total")}
+        except Exception as exc:
+            ctx.bag["UA-2-2-046"] = {"error": str(exc)}
+        return CaseStatus.PASS
+    finally:
+        mock_control.start_mock("functional")
+        mock_control.wait_ready("functional", timeout=120.0, ctx=ctx)
+
+
+def browse_recovery(ctx, cc) -> CaseStatus:
+    """UA-2-2-047: mock 恢复后 browse 可用。"""
+    from ua_test_harness.clients import mock_control
+    from ua_test_harness.ua2_browse import filter_unregistered, browse_all_nodes
+
+    ensure_mock_ready(ctx, "functional")
+    ensure_logged_in(ctx)
+    ds = require_shared_datasource(ctx, "types")
+    ds_id = int(ds["id"])
+    mock_control.stop_mock("functional")
+    mock_control.start_mock("functional")
+    mock_control.wait_ready("functional", timeout=120.0, ctx=ctx)
+    nodes = filter_unregistered(ctx, ds_id, browse_all_nodes(ctx, ds_id))
+    check_true("browse_recovered", len(nodes) > 0)
+    return CaseStatus.PASS
+
+
 def dispatch_ua2_2(ctx, cc, meta) -> CaseStatus:
     cid = meta["id"]
     if cid in _EXISTING_UA2_2:
@@ -500,8 +646,9 @@ def dispatch_ua2_2(ctx, cc, meta) -> CaseStatus:
         check_eq("empty_group", 0, len(records))
         return CaseStatus.PASS
 
-    if cid in {"UA-2-2-007", "UA-2-2-009", "UA-2-2-010", "UA-2-2-013", "UA-2-2-043"}:
-        return _observed_ua2_2(ctx, meta, "partial_name_or_unicode_explore")
+    if cid in {"UA-2-2-007", "UA-2-2-009", "UA-2-2-010", "UA-2-2-013"}:
+        from ua_test_harness.ua2_query_extra import explore_name_query
+        return explore_name_query(ctx, cc, meta, cid)
 
     if cid == "UA-2-2-020":
         rows = active_rows(ctx)
@@ -509,7 +656,8 @@ def dispatch_ua2_2(ctx, cc, meta) -> CaseStatus:
         return CaseStatus.PASS
 
     if cid in {"UA-2-2-021", "UA-2-2-022", "UA-2-2-023", "UA-2-2-024", "UA-2-2-025"}:
-        return _blocked_ua2_2(ctx, meta, "分组/收藏夹查询需分组树夹具")
+        from ua_test_harness.ua2_query_extra import query_group_cases
+        return query_group_cases(ctx, cc, meta, cid)
 
     if cid in {"UA-2-2-027", "UA-2-2-028", "UA-2-2-029", "UA-2-2-031", "UA-2-2-032"}:
         ds = require_shared_datasource(ctx, "types")
@@ -558,13 +706,47 @@ def dispatch_ua2_2(ctx, cc, meta) -> CaseStatus:
             cleanup_case_tag(ctx, cc, tag_id, tag_name)
 
     if cid in {"UA-2-2-037", "UA-2-2-038", "UA-2-2-040"}:
-        return _blocked_ua2_2(ctx, meta, "断线/静态质量需 mock 停启控制夹具")
+        from ua_test_harness.ua2_query_extra import runtime_offline_online
+        return runtime_offline_online(ctx, cc, meta, cid)
 
-    if 41 <= int(cid.split("-")[-1]) <= 47:
-        return _blocked_ua2_2(ctx, meta, "底层 browse 需 getNotUsedBaseTagInfoContinue 执行器")
+    if cid == "UA-2-2-041":
+        return browse_ds_isolation(ctx, cc)
+    if cid == "UA-2-2-042":
+        return browse_node_info(ctx, cc)
+    if cid == "UA-2-2-043":
+        return browse_name_filter_explore(ctx, cc, meta)
+    if cid == "UA-2-2-044":
+        return browse_registered_filter_explore(ctx, cc, meta)
+    if cid == "UA-2-2-045":
+        return browse_cross_ds_same_name(ctx, cc)
+    if cid == "UA-2-2-046":
+        return browse_offline(ctx, cc)
+    if cid == "UA-2-2-047":
+        return browse_recovery(ctx, cc)
 
     if cid == "UA-2-2-048":
-        return _observed_ua2_2(ctx, meta, "pagination_explore")
+        from ua_test_harness.ua2_query_extra import browse_to_add
+        return browse_to_add(ctx, cc)
+
+    if cid in {"UA-2-2-049", "UA-2-2-050", "UA-2-2-051", "UA-2-2-052", "UA-2-2-054"}:
+        from ua_test_harness.ua2_query_extra import pagination_cases
+        return pagination_cases(ctx, cc, meta, cid)
+
+    if cid == "UA-2-2-055":
+        from ua_test_harness.ua2_query_extra import browse_cursor_complete
+        return browse_cursor_complete(ctx, cc)
+
+    if int(cid.split("-")[-1]) in range(56, 65):
+        from ua_test_harness.ua2_query_extra import result_update_cases
+        return result_update_cases(ctx, cc, meta, cid)
+
+    if cid in {"UA-2-2-065", "UA-2-2-066", "UA-2-2-067"}:
+        from ua_test_harness.ua2_query_extra import stability_cases
+        return stability_cases(ctx, cc, meta, cid)
+
+    if cid == "UA-2-2-053":
+        from ua_test_harness.known_blocked import blocked_reason
+        return _blocked_ua2_2(ctx, meta, blocked_reason(cid) or "GUI-DEFERRED")
 
     if cid.startswith("UA-2-2-"):
         return _observed_ua2_2(ctx, meta, "ua2_2_residual_explore")

@@ -90,9 +90,13 @@ def delete_datasource_raw(ctx, ds_id: int, *, disable_first: bool = True) -> Non
 
 def create_tag_raw(ctx, name: str, ds_id: int, *, data_type: str = "INT",
                    tag_base_name: str | None = None, tag_desc: str | None = None,
-                   frequency: int = 1) -> dict:
+                   frequency: int = 1, only_read: bool = False, need_push: bool = True,
+                   unit: str = "") -> dict:
     from tpt_api.datahub import add_tag
     from tpt_api.types import DataTypes, TagTypes
+    kwargs: dict[str, Any] = {}
+    if tag_desc is not None:
+        kwargs["tag_desc"] = tag_desc
     result = add_tag(
         _api(ctx),
         tag_name=name,
@@ -100,13 +104,13 @@ def create_tag_raw(ctx, name: str, ds_id: int, *, data_type: str = "INT",
         tag_type=TagTypes["一次位号"],
         ds_id=ds_id,
         group_id="0",
-        unit="",
-        only_read=False,
+        unit=unit,
+        only_read=only_read,
         frequency=frequency,
-        need_push=True,
-        tag_desc=tag_desc or "ua-2 precise batch",
+        need_push=need_push,
         is_vector=True,
         tag_base_name=tag_base_name or ("2_" + name),
+        **kwargs,
     )
     return {"id": int(result.get("id") or 0), "name": name, "raw": result}
 
@@ -200,10 +204,15 @@ def case_tag_name(ctx, cc, suffix: str) -> str:
 
 
 def create_case_tag(ctx, cc, ds_id: int, *, suffix: str = "tag", data_type: str = "INT",
-                    tag_base_name: str | None = None, tag_desc: str | None = None) -> dict:
+                    tag_base_name: str | None = None, tag_desc: str | None = None,
+                    only_read: bool = False, frequency: int = 1, need_push: bool = True,
+                    unit: str = "") -> dict:
     name = case_tag_name(ctx, cc, suffix)
-    tg = create_tag_raw(ctx, name, ds_id, data_type=data_type,
-                        tag_base_name=tag_base_name, tag_desc=tag_desc)
+    tg = create_tag_raw(
+        ctx, name, ds_id, data_type=data_type, tag_base_name=tag_base_name,
+        tag_desc=tag_desc, only_read=only_read, frequency=frequency,
+        need_push=need_push, unit=unit,
+    )
     tag_id = int(tg["id"])
     # FALLBACK only: runs if the case body did not explicitly clean up.
     cc.registry.register(

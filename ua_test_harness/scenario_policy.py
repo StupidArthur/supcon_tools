@@ -3,9 +3,11 @@
 调度顺序:
   UA-1 -> execute_ua1_case
   UA-2 -> execute_ua2_case (章节 dispatcher)
-  其他 -> _execute_shared
+  UA-3 -> execute_ua3_case (章节 dispatcher)
+  其他 -> _execute_shared (遗留)
 
-未接适配器的 case 仍返回 BLOCKED,精确说明缺口类别,不允许退化冒烟。
+419 条文档 Case 均在 _SUPPORTED 中登记;运行时由对应 runtime 执行。
+仅 KNOWN_BLOCKED 中的 ID 在真环境中预期 BLOCKED/OBSERVED,不得空函数 PASS。
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from ua_test_harness.scenario_runtime import execute_documented_case as _execute
 from ua_test_harness.ua1_runtime import execute_ua1_case
 from ua_test_harness.ua2_registry import ua2_supported_sets
 from ua_test_harness.ua2_runtime import is_supported_ua2, execute_ua2_case
+from ua_test_harness.ua3_runtime import is_supported_ua3, execute_ua3_case
 
 
 def _ua1_all_supported() -> dict[str, set[str]]:
@@ -88,23 +91,8 @@ def _ua3_scenario_for(meta) -> str:
 
 
 _BLOCK_REASONS = {
-    "UA-1-1": "需要鉴权 Mock、质量码扩展配置或不可达转可达控制夹具",
-    "UA-1-2": "历史增长/停增场景需要稳定历史落库夹具",
-    "UA-1-3": "需要隔离的 Mock 停启控制、断线时间线和恢复证据执行器",
-    "UA-1-4": "需要两个独立 Mock endpoint 和双源隔离夹具",
-    "UA-1-5": "需要启用删除、有位号删除、回收站关联和多数据源删除执行器",
-    "UA-1-6": "需要 ds-info/test testType=1..5 的 tpt_api 适配器",
-    "UA-2-3": "需要导入导出上传下载适配器及 xlsx 夹具",
-    "UA-2-5": "需要完整分组树、移动、收藏、循环检测和批量操作执行器",
-    "UA-2-1": "未在 UA-2 第一批精确清单内的 case 需要 queryWithQuality、异常映射、空名边界或长名边界执行器",
-    "UA-2-2": "未在 UA-2 第一批精确清单内的 case 需要 queryWithQuality、底层节点浏览、分组/收藏和分页选择器适配器",
-    "UA-2-4": "未在 UA-2 第一批精确清单内的 case 需要批量、恢复、删除影响、重建和历史生命周期执行器",
-    "UA-3-1": "需要 13 类型源端对照、频率、断线、多源和历史落地执行器",
-    "UA-3-2": "需要 ID/分组/数据库/queryTime 选择器和删除恢复执行器",
-    "UA-3-3": "需要批量类型、失败隔离、时间质量、源端对照和并发写执行器",
-    "UA-3-4": "需要确定历史导入夹具、分页、采样和双接口一致性执行器",
-    "UA-3-5": "需要 100 位号、写入和历史查询响应时间夹具",
-    "UA-3-6": "需要可配置并发、批量、长稳、历史负载和恢复测试引擎",
+    # 仅当 case 不在 _SUPPORTED 时使用的兜底说明
+    "UA-2-2": "文档 Case 未纳入 supported 矩阵",
 }
 
 
@@ -118,7 +106,18 @@ class ScenarioDecision:
 def classify_case(meta) -> ScenarioDecision:
     case_id = meta["id"]
     if case_id.startswith("UA-3-"):
-        return ScenarioDecision(True, scenario=_ua3_scenario_for(meta))
+        if is_supported_ua3(case_id):
+            return ScenarioDecision(True, scenario="ua3_runtime")
+        return ScenarioDecision(False, reason=f"UA-3 handler missing for {case_id}")
+    if case_id.startswith("UA-2-"):
+        if is_supported_ua2(case_id):
+            return ScenarioDecision(True, scenario="ua2_runtime")
+        return ScenarioDecision(False, reason=f"UA-2 handler missing for {case_id}")
+    if case_id.startswith("UA-1-"):
+        chapter = meta.get("chapter") or ""
+        if case_id in _SUPPORTED.get(chapter, set()):
+            return ScenarioDecision(True, scenario="ua1_runtime")
+        return ScenarioDecision(False, reason=f"UA-1 not in supported matrix: {case_id}")
     scenario = _SHARED_SCENARIOS.get(case_id)
     if scenario:
         return ScenarioDecision(True, scenario=scenario)
@@ -144,4 +143,13 @@ def execute_documented_case(ctx, cc, meta):
             )
             return CaseStatus.BLOCKED
         return execute_ua2_case(ctx, cc, meta)
+    if chapter.startswith("UA-3-"):
+        if not is_supported_ua3(case_id):
+            ctx.emitter.log(
+                "WARN",
+                case_id,
+                "BLOCKED: UA-3 在 registered set 中但未挂 handler。",
+            )
+            return CaseStatus.BLOCKED
+        return execute_ua3_case(ctx, cc, meta)
     return _execute_shared(ctx, cc, meta)

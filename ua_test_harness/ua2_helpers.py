@@ -97,34 +97,25 @@ def verify_config_row(rec: dict, *, tag_name: str, ds_id: int, data_type_key: st
 
 
 def standard_read_closed_loop(ctx, cc, *, suffix: str, type_key: str) -> CaseStatus:
-    """公共读取闭环: 配置 + 两次 RT 变化 + QTQ 一致 + 质量有效。"""
-    spec = read_spec(type_key)
-    ds = _types_ds(ctx)
-    ds_id = int(ds["id"])
-    base = base_name_for_node(spec["node"])
-    tag = create_case_tag(
-        ctx, cc, ds_id, suffix=suffix,
-        data_type=spec["dtype"], tag_base_name=base, tag_desc=f"ua2 read {type_key}",
+    """公共读取闭环 — 委托 ua2_precise.public_create_read_loop。"""
+    from ua_test_harness.ua2_precise import public_create_read_loop
+
+    status, tag_id, tag_name = public_create_read_loop(ctx, cc, suffix=suffix, type_key=type_key)
+    cleanup_case_tag(ctx, cc, tag_id, tag_name)
+    return status
+
+
+def standard_write_closed_loop(
+    ctx, cc, *, suffix: str, type_key: str, values: list[Any], tag_desc: str = "",
+) -> CaseStatus:
+    """公共写入闭环 — 委托 ua2_precise.public_write_closed_loop。"""
+    from ua_test_harness.ua2_precise import public_write_closed_loop
+
+    status, tag_id, tag_name = public_write_closed_loop(
+        ctx, cc, suffix=suffix, type_key=type_key, values=values, tag_desc=tag_desc,
     )
-    tag_id, tag_name = int(tag["id"]), tag["name"]
-    try:
-        cfg = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)
-        check_true("config_found", bool(cfg))
-        verify_config_row(cfg[0], tag_name=tag_name, ds_id=ds_id,
-                          data_type_key=spec["dtype"], tag_base_name=base)
-
-        time.sleep(2)
-        first = _wait_rt(ctx, tag_name)
-        second = _wait_changed(ctx, tag_name, _row_value(first))
-        check_true("rt_values_change", _row_value(first) != _row_value(second))
-
-        qtq = _qtq_row(ctx, tag_name=tag_name, ds_id=ds_id)
-        check_true("qtq_found", qtq is not None)
-        check_eq("qtq_matches_rt", _row_value(first), _row_value(qtq))
-        check_true("quality_valid", _quality(qtq) not in (None, 0))
-        return CaseStatus.PASS
-    finally:
-        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+    cleanup_case_tag(ctx, cc, tag_id, tag_name)
+    return status
 
 
 def try_add_tag(ctx, ds_id: int, *, tag_name: str, data_type: str = "INT",

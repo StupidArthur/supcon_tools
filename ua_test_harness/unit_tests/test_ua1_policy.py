@@ -10,7 +10,10 @@ def test_ua1_precise_matrix_contains_all_chapters() -> None:
     assert "UA-1-5-03" in _SUPPORTED.get("UA-1-5", set())
 
 
-def test_shared_non_ua1_cases_have_deterministic_scenarios() -> None:
-    assert classify_case({"id": "UA-3-6-001", "title": "性能"}).scenario == "performance"
-    assert classify_case({"id": "UA-3-3-001", "title": "写值"}).scenario == "rt_write"
-    assert classify_case({"id": "UA-2-1-001", "title": "新增"}).executable is False
+def test_runtime_classify_routes_to_chapter_handlers() -> None:
+    ua3 = classify_case({"id": "UA-3-6-001", "title": "性能", "chapter": "UA-3-6"})
+    assert ua3.executable is True
+    assert ua3.scenario == "ua3_runtime"
+    ua2 = classify_case({"id": "UA-2-1-001", "title": "新增", "chapter": "UA-2-1"})
+    assert ua2.executable is True
+    assert ua2.scenario == "ua2_runtime"

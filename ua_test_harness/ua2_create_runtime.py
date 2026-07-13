@@ -200,6 +200,7 @@ from ua_test_harness.ua2_helpers import (
     _wait_changed,
     _wait_rt,
     standard_read_closed_loop,
+    standard_write_closed_loop,
     try_add_tag,
     verify_config_row,
     write_and_verify,
@@ -215,6 +216,110 @@ def _explore(ctx, meta, *, outcome: str, detail: Any = None) -> _CS:
 def _blocked(ctx, meta, reason: str) -> _CS:
     ctx.bag[f"blocked_{meta['id']}"] = reason
     return _CS.BLOCKED
+
+
+def _precise_explore_duplicate_base(ctx, cc, meta) -> _CS:
+    """UA-2-1-011: 同数据源重复映射同一底层节点 — 记录第二次是否允许。"""
+    ds = _types_ds(ctx)
+    ds_id = int(ds["id"])
+    base = base_name_for_node("ua2_int32_r_1")
+    a = create_case_tag(ctx, cc, ds_id, suffix="11a", data_type="INT", tag_base_name=base)
+    a_id, a_name = int(a["id"]), a["name"]
+    try:
+        b_name = case_tag_name(ctx, cc, "11b")
+        ok, detail = try_add_tag(ctx, ds_id, tag_name=b_name, data_type="INT", tag_base_name=base)
+        ctx.bag[meta["id"]] = {"second_allowed": ok, "detail": detail}
+        if ok:
+            rows = exact(active_rows(ctx, tagBaseName=base), "tagBaseName", base)
+            ctx.bag[f"{meta['id']}_count"] = len(rows)
+            cleanup_case_tag(ctx, cc, int(rows[-1]["id"]), rows[-1]["tagName"])
+        return _CS.OBSERVED
+    finally:
+        cleanup_case_tag(ctx, cc, a_id, a_name)
+
+
+def _precise_explore_invalid_base(ctx, cc, meta) -> _CS:
+    """UA-2-1-012: 非法 tagBaseName 格式 — 记录接受/拒绝与字段值。"""
+    ds = _types_ds(ctx)
+    b_name = case_tag_name(ctx, cc, "12")
+    ok, detail = try_add_tag(
+        ctx, int(ds["id"]),
+        tag_name=b_name,
+        tag_base_name="invalid_format",
+    )
+    ctx.bag[meta["id"]] = {"accepted": ok, "detail": detail}
+    if ok:
+        rows = exact(active_rows(ctx, tagName=b_name), "tagName", b_name)
+        if rows:
+            cleanup_case_tag(ctx, cc, int(rows[0]["id"]), b_name)
+    return _CS.OBSERVED
+
+
+def _precise_explore_type_mismatch(ctx, cc, meta) -> _CS:
+    """UA-2-1-015: Double 节点配置 Boolean。"""
+    from ua_test_harness.fixtures.tag import read_rt
+
+    ds = _types_ds(ctx)
+    spec = read_spec("DOUBLE")
+    base = base_name_for_node(spec["node"])
+    name = case_tag_name(ctx, cc, "15")
+    ok, detail = try_add_tag(ctx, int(ds["id"]), tag_name=name, data_type="BOOLEAN", tag_base_name=base)
+    ctx.bag[meta["id"]] = {"accepted": ok, "detail": detail}
+    rows = exact(active_rows(ctx, tagName=name), "tagName", name)
+    if rows:
+        row = read_rt(ctx, name)
+        ctx.bag[meta["id"]]["rt"] = row
+        cleanup_case_tag(ctx, cc, int(rows[0]["id"]), name)
+    return _CS.OBSERVED
+
+
+def _precise_explore_whitespace_names(ctx, cc, meta) -> _CS:
+    """UA-2-1-020: 纯空白名称探索。"""
+    ds = _types_ds(ctx)
+    results = []
+    for label, nm in [("space", " "), ("spaces", "   "), ("tab", "\t")]:
+        ok, detail = try_add_tag(ctx, int(ds["id"]), tag_name=nm)
+        results.append({"label": label, "accepted": ok, "detail": detail})
+        rows = exact(active_rows(ctx, tagName=nm), "tagName", nm) if ok else []
+        for r in rows:
+            cleanup_case_tag(ctx, cc, int(r["id"]), r["tagName"])
+    ctx.bag[meta["id"]] = results
+    return _CS.OBSERVED
+
+
+def _precise_explore_name_boundary(ctx, cc, meta, cid: str) -> _CS:
+    """UA-2-1-023/024/025: 名称边界与 Unicode。"""
+    from ua_test_harness.fixtures.tag import read_rt
+
+    ds = _types_ds(ctx)
+    ds_id = int(ds["id"])
+    if cid == "UA-2-1-023":
+        name = "n" * 129
+        ok, detail = try_add_tag(ctx, ds_id, tag_name=name)
+        ctx.bag[cid] = {"len": 129, "accepted": ok, "detail": detail}
+        rows = exact(active_rows(ctx, tagName=name), "tagName", name)
+        if rows:
+            cleanup_case_tag(ctx, cc, int(rows[0]["id"]), name)
+        return _CS.OBSERVED
+    if cid == "UA-2-1-024":
+        name = "a/b\\c.d@e#f"
+        ok, detail = try_add_tag(ctx, ds_id, tag_name=name)
+        ctx.bag[cid] = {"accepted": ok, "detail": detail}
+        rows = exact(active_rows(ctx, tagName=name), "tagName", name)
+        if rows:
+            ctx.bag[cid]["rt"] = read_rt(ctx, name)
+            cleanup_case_tag(ctx, cc, int(rows[0]["id"]), name)
+        return _CS.OBSERVED
+    names = ["位号中文", "tag🔥", "Tag_A", "tag_a"]
+    records = []
+    for nm in names:
+        ok, detail = try_add_tag(ctx, ds_id, tag_name=nm)
+        records.append({"name": nm, "accepted": ok, "detail": detail})
+        rows = exact(active_rows(ctx, tagName=nm), "tagName", nm)
+        for r in rows:
+            cleanup_case_tag(ctx, cc, int(r["id"]), r["tagName"])
+    ctx.bag[cid] = records
+    return _CS.OBSERVED
 
 
 def _basic_create_read(ctx, cc, meta, *, suffix: str, base_node: str = "ua2_int32_r_1",
@@ -244,10 +349,11 @@ def dispatch_ua2_1(ctx, cc, meta) -> _CS:
     if cid in CASE_READ_TYPE:
         return standard_read_closed_loop(ctx, cc, suffix=cid.split("-")[-1], type_key=CASE_READ_TYPE[cid])
 
-    if cid == "UA-2-1-001":
-        return _basic_create_read(ctx, cc, meta, suffix="001")
-    if cid == "UA-2-1-002":
-        return _basic_create_read(ctx, cc, meta, suffix="002")
+    if cid in {"UA-2-1-001", "UA-2-1-002"}:
+        from ua_test_harness.ua2_precise import public_create_read_loop
+        status, tag_id, tag_name = public_create_read_loop(ctx, cc, suffix=cid[-3:], type_key="INT32")
+        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        return status
 
     if cid == "UA-2-1-003":
         ds = _types_ds(ctx)
@@ -259,87 +365,87 @@ def dispatch_ua2_1(ctx, cc, meta) -> _CS:
         ctx.bag[f"reject_{cid}"] = detail
         return _CS.PASS
 
-    if cid in {"UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007"}:
-        return _blocked(ctx, meta, "共享 baseline DS 不可停 mock/禁用;需独立夹具(用户决策)")
+    if cid == "UA-2-1-004":
+        from ua_test_harness.ua2_precise import precise_mock_offline_create
+        return precise_mock_offline_create(ctx, cc, meta)
+    if cid == "UA-2-1-005":
+        from ua_test_harness.ua2_precise import precise_mock_recovery
+        return precise_mock_recovery(ctx, cc, meta)
+    if cid == "UA-2-1-006":
+        from ua_test_harness.ua2_precise import precise_ds_disabled_create
+        return precise_ds_disabled_create(ctx, cc, meta)
+    if cid == "UA-2-1-007":
+        from ua_test_harness.ua2_precise import precise_ds_reenable_collect
+        return precise_ds_reenable_collect(ctx, cc, meta)
 
     if cid == "UA-2-1-008":
-        ds = _types_ds(ctx)
-        ds_id = int(ds["id"])
-        base = base_name_for_node("ua2_double_r_1")
-        tag = create_case_tag(ctx, cc, ds_id, suffix="008", data_type="DOUBLE", tag_base_name=base)
-        tag_id, tag_name = int(tag["id"]), tag["name"]
-        try:
-            cfg = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)
-            check_true("created", bool(cfg))
-            check_eq("base_saved", base, cfg[0].get("tagBaseName"))
-            _wait_rt(ctx, tag_name)
-            return _CS.PASS
-        finally:
-            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        from ua_test_harness.ua2_precise import public_create_read_loop
+        status, tag_id, tag_name = public_create_read_loop(
+            ctx, cc, suffix="008", type_key="DOUBLE", tag_desc="ua2-1-008",
+        )
+        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        return status
 
     if cid == "UA-2-1-009":
-        ds = _types_ds(ctx)
-        ds_id = int(ds["id"])
+        from ua_test_harness.ua2_precise import public_create_read_no_collect
         base = base_name_for_node("1_nonexistent")
-        tag = create_case_tag(ctx, cc, ds_id, suffix="009", data_type="INT", tag_base_name=base)
-        tag_id, tag_name = int(tag["id"]), tag["name"]
-        try:
-            row = _wait_rt(ctx, tag_name, timeout=15.0)
-            qtq = _qtq_row(ctx, tag_name=tag_name, ds_id=ds_id)
-            if qtq:
-                check_true("bad_node_quality_zero", _quality(qtq) in (None, 0) or not _row_value(qtq))
-            elif row:
-                check_true("rt_no_good_value", _quality(row) in (None, 0))
-            return _CS.PASS
-        finally:
-            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        status, tag_id, tag_name = public_create_read_no_collect(
+            ctx, cc, suffix="009", tag_base_name=base, data_type="INT",
+        )
+        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        return status
 
     if cid == "UA-2-1-010":
-        return _blocked(ctx, meta, "需两个均有相同节点的 mock endpoint;当前仅 types mock 有位号节点")
+        from ua_test_harness.ua2_precise import precise_cross_ds_same_node
+        return precise_cross_ds_same_node(ctx, cc, meta)
 
-    if cid in {"UA-2-1-011", "UA-2-1-012", "UA-2-1-015", "UA-2-1-020", "UA-2-1-023",
-               "UA-2-1-024", "UA-2-1-025"}:
-        return _explore(ctx, meta, outcome="deferred_explore", detail=title)
+    if cid == "UA-2-1-011":
+        return _precise_explore_duplicate_base(ctx, cc, meta)
+
+    if cid == "UA-2-1-012":
+        return _precise_explore_invalid_base(ctx, cc, meta)
+
+    if cid == "UA-2-1-015":
+        return _precise_explore_type_mismatch(ctx, cc, meta)
+    if cid == "UA-2-1-020":
+        return _precise_explore_whitespace_names(ctx, cc, meta)
+    if cid in {"UA-2-1-023", "UA-2-1-024", "UA-2-1-025"}:
+        return _precise_explore_name_boundary(ctx, cc, meta, cid)
 
     if cid == "UA-2-1-013":
-        ds = _types_ds(ctx)
-        ds_id = int(ds["id"])
+        from ua_test_harness.ua2_precise import public_create_read_no_collect
         base = base_name_for_node("99_double_ch_1")
-        tag = create_case_tag(ctx, cc, ds_id, suffix="013", data_type="DOUBLE", tag_base_name=base)
-        tag_id, tag_name = int(tag["id"]), tag["name"]
-        try:
-            qtq = _qtq_row(ctx, tag_name=tag_name, ds_id=ds_id)
-            if qtq:
-                check_true("quality_zero", _quality(qtq) in (None, 0))
-            return _CS.PASS
-        finally:
-            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        status, tag_id, tag_name = public_create_read_no_collect(
+            ctx, cc, suffix="013", tag_base_name=base, data_type="DOUBLE",
+        )
+        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        return status
 
     if cid == "UA-2-1-014":
         ds = _types_ds(ctx)
         ok, detail = try_add_tag(ctx, int(ds["id"]), tag_name=f"ua_case_ua2_{cid}",
                                  tag_base_name="")
         ctx.bag[f"empty_base_{cid}"] = {"ok": ok, "detail": detail}
-        return _CS.OBSERVED if kind == "exploratory" else (_CS.PASS if not ok else _CS.FAIL)
+        rows = exact(active_rows(ctx), "tagName", f"ua_case_ua2_{cid}")
+        if not ok:
+            check_eq("no_residual_on_reject", 0, len(rows))
+            return _CS.PASS
+        return _CS.OBSERVED
 
     if cid == "UA-2-1-016":
+        from ua_test_harness.ua2_precise import config_page_row, public_create_read_loop, rt_row
         ds = _types_ds(ctx)
         ds_id = int(ds["id"])
         custom = f"ua_case_ua2_{cid}_custom"
         base = base_name_for_node("ua2_double_r_1")
-        tag = create_case_tag(ctx, cc, ds_id, suffix="016", data_type="DOUBLE",
-                              tag_base_name=base, tag_desc="custom")
-        # override name via create_tag_raw pattern - create_case_tag auto-names; use raw:
-        cleanup_case_tag(ctx, cc, int(tag["id"]), tag["name"])
         raw = create_tag_raw(ctx, custom, ds_id, data_type="DOUBLE", tag_base_name=base)
         tag_id = int(raw["id"])
         cc.registry.register(f"tag:{custom}", "tag", lambda: physical_delete_tag(ctx, tag_id))
         try:
-            cfg = exact(active_rows(ctx, tagName=custom), "tagName", custom)
-            check_eq("one_record", 1, len(cfg))
-            check_eq("tagName_saved", custom, cfg[0].get("tagName"))
-            check_eq("base_saved", base, cfg[0].get("tagBaseName"))
-            _wait_rt(ctx, custom)
+            cfg = config_page_row(ctx, custom)
+            check_eq("tagName_saved", custom, cfg.get("tagName"))
+            check_eq("base_saved", base, cfg.get("tagBaseName"))
+            rt_row(ctx, custom)
             return _CS.PASS
         finally:
             cleanup_case_tag(ctx, cc, tag_id, custom)
@@ -364,58 +470,38 @@ def dispatch_ua2_1(ctx, cc, meta) -> _CS:
         finally:
             cleanup_case_tag(ctx, cc, a_id, dup)
 
-    if cid in {"UA-2-1-076", "UA-2-1-077", "UA-2-1-079", "UA-2-1-080"}:
-        ds = _types_ds(ctx)
-        ds_id = int(ds["id"])
-        unit = "kW" if cid == "UA-2-1-076" else ""
-        desc = "test desc" if cid == "UA-2-1-079" else None
-        tag = create_case_tag(ctx, cc, ds_id, suffix=cid[-3:], data_type="INT",
-                              tag_desc=desc or f"ua2 {cid}")
-        tag_id, tag_name = int(tag["id"]), tag["name"]
-        try:
-            cfg = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)[0]
-            if cid == "UA-2-1-076":
-                from tpt_api.datahub import update_tag
-                from tpt_api.types import DataTypes
-                update_tag(_api_from_ctx(ctx), tag_id, tag_name=tag_name,
-                             data_type=int(cfg.get("dataType") or DataTypes["INT"]),
-                             ds_id=int(cfg.get("dsId")), unit=unit)
-            cfg = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)
-            check_true("found", bool(cfg))
-            if cid == "UA-2-1-076":
-                check_eq("unit", unit, cfg[0].get("unit"))
-            if cid == "UA-2-1-079":
-                check_eq("desc", "test desc", cfg[0].get("tagDesc"))
-            if cid == "UA-2-1-080":
-                check_eq("default_desc", f"{tag_name} 描述", cfg[0].get("tagDesc"))
-            return _CS.PASS
-        finally:
-            cleanup_case_tag(ctx, cc, tag_id, tag_name)
-
-    if cid in {"UA-2-1-078", "UA-2-1-081"}:
-        return _explore(ctx, meta, outcome="unicode_length_explore")
+    if cid in {"UA-2-1-076", "UA-2-1-077", "UA-2-1-078", "UA-2-1-079", "UA-2-1-080", "UA-2-1-081"}:
+        from ua_test_harness.ua2_precise import precise_field_unit_desc
+        return precise_field_unit_desc(ctx, cc, meta)
 
     if cid in CASE_WRITE_TYPE:
         return _dispatch_ua2_1_write(ctx, cc, meta)
 
     if cid in {"UA-2-1-082", "UA-2-1-083", "UA-2-1-084", "UA-2-1-085"}:
-        return _dispatch_ua2_1_only_read(ctx, cc, meta)
+        from ua_test_harness.ua2_precise import precise_only_read
+        return precise_only_read(ctx, cc, meta)
 
     if cid in {"UA-2-1-086", "UA-2-1-087", "UA-2-1-088", "UA-2-1-089", "UA-2-1-090"}:
-        return _dispatch_ua2_1_frequency(ctx, cc, meta)
+        from ua_test_harness.ua2_precise import precise_frequency
+        return precise_frequency(ctx, cc, meta)
 
     if cid in {"UA-2-1-091", "UA-2-1-092", "UA-2-1-093", "UA-2-1-094",
                "UA-2-1-095", "UA-2-1-096", "UA-2-1-097"}:
-        return _dispatch_ua2_1_limits(ctx, cc, meta)
+        from ua_test_harness.ua2_precise import precise_limits
+        return precise_limits(ctx, cc, meta)
 
     if cid in {"UA-2-1-098", "UA-2-1-099", "UA-2-1-100", "UA-2-1-101"}:
-        return _dispatch_ua2_1_need_push(ctx, cc, meta)
+        from ua_test_harness.ua2_precise import precise_need_push
+        return precise_need_push(ctx, cc, meta)
 
     if cid in {"UA-2-1-102", "UA-2-1-103", "UA-2-1-104"}:
-        return _dispatch_ua2_1_availability(ctx, cc, meta)
+        from ua_test_harness.ua2_precise import precise_availability
+        return precise_availability(ctx, cc, meta)
 
-    if cid in {f"UA-2-1-{n:03d}" for n in range(105, 113)}:
-        return _dispatch_ua2_1_batch(ctx, cc, meta)
+    if cid in {"UA-2-1-105", "UA-2-1-106", "UA-2-1-107",
+               "UA-2-1-108", "UA-2-1-109", "UA-2-1-110", "UA-2-1-111", "UA-2-1-112"}:
+        from ua_test_harness.ua2_precise import precise_batch
+        return precise_batch(ctx, cc, meta)
 
     return _blocked(ctx, meta, f"UA-2-1 dispatcher 未覆盖 {cid}")
 
@@ -437,6 +523,15 @@ def _row_value(row):
 
 def _dispatch_ua2_1_write(ctx, cc, meta) -> _CS:
     cid = meta["id"]
+    from ua_test_harness.ua2_precise import CASE_WRITE_VALUES, precise_write_explore
+
+    if cid in CASE_WRITE_VALUES:
+        type_key = CASE_WRITE_TYPE.get(cid, "INT32")
+        return standard_write_closed_loop(
+            ctx, cc, suffix=cid[-3:], type_key=type_key,
+            values=CASE_WRITE_VALUES[cid], tag_desc=f"write {cid}",
+        )
+
     type_key = CASE_WRITE_TYPE.get(cid, "INT32")
     spec = write_spec(type_key)
     ds = _types_ds(ctx)
@@ -446,53 +541,49 @@ def _dispatch_ua2_1_write(ctx, cc, meta) -> _CS:
                           data_type=spec["dtype"], tag_base_name=base, tag_desc=f"write {cid}")
     tag_id, tag_name = int(tag["id"]), tag["name"]
     try:
-        if cid in {"UA-2-1-039", "UA-2-1-040"}:
-            val = cid.endswith("039")
-            write_and_verify(ctx, tag_name, val)
-            return _CS.PASS
-        if cid in {"UA-2-1-041", "UA-2-1-043", "UA-2-1-045", "UA-2-1-047", "UA-2-1-049",
-                   "UA-2-1-051", "UA-2-1-053", "UA-2-1-056", "UA-2-1-059", "UA-2-1-062", "UA-2-1-065", "UA-2-1-070"}:
-            return _explore(ctx, meta, outcome="write_boundary_explore")
-        if cid in {"UA-2-1-042", "UA-2-1-044", "UA-2-1-046", "UA-2-1-048", "UA-2-1-050", "UA-2-1-052"}:
-            return _explore(ctx, meta, outcome="int_boundary_write_explore")
-        if cid == "UA-2-1-054":
-            write_and_verify(ctx, tag_name, 9999999999)
-            return _CS.PASS
-        if cid in {"UA-2-1-055", "UA-2-1-058"}:
-            return _explore(ctx, meta, outcome="int64_string_write_explore")
-        if cid in {"UA-2-1-060", "UA-2-1-061", "UA-2-1-063", "UA-2-1-064"}:
-            write_and_verify(ctx, tag_name, 1.25)
-            return _CS.PASS
-        if cid == "UA-2-1-066":
-            write_and_verify(ctx, tag_name, "")
-            return _CS.PASS
-        if cid in {"UA-2-1-067", "UA-2-1-068"}:
-            write_and_verify(ctx, tag_name, "测试用例" if cid.endswith("067") else "a<b>")
-            return _CS.PASS
-        if cid == "UA-2-1-069":
-            return _explore(ctx, meta, outcome="string_length_explore")
-        if cid in {"UA-2-1-071", "UA-2-1-072"}:
-            write_and_verify(ctx, tag_name, "2025-06-01T12:00:00Z")
-            return _CS.PASS
+        explore_probes: dict[str, list[Any]] = {
+            "UA-2-1-041": [1, 0, "true"],
+            "UA-2-1-043": [-129, 128],
+            "UA-2-1-045": [-1, 256],
+            "UA-2-1-047": [-32769, 32768],
+            "UA-2-1-049": [-1, 65536],
+            "UA-2-1-051": [-2147483649, 2147483648],
+            "UA-2-1-053": [-1, 4294967296],
+            "UA-2-1-056": ["-9223372036854775809", "9223372036854775808"],
+            "UA-2-1-059": [-1, "18446744073709551616"],
+            "UA-2-1-062": [float("nan"), float("inf"), float("-inf")],
+            "UA-2-1-065": [float("nan"), float("inf"), float("-inf")],
+            "UA-2-1-069": ["a", "x" * 255, "x" * 256, "x" * 1000],
+            "UA-2-1-070": [None],
+        }
+        if cid in explore_probes:
+            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+            tag_id = tag_name = 0
+            return precise_write_explore(
+                ctx, cc, meta, suffix=cid[-3:], type_key=type_key,
+                probe_values=explore_probes[cid],
+            )
         if cid == "UA-2-1-073":
             from ua_test_harness.fixtures.tag import write_tag, read_rt
             failed = False
-            try:
-                write_tag(ctx, tag_name, "not-a-date")
-            except Exception:
-                failed = True
+            for bad in ("not-a-date", "2025-02-30T00:00:00Z"):
+                try:
+                    write_tag(ctx, tag_name, bad)
+                except Exception:
+                    failed = True
             check_true("bad_date_rejected", failed)
             return _CS.PASS
-        if cid == "UA-2-1-074":
-            return _explore(ctx, meta, outcome="datetime_boundary_explore")
         if cid == "UA-2-1-075":
-            return _explore(ctx, meta, outcome="datetime_precision_explore")
-        if cid == "UA-2-1-057":
-            write_and_verify(ctx, tag_name, 9999999999)
-            return _CS.PASS
+            cleanup_case_tag(ctx, cc, tag_id, tag_name)
+            tag_id = tag_name = 0
+            return precise_write_explore(
+                ctx, cc, meta, suffix="075", type_key=type_key,
+                probe_values=["2025-06-01T12:00:00.123Z", "2025-06-01T12:00:00"],
+            )
         return _explore(ctx, meta, outcome="write_fallback_explore")
     finally:
-        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        if tag_id:
+            cleanup_case_tag(ctx, cc, tag_id, tag_name)
 
 
 def _dispatch_ua2_1_only_read(ctx, cc, meta) -> _CS:
@@ -625,36 +716,3 @@ def _dispatch_ua2_1_availability(ctx, cc, meta) -> _CS:
         return _CS.BLOCKED
     finally:
         cleanup_case_tag(ctx, cc, tag_id, tag_name)
-
-
-def _dispatch_ua2_1_batch(ctx, cc, meta) -> _CS:
-    cid = meta["id"]
-    if cid in {"UA-2-1-108", "UA-2-1-109", "UA-2-1-110", "UA-2-1-111", "UA-2-1-112"}:
-        return _explore(ctx, meta, outcome="batch_edge_explore")
-    from tpt_api.datahub import batch_add_tags
-    from tpt_api.types import DataTypes, TagTypes
-
-    ds = _types_ds(ctx)
-    ds_id = int(ds["id"])
-    names = [case_tag_name(ctx, cc, f"b{i}") for i in range(3)]
-    infos = [{
-        "tagName": n, "tagBaseName": base_name_for_node("ua2_int32_r_1"),
-        "dataType": DataTypes["INT"], "tagType": TagTypes["一次位号"],
-        "dsId": ds_id, "frequency": 1, "onlyRead": True, "needPush": True,
-    } for n in names]
-    try:
-        if cid == "UA-2-1-105":
-            batch_add_tags(_api_from_ctx(ctx), infos, conflict_strategy=0)
-            for n in names:
-                check_true("batch_created", bool(exact(active_rows(ctx, tagName=n), "tagName", n)))
-            return _CS.PASS
-        if cid == "UA-2-1-106":
-            return _explore(ctx, meta, outcome="batch_conflict_skip_explore")
-        if cid == "UA-2-1-107":
-            return _explore(ctx, meta, outcome="batch_conflict_overwrite_explore")
-        return _CS.BLOCKED
-    finally:
-        for n in names:
-            row = exact(active_rows(ctx, tagName=n), "tagName", n)
-            if row:
-                cleanup_case_tag(ctx, cc, int(row[0]["id"]), n)
