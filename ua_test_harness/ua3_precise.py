@@ -48,6 +48,42 @@ def _observe(ctx, cid: str, payload: Any) -> CaseStatus:
     return CaseStatus.OBSERVED
 
 
+def _bound_read_tag(
+    ctx, cc, ds_id: int, *, suffix: str, type_key: str = "INT32", frequency: int = 1,
+) -> dict:
+    """绑定 mock 只读节点,确保 RT 可采集(同 UA-2-3 _make_tags 模式)。"""
+    spec = read_spec(type_key)
+    return create_case_tag(
+        ctx, cc, ds_id, suffix=suffix, data_type=spec["dtype"],
+        tag_base_name=base_name_for_node(spec["node"]), only_read=True, frequency=frequency,
+    )
+
+
+def _bound_write_tag(ctx, cc, ds_id: int, *, suffix: str, type_key: str = "DOUBLE") -> dict:
+    """绑定 mock 可写节点,供 writeTagValues 闭环。"""
+    spec = write_spec(type_key)
+    return create_case_tag(
+        ctx, cc, ds_id, suffix=suffix, data_type=spec["dtype"],
+        tag_base_name=base_name_for_node(spec["node"]), only_read=False,
+    )
+
+
+def _history_has_data(resp: Any) -> bool:
+    """getHistoryValueFromDB / getHistoryValue 响应是否含有效记录。"""
+    if not resp:
+        return False
+    if isinstance(resp, dict):
+        records = resp.get("records")
+        if records is not None:
+            return bool(records) or int(resp.get("total", 0)) > 0
+        for value in resp.values():
+            if isinstance(value, dict):
+                rows = value.get("list") or []
+                if rows or int(value.get("total", 0)) > 0:
+                    return True
+    return bool(resp)
+
+
 def collect_read_loop(ctx, cc, *, suffix: str, type_key: str = "INT32") -> CaseStatus:
     status, tag_id, tag_name = public_create_read_loop(ctx, cc, suffix=suffix, type_key=type_key)
     cleanup_case_tag(ctx, cc, tag_id, tag_name)
@@ -151,7 +187,7 @@ def rt_get_by_id(ctx, cc, suffix: str = "002") -> CaseStatus:
     from tpt_api.datahub import get_rt_value
 
     ds = types_context(ctx)
-    tag = create_case_tag(ctx, cc, int(ds["id"]), suffix=suffix, data_type="INT")
+    tag = _bound_read_tag(ctx, cc, int(ds["id"]), suffix=suffix)
     tag_id, tag_name = int(tag["id"]), tag["name"]
     try:
         rt_row(ctx, tag_name)
@@ -314,7 +350,7 @@ def rt_by_group(ctx, cc, suffix: str = "003") -> CaseStatus:
     from tpt_api.datahub import add_tag_group_relation, get_rt_value
 
     ds = types_context(ctx)
-    tag = create_case_tag(ctx, cc, int(ds["id"]), suffix=suffix, data_type="INT")
+    tag = _bound_read_tag(ctx, cc, int(ds["id"]), suffix=suffix)
     tag_id, tag_name = int(tag["id"]), tag["name"]
     try:
         rt_row(ctx, tag_name)
@@ -332,8 +368,8 @@ def rt_cross_ds(ctx, cc, suffix: str = "004") -> CaseStatus:
 
     types_ds = require_shared_datasource(ctx, "types")
     empty_ds = require_shared_datasource(ctx, "empty")
-    t1 = create_case_tag(ctx, cc, int(types_ds["id"]), suffix=f"{suffix}a", data_type="INT")
-    t2 = create_case_tag(ctx, cc, int(empty_ds["id"]), suffix=f"{suffix}b", data_type="INT")
+    t1 = _bound_read_tag(ctx, cc, int(types_ds["id"]), suffix=f"{suffix}a")
+    t2 = _bound_read_tag(ctx, cc, int(empty_ds["id"]), suffix=f"{suffix}b")
     try:
         rt_row(ctx, t1["name"])
         rt_row(ctx, t2["name"])
@@ -376,7 +412,7 @@ def rt_mixed_valid_invalid(ctx, cc, suffix: str = "008") -> CaseStatus:
     from tpt_api.datahub import get_rt_value
 
     ds = types_context(ctx)
-    tag = create_case_tag(ctx, cc, int(ds["id"]), suffix=suffix, data_type="INT")
+    tag = _bound_read_tag(ctx, cc, int(ds["id"]), suffix=suffix)
     tag_id, tag_name = int(tag["id"]), tag["name"]
     try:
         rt_row(ctx, tag_name)
@@ -463,16 +499,17 @@ def write_mixed_batch(ctx, cc, suffix: str = "011") -> CaseStatus:
     from tpt_api.datahub import write_tag_values
 
     ds = types_context(ctx)
-    good = create_case_tag(ctx, cc, int(ds["id"]), suffix=f"{suffix}a", data_type="DOUBLE")
-    ro = create_case_tag(ctx, cc, int(ds["id"]), suffix=f"{suffix}b", data_type="DOUBLE", only_read=True)
+    ds_id = int(ds["id"])
+    good = _bound_write_tag(ctx, cc, ds_id, suffix=f"{suffix}a")
+    ro = _bound_read_tag(ctx, cc, ds_id, suffix=f"{suffix}b", type_key="DOUBLE")
     try:
         resp = write_tag_values(
             _api(ctx),
-            [
-                {"tagName": good["name"], "tagValue": 1.1},
-                {"tagName": ro["name"], "tagValue": 2.2},
-                {"tagName": "__ua_not_exist__", "tagValue": 3.3},
-            ],
+            {
+                good["name"]: 1.1,
+                ro["name"]: 2.2,
+                "__ua_not_exist__": 3.3,
+            },
         )
         ctx.bag["mixed_write"] = resp
         ok_names = resp.get("tagNames") or resp.get("successTagNames") or []
@@ -487,10 +524,10 @@ def write_mixed_batch(ctx, cc, suffix: str = "011") -> CaseStatus:
 
 def history_query_pair(ctx, cc, suffix: str, *, min_count: int = 10) -> CaseStatus:
     from datetime import datetime, timezone
-    from tpt_api.datahub import get_history_value, get_history_value_from_db
+    from tpt_api.datahub import get_history_value, query_history_value
 
     ds = types_context(ctx)
-    tag = create_case_tag(ctx, cc, int(ds["id"]), suffix=suffix, data_type="INT")
+    tag = _bound_read_tag(ctx, cc, int(ds["id"]), suffix=suffix)
     tag_id, tag_name = int(tag["id"]), tag["name"]
     try:
         from ua_test_harness.fixtures.history import HistoryFixtureFactory
@@ -502,11 +539,13 @@ def history_query_pair(ctx, cc, suffix: str, *, min_count: int = 10) -> CaseStat
         end = now + 60 * 1000
         beg_str = datetime.fromtimestamp(beg / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         end_str = datetime.fromtimestamp(end / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        basic = get_history_value_from_db(_api(ctx), tag_names=[tag_name], beg_time=beg_str, end_time=end_str)
-        adv = get_history_value(_api(ctx), tag_names=[tag_name], beg_time=beg_str, end_time=end_str, page=1, page_size=100)
+        basic = get_history_value(_api(ctx), tag_names=[tag_name], beg_time=beg_str, end_time=end_str)
+        adv = query_history_value(
+            _api(ctx), tag_names=[tag_name], beg_time=beg_str, end_time=end_str, page=1, page_size=100,
+        )
         ctx.bag[f"history_{suffix}"] = {"basic": basic, "advanced": adv}
-        check_true("basic_has_data", bool(basic))
-        check_true("advanced_has_data", bool(adv))
+        check_true("basic_has_data", _history_has_data(basic))
+        check_true("advanced_has_data", _history_has_data(adv))
         return CaseStatus.PASS
     except AssertFail as exc:
         ctx.bag[f"setup_failed_{suffix}"] = str(exc)
@@ -543,8 +582,8 @@ def multi_ds_isolation(ctx, cc) -> CaseStatus:
 
     types_ds = require_shared_datasource(ctx, "types")
     empty_ds = require_shared_datasource(ctx, "empty")
-    t_a = create_case_tag(ctx, cc, int(types_ds["id"]), suffix="18a", data_type="INT")
-    t_b = create_case_tag(ctx, cc, int(empty_ds["id"]), suffix="18b", data_type="INT")
+    t_a = _bound_read_tag(ctx, cc, int(types_ds["id"]), suffix="18a")
+    t_b = _bound_read_tag(ctx, cc, int(empty_ds["id"]), suffix="18b")
     try:
         rt_row(ctx, t_a["name"])
         rt_row(ctx, t_b["name"])

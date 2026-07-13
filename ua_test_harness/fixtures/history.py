@@ -50,7 +50,7 @@ class HistoryFixtureFactory:
         from tpt_api.datahub import write_tag_values
 
         for i in range(count):
-            write_tag_values(self.api, [{"tagName": tag_name, "tagValue": float(i)}])
+            write_tag_values(self.api, {tag_name: float(i)})
             time.sleep(0.2)
         return {"count": count, "tagName": tag_name}
 

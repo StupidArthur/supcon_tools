@@ -67,7 +67,7 @@ def dispatch_ua3_1(ctx, cc, meta) -> CaseStatus:
             from ua_test_harness.ua2_ops import cleanup_case_tag, create_case_tag
 
             ds = p.types_context(ctx)
-            tag = create_case_tag(ctx, cc, int(ds["id"]), suffix="019", data_type="INT")
+            tag = p._bound_read_tag(ctx, cc, int(ds["id"]), suffix="019")
             try:
                 factory = HistoryFixtureFactory(ctx)
                 factory.create_acquisition_dataset(tag["name"], count=20)
@@ -188,7 +188,7 @@ def dispatch_ua3_3(ctx, cc, meta) -> CaseStatus:
             from ua_test_harness.ua2_ops import cleanup_case_tag, create_case_tag
 
             ds = p.types_context(ctx)
-            tag = create_case_tag(ctx, cc, int(ds["id"]), suffix="019w", data_type="DOUBLE")
+            tag = p._bound_write_tag(ctx, cc, int(ds["id"]), suffix="019w")
             try:
                 factory = HistoryFixtureFactory(ctx)
                 factory.create_write_dataset(tag["name"], count=5)

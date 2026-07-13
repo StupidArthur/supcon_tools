@@ -958,3 +958,104 @@
 **结果**: PASS=2 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
 
 **产品 FAIL**: 无
+
+---
+
+## UA-3 BLOCKED×9 + FAIL×17 triage 摘要 (2026-07-13)
+
+**代码修复**（未 commit）:
+- `ua3_precise.py`: `write_mixed_batch` 改 `{tagName: value}` dict；`history_query_pair` 用 `get_history_value` + `query_history_value`；新增 `_bound_read_tag`/`_bound_write_tag` 绑定 mock 节点
+- `ua3_extra.py`: `collect_multi_frequency` 绑 INT32 只读节点
+- `ua3_runtime.py`: UA-3-1-019 / UA-3-3-019 setup 绑节点
+- `fixtures/history.py`: `create_write_dataset` 改 dict 格式（修 UA-3-3-019 A0400）
+
+**9 条 BLOCKED 重跑结果**（`165223` + `165636`）:
+
+| Case | 修前 | 修后 | 说明 |
+|------|------|------|------|
+| UA-3-3-010/011/017 | A0400 | **PASS** | writeTagValues dict 修复 |
+| UA-3-3-019 | A0400→ERROR | **BLOCKED** | 写通但 `verify_history` 不足（setup_failed） |
+| UA-3-4-001~005 | ImportError | **BLOCKED** | import 已通；历史造数/核验未达 min_count（产品/环境） |
+
+**17 条 FAIL triage**（RT timeout 类）:
+
+| Case | 修前 | 修后 | 分类 |
+|------|------|------|------|
+| UA-3-1-008 | RT timeout | **PASS** | 测试代码 bug（未绑节点）已修 |
+| UA-3-1-018 | RT timeout | **OBSERVED** | 绑节点后 RT 可读；探索断言保留 OBSERVED |
+| UA-3-2-002/013 | RT timeout | **FAIL** `by_id_hit` | RT 已通；`getRTValue(tag_info_ids)` 未命中 → **产品 FAIL** |
+| UA-3-2-003 | RT timeout | **ERROR** 500 | `getRTValue(group_id=1)` 报 Tag Dose Not Exist → **产品/环境** |
+| UA-3-2-004/008/019 | RT timeout | **PASS** | 测试代码 bug 已修 |
+| UA-3-1-001/002/004/006 | opcua/change | **FAIL** | 已绑节点；`opcua_matches_rt2`/`values_change` → **产品 FAIL** |
+| UA-3-1-003 | value_stable | **FAIL** | mock 值变化 38→42 → **产品 FAIL** |
+| UA-3-1-005 | — | **PASS** | 非原 FAIL 集，顺带 PASS |
+| UA-3-2-005/012 | opcua/quality | **FAIL** | 已绑节点 → **产品 FAIL** |
+| UA-3-3-003 | rt_matches_write | **FAIL** | `opcua_matches_rt` → **产品 FAIL** |
+
+**库存**: `verified=189` `verifiedFail=45`（overlay `165636`）
+
+---
+
+**产物**: `output/automation_ua2_default_20260713_164636`
+**选择**: {"selectionMode": "cases", "requested": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-3-010", "UA-3-3-011", "UA-3-3-017", "UA-3-3-019", "UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-008", "UA-3-1-018", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-008", "UA-3-2-012", "UA-3-2-013", "UA-3-2-019", "UA-3-3-003"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 26, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-3-010", "UA-3-3-011", "UA-3-3-017", "UA-3-3-019", "UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-008", "UA-3-1-018", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-008", "UA-3-2-012", "UA-3-2-013", "UA-3-2-019", "UA-3-3-003"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=14400.0
+
+**环境 BLOCKED**: `BaselineError: datasource 'ua_shared_ua2_empty_ds' did not become alive after enable` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — ua3-single-test (2026-07-13 16:51)
+
+**产物**: `output/automation_ua2_default_20260713_164856`
+**选择**: {"selectionMode": "cases", "requested": ["UA-3-4-001"], "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 1, "selectedCases": ["UA-3-4-001"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: datasource 'ua_shared_ua2_empty_ds' did not become alive after enable` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — ua3-blocked9-fail17-rerun (2026-07-13 16:55)
+
+**产物**: `output/automation_ua2_default_20260713_165223`
+**选择**: {"selectionMode": "cases", "requested": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-3-010", "UA-3-3-011", "UA-3-3-017", "UA-3-3-019", "UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-008", "UA-3-1-018", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-008", "UA-3-2-012", "UA-3-2-013", "UA-3-2-019", "UA-3-3-003"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 26, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-3-010", "UA-3-3-011", "UA-3-3-017", "UA-3-3-019", "UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-008", "UA-3-1-018", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-008", "UA-3-2-012", "UA-3-2-013", "UA-3-2-019", "UA-3-3-003"], "remainingAfterBatch": 0}
+**结果**: PASS=8 FAIL=10 BLOCKED=5 TIMEOUT=0 chapterTimeoutSec=14400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-002`: assert: [values_change] not true.
+  - step `None`: [values_change] not true.
+- `UA-3-1-003`: assert: [value_stable] expected=38.0 actual=42.0
+  - step `None`: [value_stable] expected=38.0 actual=42.0
+- `UA-3-1-004`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-006`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-2-002`: assert: [by_id_hit] not true.
+  - step `None`: [by_id_hit] not true.
+- `UA-3-2-005`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-2-012`: assert: [has_quality] not true.
+  - step `None`: [has_quality] not true.
+- `UA-3-2-013`: assert: [by_id_hit] not true.
+  - step `None`: [by_id_hit] not true.
+- `UA-3-3-003`: assert: [opcua_matches_rt] not true.
+  - step `None`: [opcua_matches_rt] not true.
+
+---
+
+## 真跑批次 — ua3-blocked-remaining (2026-07-13 16:57)
+
+**产物**: `output/automation_ua2_default_20260713_165636`
+**选择**: {"selectionMode": "cases", "requested": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-3-019"], "excludedPartial": [], "skippedVerified": [], "limitApplied": 6, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-3-019"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=6 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL**: 无

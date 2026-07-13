@@ -21,6 +21,8 @@ from ua_test_harness.ua2_ops import (
 from ua_test_harness.ua2_precise import opcua_read, public_write_closed_loop, rt_row, types_context
 from ua_test_harness.ua3_precise import (
     _api,
+    _bound_read_tag,
+    _bound_write_tag,
     _quality,
     _row_value,
 )
@@ -37,7 +39,7 @@ def collect_multi_frequency(ctx, cc) -> CaseStatus:
     ds_id = int(ds["id"])
     tags = []
     for freq in (1, 5, 10):
-        t = create_case_tag(ctx, cc, ds_id, suffix=f"8{freq}", data_type="INT", frequency=freq)
+        t = _bound_read_tag(ctx, cc, ds_id, suffix=f"8{freq}", frequency=freq)
         tags.append((freq, t))
     try:
         samples = {}
