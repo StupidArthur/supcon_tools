@@ -85,3 +85,8 @@ export const rwApi: RwApi = {
   writeValues: RWBinding.WriteValues,
   readHistory: RWBinding.ReadHistory,
 };
+
+// 检测后端返回的 auth 错误(PublicErrorDTO.Error() 格式: "[auth] ..." 或 "[auth:code] ...")
+export function isAuthError(e: unknown): boolean {
+  return e instanceof Error && e.message.startsWith('[auth');
+}

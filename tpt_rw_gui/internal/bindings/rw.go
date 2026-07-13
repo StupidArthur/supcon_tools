@@ -11,9 +11,9 @@ import (
 
 // RWBinding 暴露给前端的"值读写"业务方法。薄:仅 DTO 转换 + 错误映射 + 调 Service。
 type RWBinding struct {
-	ctx context.Context
+	ctx  context.Context
 	sess *session.Service
-	svc *rw.Service
+	svc  *rw.Service
 }
 
 // NewRWBinding 创建 RWBinding。
@@ -24,10 +24,25 @@ func NewRWBinding(sess *session.Service, svc *rw.Service) *RWBinding {
 // SetContext 由 Lifecycle.Startup 注入应用根 ctx。
 func (b *RWBinding) SetContext(ctx context.Context) { b.ctx = ctx }
 
+// ensureLoggedIn 检查登录态,未登录返回 auth PublicErrorDTO。
+func (b *RWBinding) ensureLoggedIn() error {
+	if b.ctx == nil {
+		b.ctx = context.Background()
+	}
+	info := b.sess.Status(b.ctx)
+	if !info.LoggedIn {
+		return &PublicErrorDTO{Kind: "auth", Message: "未登录或已登出"}
+	}
+	return nil
+}
+
 // ListDataSources 拉数据源列表。
 func (b *RWBinding) ListDataSources() ([]DataSourceDTO, error) {
 	if b.ctx == nil {
 		b.ctx = context.Background()
+	}
+	if err := b.ensureLoggedIn(); err != nil {
+		return nil, err
 	}
 	srcs, err := b.svc.ListDataSources(b.ctx)
 	if err != nil {
@@ -51,6 +66,9 @@ func (b *RWBinding) ListTags(req ListTagsRequestDTO) ([]TagDTO, error) {
 	if b.ctx == nil {
 		b.ctx = context.Background()
 	}
+	if err := b.ensureLoggedIn(); err != nil {
+		return nil, err
+	}
 	tags, err := b.svc.ListTags(b.ctx, rw.TagListQuery{
 		DSID: req.DSID, GroupID: "0",
 		Keyword: req.Keyword, Page: req.Page, PageSize: req.PageSize,
@@ -63,7 +81,7 @@ func (b *RWBinding) ListTags(req ListTagsRequestDTO) ([]TagDTO, error) {
 			TagType: t.TagType, DSID: t.DSID, DSName: t.DSName,
 			DataType: t.DataType, DataTypeName: t.DataTypeName,
 			TagValue: rawToString(t.TagValue),
-			TagTime: t.TagTime, Quality: t.Quality, GroupName: t.GroupName,
+			TagTime:  t.TagTime, Quality: t.Quality, GroupName: t.GroupName,
 		})
 	}
 	return out, mapped
@@ -73,6 +91,9 @@ func (b *RWBinding) ListTags(req ListTagsRequestDTO) ([]TagDTO, error) {
 func (b *RWBinding) ReadRealtime(tagNames []string) ([]RTValueDTO, error) {
 	if b.ctx == nil {
 		b.ctx = context.Background()
+	}
+	if err := b.ensureLoggedIn(); err != nil {
+		return nil, err
 	}
 	pts, err := b.svc.ReadRealtime(b.ctx, tagNames)
 	mapped := mapErr(err)
@@ -92,6 +113,9 @@ func (b *RWBinding) ReadRealtime(tagNames []string) ([]RTValueDTO, error) {
 func (b *RWBinding) WriteValues(req WriteRequestDTO) (WriteResultDTO, error) {
 	if b.ctx == nil {
 		b.ctx = context.Background()
+	}
+	if err := b.ensureLoggedIn(); err != nil {
+		return WriteResultDTO{}, err
 	}
 	var delay time.Duration
 	if req.ReadbackDelayMs > 0 {
@@ -128,6 +152,9 @@ func (b *RWBinding) WriteValues(req WriteRequestDTO) (WriteResultDTO, error) {
 func (b *RWBinding) ReadHistory(req ReadHistoryRequestDTO) ([]HistoryRowDTO, error) {
 	if b.ctx == nil {
 		b.ctx = context.Background()
+	}
+	if err := b.ensureLoggedIn(); err != nil {
+		return nil, err
 	}
 	rows, err := b.svc.ReadHistory(b.ctx, rw.HistoryQuery{
 		TagNames: req.TagNames, BegTime: req.BegTime, EndTime: req.EndTime,

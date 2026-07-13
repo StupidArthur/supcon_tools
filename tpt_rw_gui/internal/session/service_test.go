@@ -61,4 +61,45 @@ func TestStatus_BeforeLogin(t *testing.T) {
 	}
 }
 
+func TestLogout_ClearsStatus(t *testing.T) {
+	srv := fakeTptServer(t, "00000", "ok")
+	defer srv.Close()
+	svc := NewService(tptapi.NewService())
+	if _, err := svc.Login(context.Background(), srv.URL, "u", "p", "", 5); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if err := svc.Logout(context.Background()); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if got := svc.Status(context.Background()); got.LoggedIn {
+		t.Fatalf("want not logged in after logout, got %+v", got)
+	}
+}
 
+func TestLogin_AfterLogout_StatusLoggedIn(t *testing.T) {
+	srv := fakeTptServer(t, "00000", "ok")
+	defer srv.Close()
+	svc := NewService(tptapi.NewService())
+	if _, err := svc.Login(context.Background(), srv.URL, "u", "p", "", 5); err != nil {
+		t.Fatalf("first login: %v", err)
+	}
+	if err := svc.Logout(context.Background()); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if _, err := svc.Login(context.Background(), srv.URL, "u", "p", "", 5); err != nil {
+		t.Fatalf("second login: %v", err)
+	}
+	if got := svc.Status(context.Background()); !got.LoggedIn {
+		t.Fatalf("want logged in after second login, got %+v", got)
+	}
+}
+
+func TestLogout_StatusNotLoggedIn(t *testing.T) {
+	svc := NewService(tptapi.NewService())
+	if err := svc.Logout(context.Background()); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if got := svc.Status(context.Background()); got.LoggedIn {
+		t.Fatalf("want not logged in, got %+v", got)
+	}
+}

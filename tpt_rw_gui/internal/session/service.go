@@ -22,14 +22,19 @@ type Info struct {
 
 // Service 登录态业务服务。
 type Service struct {
-	mu      sync.RWMutex
-	tpt     *tptapi.Service
-	subject tptapi.SubjectUrl
+	mu        sync.RWMutex
+	tpt       *tptapi.Service
+	subject   tptapi.SubjectUrl
+	loggedOut bool
 }
 
 // NewService 创建依赖 *tptapi.Service 的会话服务。tpt 共享,不可替换。
 func NewService(tpt *tptapi.Service) *Service {
-	return &Service{tpt: tpt}
+	svc := &Service{tpt: tpt}
+	if tpt != nil {
+		svc.subject = tpt.Info()
+	}
+	return svc
 }
 
 // Login 登录成功返回 Info。password 仅流转不落日志。
@@ -47,17 +52,18 @@ func (s *Service) Login(ctx context.Context, url, user, pass, tenantID string, t
 	}
 	s.mu.Lock()
 	s.subject = subject
+	s.loggedOut = false
 	s.mu.Unlock()
 	return Info{LoggedIn: true, URL: subject.BaseURL, TenantID: subject.TenantID}, nil
 }
 
-// Logout 注销(清空底层 client)。下次调用 Client() 触发重登。
+// Logout 注销并阻止 binding 层继续访问底层 client。
 func (s *Service) Logout(ctx context.Context) error {
 	s.mu.Lock()
 	s.subject = tptapi.SubjectUrl{}
+	s.loggedOut = true
 	s.mu.Unlock()
-	// tptapi.Service 没有显式 Logout;通过重新登录覆盖客户端(轻量)
-	// 这里只清前端可见的 Info,客户端仍保留 token。下次 Client() 触发 token 过期检测时自然重登。
+	// tptapi.Service 仍存凭据并可能自动重登,binding 层 session gate 负责拦截。
 	return nil
 }
 
@@ -65,10 +71,18 @@ func (s *Service) Logout(ctx context.Context) error {
 func (s *Service) Status(ctx context.Context) Info {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.subject.BaseURL == "" {
+	if s.loggedOut || s.subject.BaseURL == "" {
 		return Info{}
 	}
 	return Info{LoggedIn: true, URL: s.subject.BaseURL, TenantID: s.subject.TenantID}
+}
+
+// MarkLoggedInForTest 设置登录态为已登录,不执行网络请求。仅测试用。
+func (s *Service) MarkLoggedInForTest(url string) {
+	s.mu.Lock()
+	s.subject = tptapi.SubjectUrl{BaseURL: url}
+	s.loggedOut = false
+	s.mu.Unlock()
 }
 
 // TptService 返回底层 *tptapi.Service,供 internal/rw 复用同一份登录态。

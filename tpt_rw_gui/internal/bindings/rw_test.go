@@ -96,11 +96,42 @@ func newBinding(t *testing.T) (*RWBinding, *stubPort) {
 		histMap:  json.RawMessage(`[{"tagName":"b","tagValue":2.0,"appTime":"2026-01-02 00:00:00","quality":0}]`),
 	}
 	port := rw.NewService(&fakeAdapter{p: stub})
-	// session.Service 需要 *tptapi.Service;这里只用来访问 backend,所以传 nil 让接口不报错。
-	sess := session.NewService(nil) // 我们不会让 RWBinding 触发 session,只测 RW。
+	sess := session.NewService(nil)
+	sess.MarkLoggedInForTest("http://test")
 	binding := NewRWBinding(sess, port)
 	binding.SetContext(context.Background())
 	return binding, stub
+}
+
+func TestRW_LoggedOut_ReturnsAuthError(t *testing.T) {
+	stub := &stubPort{rt: map[string][]tptapi.RtValuePoint{}}
+	port := rw.NewService(&fakeAdapter{p: stub})
+	sess := session.NewService(nil)
+	binding := NewRWBinding(sess, port)
+	binding.SetContext(context.Background())
+
+	assertAuth := func(name string, err error) {
+		t.Helper()
+		pe, ok := err.(*PublicErrorDTO)
+		if !ok || pe.Kind != "auth" {
+			t.Fatalf("%s want auth error, got %T %v", name, err, err)
+		}
+	}
+
+	_, err := binding.ListDataSources()
+	assertAuth("ListDataSources", err)
+	_, err = binding.ListTags(ListTagsRequestDTO{})
+	assertAuth("ListTags", err)
+	_, err = binding.ReadRealtime(nil)
+	assertAuth("ReadRealtime", err)
+	_, err = binding.WriteValues(WriteRequestDTO{})
+	assertAuth("WriteValues", err)
+	_, err = binding.ReadHistory(ReadHistoryRequestDTO{})
+	assertAuth("ReadHistory", err)
+
+	if stub.listCalls != 0 {
+		t.Fatalf("stub should not be called when logged out, got %d calls", stub.listCalls)
+	}
 }
 
 func TestRW_ListDataSources(t *testing.T) {
@@ -159,7 +190,7 @@ func TestRW_ReadRealtime_NonExistentTag_ReturnsEmptySlice(t *testing.T) {
 func TestRW_WriteValues_WithReadback(t *testing.T) {
 	b, stub := newBinding(t)
 	res, err := b.WriteValues(WriteRequestDTO{
-		Values: map[string]any{"demo.t_double": 7.5},
+		Values:          map[string]any{"demo.t_double": 7.5},
 		ReadbackDelayMs: 5, // 极短,避免 sleep
 	})
 	if err != nil {
@@ -196,6 +227,7 @@ func newNonExistentBinding(t *testing.T) *RWBinding {
 	port := &nonexistentAdapter{stub: stub}
 	svc := rw.NewService(port)
 	sess := session.NewService(nil)
+	sess.MarkLoggedInForTest("http://test")
 	binding := NewRWBinding(sess, svc)
 	binding.SetContext(context.Background())
 	return binding
@@ -214,7 +246,9 @@ func (a *nonexistentAdapter) QueryTagsWithQuality(dsID *int, groupID, tagName, t
 func (a *nonexistentAdapter) GetRTValue(tagNames []string) ([]tptapi.RtValuePoint, error) {
 	return nil, &tptapi.TptAPIError{Code: "500", Msg: "Tag Dose Not Exist"}
 }
-func (a *nonexistentAdapter) WriteTagValues(values map[string]any) error { return a.stub.WriteTagValues(values) }
+func (a *nonexistentAdapter) WriteTagValues(values map[string]any) error {
+	return a.stub.WriteTagValues(values)
+}
 func (a *nonexistentAdapter) GetHistoryValue(tagNames []string, begTime, endTime string, interval int, isSecond, isSource bool, offset, option int, page, pageSize int, sort string) (json.RawMessage, error) {
 	return a.stub.GetHistoryValue(tagNames, begTime, endTime, interval, isSecond, isSource, offset, option, page, pageSize, sort)
 }

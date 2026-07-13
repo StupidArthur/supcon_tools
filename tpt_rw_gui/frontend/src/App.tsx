@@ -94,12 +94,15 @@ function LoginBlock({ info, onLoggedIn }: { info: SessionInfo; onLoggedIn: (i: S
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo>({ loggedIn: false, url: '', tenantId: '' });
+  const handleAuthError = () => {
+    setSession({ loggedIn: false, url: '', tenantId: '' });
+  };
   return (
     <ToastProvider>
       <div className="min-h-screen bg-background p-6">
         <div className="mx-auto max-w-5xl space-y-4">
           <LoginBlock info={session} onLoggedIn={setSession} />
-          <VerifyPanel disabled={!session.loggedIn} />
+          <VerifyPanel disabled={!session.loggedIn} onAuthError={handleAuthError} />
         </div>
       </div>
     </ToastProvider>

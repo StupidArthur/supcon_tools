@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@/components/ui/primitives';
-import { rwApi } from '@/lib/api';
+import { rwApi, isAuthError } from '@/lib/api';
 import type { RTValue, HistoryRow } from '@/lib/api';
 import { useToast } from '@/components/Toast';
 import { TagPickerDialog, TagPickerResult } from '@/components/TagPickerDialog';
 
 interface Props {
   disabled?: boolean; // not logged in
+  onAuthError?: () => void;
 }
 
 // 把日期格式化成平台要求的 "yyyy-MM-dd HH:mm:ss"。
@@ -18,7 +19,7 @@ function fmtDate(d: Date): string {
   );
 }
 
-export function VerifyPanel({ disabled }: Props) {
+export function VerifyPanel({ disabled, onAuthError }: Props) {
   const toast = useToast();
 
   // 选择区(主页唯一上下文)
@@ -86,6 +87,10 @@ export function VerifyPanel({ disabled }: Props) {
           });
         }
       } catch (e) {
+        if (isAuthError(e)) {
+          onAuthError?.();
+          return;
+        }
         toast.push({ kind: 'error', message: 'RT 读取失败: ' + (e as Error).message });
       }
     };
@@ -109,6 +114,10 @@ export function VerifyPanel({ disabled }: Props) {
       });
       toast.push({ kind: 'success', message: `已写入 ${tagName} = ${writeVal}` });
     } catch (e) {
+      if (isAuthError(e)) {
+        onAuthError?.();
+        return;
+      }
       toast.push({ kind: 'error', message: '写值失败: ' + (e as Error).message });
     } finally {
       setWriteBusy(false);
@@ -144,6 +153,10 @@ export function VerifyPanel({ disabled }: Props) {
       });
       setHistory(rows);
     } catch (e) {
+      if (isAuthError(e)) {
+        onAuthError?.();
+        return;
+      }
       toast.push({ kind: 'error', message: '历史查询失败: ' + (e as Error).message });
     } finally {
       setHistoryBusy(false);
