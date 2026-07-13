@@ -423,14 +423,22 @@ def dispatch_ua2_1(ctx, cc, meta) -> _CS:
 
     if cid == "UA-2-1-014":
         ds = _types_ds(ctx)
-        ok, detail = try_add_tag(ctx, int(ds["id"]), tag_name=f"ua_case_ua2_{cid}",
-                                 tag_base_name="")
+        ds_id = int(ds["id"])
+        tag_name = f"ua_case_ua2_{cid}"
+        ok, detail = try_add_tag(ctx, ds_id, tag_name=tag_name, tag_base_name="")
         ctx.bag[f"empty_base_{cid}"] = {"ok": ok, "detail": detail}
-        rows = exact(active_rows(ctx), "tagName", f"ua_case_ua2_{cid}")
+        rows = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)
         if not ok:
             check_eq("no_residual_on_reject", 0, len(rows))
             return _CS.PASS
-        return _CS.OBSERVED
+        check_eq("exactly_one_if_accepted", 1, len(rows))
+        rec = rows[0]
+        check_eq("tag_name_saved", tag_name, rec.get("tagName"))
+        check_eq("ds_unchanged", ds_id, int(rec.get("dsId")))
+        tid = int(rec["id"])
+        cleanup_case_tag(ctx, cc, tid, tag_name)
+        check_eq("cleaned_up", 0, len(exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)))
+        return _CS.PASS
 
     if cid == "UA-2-1-016":
         from ua_test_harness.ua2_precise import config_page_row, public_create_read_loop, rt_row

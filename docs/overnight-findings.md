@@ -212,3 +212,31 @@
 | 预期 BLOCKED | 1 (UA-2-2-053 GUI-DEFERRED) |
 
 **下一步**（需用户允许后）: `pytest ua_test_harness/unit_tests` → `case_inventory` → 分章 CLI 真环境采样
+
+---
+
+## 批次 13 — talk-main 任务 A 第一批 (2026-07-13)
+
+**范围**: UA-2-2 余量回归 `003/006/012/014/017/018/020~032`(除 `053`) + UA-2-1-014
+
+**OBSERVED → 真实断言 (晋升 STRICT_IMPLEMENTED)**:
+- `UA-2-1-014`: 空 `tagBaseName` 拒绝路径 `no_residual_on_reject`；接受路径断言 `tag_name_saved` + 清理后无残留
+- `UA-2-2-003`: 双 DS(types+empty) 各建 tag；`active_rows` + `query_tags_with_quality` 断言归属、无重复 ID、不限定范围查询
+- `UA-2-2-058`: `update_tag` 改 `tagBaseName`；旧映射消失、新映射可查、`config_page_row` + `rt_row`
+- `UA-2-2-059`: `add_tag_group` + `batch_update_tags` 分组移动；G1 空 / G2 有 / ID 不变
+- 同批已在 `case_fidelity.STRICT` 登记的 UA-2-2 `020~032/037~040/048~052/054~067` 等回归 handler 保持 `check_*` 闭环
+
+**保留 OBSERVED_ONLY (探索类, 未改 doc)**:
+- `UA-2-2-007/009/010/013/021/043/044/046/047/053/063/064`
+
+**inventory 变化** (相对任务 G 基线 `246/173`):
+- `IMPLEMENTED` 246 → **270** (+24)
+- `PARTIAL` 173 → **149** (-24)
+- `coveragePercent` 58.71% → **64.44%**
+- `structureOk=true`
+
+**单测**: `compileall` OK；`pytest ua_test_harness/unit_tests` **179 passed**
+
+**产品 FAIL**: 本批仅 mock 单测, 未真跑
+
+**修复**: `result_update_cases` 中 `058/059` 提前于通用 `create_case_tag`, 避免重复建 tag

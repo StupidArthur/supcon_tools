@@ -225,30 +225,54 @@ def query_list_default_range(ctx, cc):
 
 
 def query_multi_datasource_set(ctx, cc):
-    """UA-2-2-003: types / empty 数据源位号集合归属正确,无重复 ID。"""
+    """UA-2-2-003: A/B 各有位号；分别查询 A、B 及不限定范围；归属正确、无重复 ID。"""
     ensure_mock_ready(ctx, "functional")
     ensure_logged_in(ctx)
     types_ds = require_shared_datasource(ctx, "types")
     empty_ds = require_shared_datasource(ctx, "empty")
     types_id, empty_id = int(types_ds["id"]), int(empty_ds["id"])
 
-    tag = create_case_tag(ctx, cc, types_id, suffix="mds", tag_desc=TAG_DESC)
-    tag_id, tag_name = int(tag["id"]), tag["name"]
+    tag_t = create_case_tag(ctx, cc, types_id, suffix="mds_t", tag_desc=TAG_DESC)
+    tag_e = create_case_tag(ctx, cc, empty_id, suffix="mds_e", tag_desc=TAG_DESC)
+    t_id, t_name = int(tag_t["id"]), tag_t["name"]
+    e_id, e_name = int(tag_e["id"]), tag_e["name"]
     try:
         types_rows = active_rows(ctx, dsId=types_id)
         empty_rows = active_rows(ctx, dsId=empty_id)
-        check_true("types_has_case_tag", tag_name in {r.get("tagName") for r in types_rows})
-        check_eq("empty_has_no_case_tag", 0, len(exact(empty_rows, "tagName", tag_name)))
+        check_true("types_has_case_tag", t_name in {r.get("tagName") for r in types_rows})
+        check_true("empty_has_case_tag", e_name in {r.get("tagName") for r in empty_rows})
+        check_eq("types_excludes_empty_tag", 0, len(exact(types_rows, "tagName", e_name)))
+        check_eq("empty_excludes_types_tag", 0, len(exact(empty_rows, "tagName", t_name)))
 
         types_ids = _unique_ids(types_rows)
         empty_ids = _unique_ids(empty_rows)
         check_eq("types_no_dup_id", len(types_ids), len(set(types_ids)))
         check_eq("empty_no_dup_id", len(empty_ids), len(set(empty_ids)))
-        overlap = set(types_ids) & set(empty_ids)
-        check_eq("no_cross_ds_id_overlap", 0, len(overlap))
+        check_eq("no_cross_ds_id_overlap", 0, len(set(types_ids) & set(empty_ids)))
+
+        broad = active_rows(ctx)
+        broad_ids = _unique_ids(broad)
+        check_eq("broad_no_dup_id", len(broad_ids), len(set(broad_ids)))
+        check_true("broad_includes_types_tag", t_name in {r.get("tagName") for r in broad})
+        check_true("broad_includes_empty_tag", e_name in {r.get("tagName") for r in broad})
+
+        from tpt_api.datahub import query_tags_with_quality
+        from ua_test_harness.clients.tpt_client import get_api
+        api = get_api(ctx)
+        qtq_types = ((query_tags_with_quality(api, ds_id=types_id, page=1, page_size=200) or {})
+                     .get("tagInfoList") or {}).get("records") or []
+        qtq_empty = ((query_tags_with_quality(api, ds_id=empty_id, page=1, page_size=200) or {})
+                     .get("tagInfoList") or {}).get("records") or []
+        check_true("qtq_types_has_tag", t_name in {r.get("tagName") for r in qtq_types})
+        check_true("qtq_empty_has_tag", e_name in {r.get("tagName") for r in qtq_empty})
+        for row in qtq_types:
+            check_eq("qtq_types_ds", types_id, int(row.get("dsId")))
+        for row in qtq_empty:
+            check_eq("qtq_empty_ds", empty_id, int(row.get("dsId")))
         return CaseStatus.PASS
     finally:
-        cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        cleanup_case_tag(ctx, cc, t_id, t_name)
+        cleanup_case_tag(ctx, cc, e_id, e_name)
 
 
 def query_full_tag_name(ctx, cc):

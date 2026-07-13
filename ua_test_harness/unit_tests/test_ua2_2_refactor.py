@@ -88,12 +88,13 @@ def _patch_env(monkeypatch, calls: _Calls, *,
     def fake_create_case_tag(ctx, cc, ds_id, *, suffix="tag", **kw):
         calls.create_case_tag.append((suffix, ds_id))
         n = f"ua_case_ua2_{cc.case_id}_{suffix}_ns001"
+        tag_id = 800 if int(ds_id) == int(TYPES_DS["id"]) else 801
         cc.registry.register(
             f"tag:{n}", "tag",
-            lambda: calls.physical_delete_tag.append(800),
-            payload={"id": 800, "name": n},
+            lambda tid=tag_id: calls.physical_delete_tag.append(tid),
+            payload={"id": tag_id, "name": n},
         )
-        return {"id": 800, "name": n}
+        return {"id": tag_id, "name": n}
     monkeypatch.setattr(rt, "create_case_tag", fake_create_case_tag)
 
     def fake_cleanup_case_tag(ctx, cc, tag_id, tag_name):
@@ -437,21 +438,40 @@ def test_003_multi_ds_scoped_queries(monkeypatch):
     ctx = _ctx()
     cc = _cc("UA-2-2-003")
     calls = _Calls()
-    tag_name = "ua_case_ua2_UA-2-2-003_mds_ns001"
+    tag_t = "ua_case_ua2_UA-2-2-003_mds_t_ns001"
+    tag_e = "ua_case_ua2_UA-2-2-003_mds_e_ns001"
 
     def ar(**kw):
         if kw.get("dsId") == 100:
-            return [{"id": 800, "dsId": 100, "tagName": tag_name}]
+            return [{"id": 800, "dsId": 100, "tagName": tag_t}]
         if kw.get("dsId") == 200:
-            return []
-        return []
+            return [{"id": 801, "dsId": 200, "tagName": tag_e}]
+        return [{"id": 800, "dsId": 100, "tagName": tag_t}, {"id": 801, "dsId": 200, "tagName": tag_e}]
 
     _patch_env(monkeypatch, calls, active_rows_records_for=ar)
+
+    qtq_calls: list[dict] = []
+
+    def fake_qtq(api, ds_id=None, **kw):
+        qtq_calls.append({"ds_id": ds_id})
+        if ds_id == 100:
+            return {"tagInfoList": {"records": [{"id": 800, "dsId": 100, "tagName": tag_t}]}}
+        if ds_id == 200:
+            return {"tagInfoList": {"records": [{"id": 801, "dsId": 200, "tagName": tag_e}]}}
+        return {"tagInfoList": {"records": []}}
+
+    monkeypatch.setattr("tpt_api.datahub.query_tags_with_quality", fake_qtq)
+    monkeypatch.setattr("ua_test_harness.clients.tpt_client.get_api", lambda ctx: object())
+
     status = rt.query_multi_datasource_set(ctx, cc)
 
     assert status == CaseStatus.PASS
     assert calls.require_shared == ["types", "empty"]
-    assert calls.cleanup_case_tag == [(800, tag_name)]
+    assert ("mds_t", 100) in calls.create_case_tag
+    assert ("mds_e", 200) in calls.create_case_tag
+    assert (800, tag_t) in calls.cleanup_case_tag
+    assert (801, tag_e) in calls.cleanup_case_tag
+    assert {c["ds_id"] for c in qtq_calls} == {100, 200}
 
 
 def test_006_full_tag_name_exact_hit(monkeypatch):

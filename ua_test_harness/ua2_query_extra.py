@@ -326,6 +326,7 @@ def result_update_cases(ctx, cc, meta, cid: str) -> CaseStatus:
     api = _api(ctx)
     tag_id = tag_name = 0
     gid = ""
+    created_groups: list[str] = []
 
     try:
         if cid == "UA-2-2-056":
@@ -337,6 +338,60 @@ def result_update_cases(ctx, cc, meta, cid: str) -> CaseStatus:
             check_true("found_after_add", bool(exact(active_rows(ctx, tagName=new_name), "tagName", new_name)))
             row = exact(active_rows(ctx, tagName=new_name), "tagName", new_name)[0]
             cleanup_case_tag(ctx, cc, int(row["id"]), new_name)
+            return CaseStatus.PASS
+
+        if cid in {"UA-2-2-058", "UA-2-2-059"}:
+            from tpt_api.datahub import add_tag_group, add_tag_group_relation, batch_update_tags, query_tags_with_quality
+            from ua_test_harness.ua2_browse import node_base_name, pick_unused_nodes
+            from ua_test_harness.ua2_precise import config_page_row, rt_row
+
+            if cid == "UA-2-2-058":
+                nodes = pick_unused_nodes(ctx, ds_id, 2)
+                base_a = node_base_name(nodes[0])
+                base_b = node_base_name(nodes[1])
+                tag = create_case_tag(
+                    ctx, cc, ds_id, suffix="58",
+                    tag_base_name=base_a, data_type=str(nodes[0].get("dataType") or "INT"),
+                )
+                tag_id, tag_name = int(tag["id"]), tag["name"]
+                cfg = exact(active_rows(ctx, tagName=tag_name), "tagName", tag_name)[0]
+                dtype = int(cfg.get("dataType") or 6)
+                update_tag(
+                    api, tag_id, tag_name=tag_name, data_type=dtype, ds_id=ds_id,
+                    tag_base_name=base_b, frequency=int(cfg.get("frequency") or 10),
+                    unit=str(cfg.get("unit") or ""),
+                )
+                check_eq("old_base_gone", 0, len([
+                    r for r in active_rows(ctx, tagBaseName=base_a, tagName=tag_name)
+                    if str(r.get("tagBaseName") or "") == base_a
+                ]))
+                new_rows = [
+                    r for r in active_rows(ctx, tagBaseName=base_b)
+                    if r.get("tagName") == tag_name and str(r.get("tagBaseName") or "") == base_b
+                ]
+                check_eq("new_base_hit", 1, len(new_rows))
+                cfg2 = config_page_row(ctx, tag_name)
+                check_eq("config_base_updated", base_b, cfg2.get("tagBaseName"))
+                rt_row(ctx, tag_name, timeout=60.0)
+                cleanup_case_tag(ctx, cc, tag_id, tag_name)
+                tag_id = tag_name = 0
+                return CaseStatus.PASS
+
+            g1 = add_tag_group(api, group_name=case_tag_name(ctx, cc, "g58a"), parent_id="0")
+            g2 = add_tag_group(api, group_name=case_tag_name(ctx, cc, "g58b"), parent_id="0")
+            g1_id, g2_id = str(g1.get("id") or ""), str(g2.get("id") or "")
+            created_groups.extend([g1_id, g2_id])
+            tag = create_case_tag(ctx, cc, ds_id, suffix="59")
+            tag_id, tag_name = int(tag["id"]), tag["name"]
+            add_tag_group_relation(api, group_id=g1_id, tag_ids=[tag_id])
+            batch_update_tags(api, [tag_id], group_id=g2_id)
+            in_g1 = ((query_tags_with_quality(api, group_id=g1_id, tag_name=tag_name, page=1, page_size=10) or {})
+                     .get("tagInfoList") or {}).get("records") or []
+            in_g2 = ((query_tags_with_quality(api, group_id=g2_id, tag_name=tag_name, page=1, page_size=10) or {})
+                     .get("tagInfoList") or {}).get("records") or []
+            check_eq("g1_empty", 0, len(in_g1))
+            check_eq("g2_has_tag", 1, len(in_g2))
+            check_eq("tag_id_unchanged", tag_id, int(in_g2[0].get("id") or 0))
             return CaseStatus.PASS
 
         tag = create_case_tag(ctx, cc, ds_id, suffix=cid[-3:])
@@ -398,14 +453,17 @@ def result_update_cases(ctx, cc, meta, cid: str) -> CaseStatus:
             remove_tag_group_relation(api, group_id="2", tag_ids=[tag_id])
             return CaseStatus.PASS
 
-        if cid in {"UA-2-2-058", "UA-2-2-059"}:
-            ctx.bag[cid] = {"deferred": "needs second mock node or group move fixture"}
-            return CaseStatus.OBSERVED
-
         raise AssertFail(f"result_update_cases: {cid}")
     finally:
         if tag_id:
             cleanup_case_tag(ctx, cc, tag_id, tag_name)
+        from tpt_api.datahub import delete_tag_group
+        for grp_id in created_groups:
+            if grp_id:
+                try:
+                    delete_tag_group(api, [grp_id], is_force=False)
+                except Exception:
+                    pass
 
 
 def stability_cases(ctx, cc, meta, cid: str) -> CaseStatus:
