@@ -159,7 +159,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
             </Button>
           </div>
 
-          <div className="max-h-[26rem] overflow-y-auto rounded border border-border">
+          <div className="max-h-[31rem] overflow-y-auto rounded border border-border">
             {dsId === null ? (
               <div className="p-3 text-center text-sm text-muted-foreground">请先选择数据源</div>
             ) : tagStatus === 'loading' ? (
