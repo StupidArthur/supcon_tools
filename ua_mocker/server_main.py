@@ -8,6 +8,7 @@ OPC UA Mock Server 主逻辑：根据组态创建命名空间与变量节点，
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from asyncua import Server, ua
@@ -139,6 +140,7 @@ async def run_server(config_path: str) -> None:
     print(CONSOLE_BUILD_START)
     addnodes: list = []
     change_info: list = []
+    writable_node_ids: list = []
     global_idx = 0
     for node_cfg, variant_type, default_py, count in node_specs:
         for i in range(1, count + 1):
@@ -147,6 +149,8 @@ async def run_server(config_path: str) -> None:
             addnodes.append(addnode)
             if chg is not None:
                 change_info.append(chg)
+            if node_cfg["writable"] is True:
+                writable_node_ids.append(addnode.RequestedNewNodeId)
             global_idx += 1
 
     # 分批 add_nodes(每批 1000),逐个 check StatusCode
@@ -159,6 +163,23 @@ async def run_server(config_path: str) -> None:
     # change 节点用 RequestedNewNodeId 构造 Node(成功时 AddedNodeId 与请求一致)
     change_nodes = [(make_node(session, nid), vt) for nid, vt in change_info]
     print(CONSOLE_BUILD_DONE)
+
+    # 可写节点 setter:拦截客户端写入,强制使用服务器时间戳(参考 ua_player)
+    # 解决:asyncua 客户端写入时 SourceTimestamp 为 None,读取时显示 1601-01-01
+    def _writable_setter(node_data, attr, dv):
+        if dv is None:
+            return
+        now_ts = datetime.now(timezone.utc)
+        object.__setattr__(dv, "SourceTimestamp", now_ts)
+        object.__setattr__(dv, "ServerTimestamp", now_ts)
+        object.__setattr__(dv, "SourcePicoseconds", None)
+        object.__setattr__(dv, "ServerPicoseconds", None)
+        node_data.attributes[attr].value = dv
+
+    for nid in writable_node_ids:
+        server.set_attribute_value_setter(nid, _writable_setter)
+    if writable_node_ids:
+        print(f"可写节点 setter 已设置({len(writable_node_ids)} 个,强制使用服务器时间戳)")
 
     async def _on_client_write(event: Any, _callback_svc: Any = None) -> None:
         """客户端写值时：控制台打印并写文件日志。"""
