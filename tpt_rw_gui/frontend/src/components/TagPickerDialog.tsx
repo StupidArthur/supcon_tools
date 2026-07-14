@@ -112,7 +112,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
   return (
     <Dialog open={open} onClose={onClose} title="选择位号">
       <Card className="border-0 shadow-none">
-        <CardContent className="space-y-3 p-0">
+        <CardContent className="flex h-full flex-col gap-3 p-0">
           <label className="block text-sm">
             数据源
             <select
@@ -150,7 +150,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
             </Button>
           </div>
 
-          <div className="min-h-[28rem] max-h-[40rem] overflow-y-auto rounded border border-border">
+          <div className="flex-1 overflow-y-auto rounded border border-border">
             {dsId === null ? (
               <div className="p-3 text-center text-sm text-muted-foreground">请先选择数据源</div>
             ) : tagStatus === 'loading' ? (
@@ -184,7 +184,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex shrink-0 justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>取消</Button>
             <Button disabled={pickedId === null} onClick={confirm}>确认</Button>
           </div>
