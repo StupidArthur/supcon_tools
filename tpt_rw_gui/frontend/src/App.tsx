@@ -119,6 +119,10 @@ export default function App() {
     <ToastProvider>
       <div className="min-h-screen bg-background p-6">
         <div className="mx-auto max-w-5xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold">TPT 值读写验证</h1>
+            <span className="text-xs text-muted-foreground">v0.1 designed by @yuzechao</span>
+          </div>
           <LoginBlock info={session} onLoggedIn={setSession} />
           <VerifyPanel disabled={!session.loggedIn} onAuthError={handleAuthError} />
         </div>
