@@ -161,13 +161,13 @@ def query_group_cases(ctx, cc, meta, cid: str) -> CaseStatus:
 def runtime_offline_online(ctx, cc, meta, cid: str) -> CaseStatus:
     """UA-2-2-037/038/040: 断线/恢复/静态质量。"""
     from ua_test_harness.clients import mock_control
-    from ua_test_harness.ua2_fixture_map import base_name_for_node, read_spec
+    from ua_test_harness.ua2_fixture_map import base_name_for_node, read_spec, write_spec
     from ua_test_harness.ua2_precise import opcua_read, rt_row
 
     ds = require_shared_datasource(ctx, "types")
     ds_id = int(ds["id"])
     endpoint = str(ds["endpoint"])
-    spec = read_spec("DOUBLE") if cid == "UA-2-2-040" else read_spec("INT32")
+    spec = write_spec("DOUBLE") if cid == "UA-2-2-040" else read_spec("INT32")
     base = base_name_for_node(spec["node"])
     tag = create_case_tag(ctx, cc, ds_id, suffix=cid[-3:], data_type=spec["dtype"], tag_base_name=base)
     tag_id, tag_name = int(tag["id"]), tag["name"]

@@ -102,7 +102,7 @@ def collect_change(ctx, cc, suffix: str = "002") -> CaseStatus:
 
 
 def collect_static(ctx, cc, suffix: str = "003") -> CaseStatus:
-    spec = read_spec("DOUBLE")
+    spec = write_spec("DOUBLE")
     ds = types_context(ctx)
     tag = create_case_tag(ctx, cc, int(ds["id"]), suffix=suffix, data_type=spec["dtype"],
                           tag_base_name=base_name_for_node(spec["node"]))

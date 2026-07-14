@@ -282,8 +282,10 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
     change_state(ctx, ds["id"], True)
     wait_alive(ctx, ds["id"], timeout=60.0)
     ds_id = int(ds["id"])
-    node = read_spec("INT32")["node"]
-    browse_name = base_name_for_node(node)
+    # functional mock: ns=1, 节点名 mock_* (不是 ua2_fixture_map 的 ns=2 ua2_*)
+    FUNC_NS = 1
+    node = "mock_Int32_r_1"
+    browse_name = tpt_tag_base_name(FUNC_NS, node)
 
     try:
         if num == 1:
@@ -310,7 +312,7 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
 
         if num == 4:
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestReadRT, tag_name=browse_name)
-            src = opcua_read(endpoint, node)
+            src = opcua_read(endpoint, node, namespace_index=FUNC_NS)
             ctx.bag[cid] = {"test": resp, "asyncua": src}
             check_true("has_success", bool(resp.get("successes")))
             return CaseStatus.PASS
@@ -360,22 +362,22 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
             return CaseStatus.PASS
 
         if num == 10:
-            wnode = write_spec("DOUBLE")["node"]
-            wbase = base_name_for_node(wnode)
+            wnode = "mock_Double_w_1"
+            wbase = tpt_tag_base_name(FUNC_NS, wnode)
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestWrite, tag_name=wbase, tag_value="123.45")
-            after = opcua_read(endpoint, wnode)
+            after = opcua_read(endpoint, wnode, namespace_index=FUNC_NS)
             ctx.bag[cid] = {"resp": resp, "asyncua": after}
             return CaseStatus.OBSERVED
 
         if num == 11:
-            rnode = read_spec("INT32")["node"]
-            rbase = base_name_for_node(rnode)
+            rnode = "mock_Int32_r_1"
+            rbase = tpt_tag_base_name(FUNC_NS, rnode)
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestWrite, tag_name=rbase, tag_value="1")
             ctx.bag[cid] = resp
             return CaseStatus.OBSERVED
 
         if num == 12:
-            wbase = base_name_for_node(write_spec("DOUBLE")["node"])
+            wbase = tpt_tag_base_name(FUNC_NS, "mock_Double_w_1")
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestWrite, tag_name=wbase, tag_value="abc")
             ctx.bag[cid] = resp
             check_true("type_mismatch", not resp.get("isAllSuccess", True))

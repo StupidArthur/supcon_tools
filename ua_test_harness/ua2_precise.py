@@ -92,15 +92,16 @@ def qtq_row(ctx, tag_name: str, ds_id: int, *, timeout: float = 60.0) -> dict[st
     raise AssertFail(f"queryWithQuality timeout for {tag_name}")
 
 
-def opcua_read(endpoint: str, node_name: str) -> Any:
-    """asyncua 直读源端节点(namespace=2)。"""
-    client = UaSourceClient(endpoint, namespace_index=NAMESPACE_INDEX)
+def opcua_read(endpoint: str, node_name: str, *, namespace_index: int = NAMESPACE_INDEX) -> Any:
+    """asyncua 直读源端节点(默认 namespace=2,可传 namespace_index=1 读 functional mock)。"""
+    client = UaSourceClient(endpoint, namespace_index=namespace_index)
     return client.read_sync(node_name)
 
 
-def opcua_write(endpoint: str, node_name: str, value: Any, *, type_key: str | None = None) -> None:
-    """asyncua 直写源端节点(namespace=2);type_key 用于恢复源端时显式 varianttype。"""
-    client = UaSourceClient(endpoint, namespace_index=NAMESPACE_INDEX)
+def opcua_write(endpoint: str, node_name: str, value: Any, *, type_key: str | None = None,
+                namespace_index: int = NAMESPACE_INDEX) -> None:
+    """asyncua 直写源端节点(默认 namespace=2);type_key 用于恢复源端时显式 varianttype。"""
+    client = UaSourceClient(endpoint, namespace_index=namespace_index)
     client.write_sync(node_name, value, type_key=type_key)
 
 
