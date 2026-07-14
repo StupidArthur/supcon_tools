@@ -104,10 +104,6 @@ export function VerifyPanel({ disabled, onAuthError }: Props) {
         if (first) {
           setRt(first);
           lastRtErrorRef.current = 0;
-          // 自动填充 writeVal:仅当输入框为空且未聚焦时(避免打断用户输入)
-          if (writeValRef.current === '' && writeInputRef.current !== document.activeElement) {
-            setWriteVal(first.value);
-          }
         } else {
           // 后端返回空列表:清掉旧 RT,避免残留值
           setRt(null);
