@@ -13,7 +13,7 @@ import (
 // Service 业务能力:登录后做 "登录态下的 TPT 值读写" 业务用例。
 //
 // 设计要点:
-//   - 通过 SessionPort 拿到 *tptapi.TptClient(Service.Client() 返回,内置 token 续期)。
+//   - 通过 ClientPort 拿到 *tptapi.TptClient(由 container 注入,内置 token 续期)。
 //   - 所有调用都做绑定,遇到 *tptapi.TptAPIError / 其它错误时统一翻译成 *PublicError。
 //   - 写值回读为可选 + 延时,默认 1s(平台实测 ~1s RT 反映,~4s 历史落库,见 tpt_api/README.md)。
 type Service struct {

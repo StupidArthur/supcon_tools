@@ -9,5 +9,11 @@
   "author": {
     "name": "stupidArthur",
     "email": "yuzc@zju.edu.cn"
+  },
+  "info": {
+    "productName": "TPT Read/Write GUI",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2026",
+    "comments": "TPT data source read/write verification tool"
   }
 }

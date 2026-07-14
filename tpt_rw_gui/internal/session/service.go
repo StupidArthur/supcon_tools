@@ -85,7 +85,4 @@ func (s *Service) MarkLoggedInForTest(url string) {
 	s.mu.Unlock()
 }
 
-// TptService 返回底层 *tptapi.Service,供 internal/rw 复用同一份登录态。
-func (s *Service) TptService() *tptapi.Service {
-	return s.tpt
-}
+

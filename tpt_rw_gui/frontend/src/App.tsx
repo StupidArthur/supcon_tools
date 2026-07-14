@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { VerifyPanel } from '@/components/VerifyPanel';
 import { ToastProvider, useToast } from '@/components/Toast';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@/components/ui/primitives';
@@ -97,6 +97,24 @@ export default function App() {
   const handleAuthError = () => {
     setSession({ loggedIn: false, url: '', tenantId: '' });
   };
+  useEffect(() => {
+    if (!session.loggedIn) return;
+    let stopped = false;
+    const check = async () => {
+      try {
+        const status = await sessionApi.status();
+        if (!stopped && !status.loggedIn) {
+          setSession({ loggedIn: false, url: '', tenantId: '' });
+        }
+      } catch {
+      }
+    };
+    const timer = window.setInterval(check, 30000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [session.loggedIn]);
   return (
     <ToastProvider>
       <div className="min-h-screen bg-background p-6">

@@ -30,12 +30,6 @@ type ClientPort interface {
 	ListGroupTagsRaw(groupID, tagName string, tagType, page, pageSize int) (json.RawMessage, error)
 }
 
-// EnsureLoggedIn 用于 binding 调用前保证底层已登录。
-// *tptapi.Service 暴露 Client() 自动续期。
-type SessionPort interface {
-	Client() *tptapi.TptClient
-}
-
 // TagListQuery 业务层传给 QueryTagsWithQuality 的查询条件。
 type TagListQuery struct {
 	DSID       *int   // nil = 不过滤
