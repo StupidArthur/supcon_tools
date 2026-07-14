@@ -11,9 +11,9 @@
     "email": "yuzc@zju.edu.cn"
   },
   "info": {
-    "productName": "TPT Read/Write GUI",
-    "productVersion": "1.0.0",
+    "productName": "DataHub读写值验证工具",
+    "productVersion": "0.1.0",
     "copyright": "Copyright © 2026",
-    "comments": "TPT data source read/write verification tool"
+    "comments": "DataHub data source read/write verification tool"
   }
 }

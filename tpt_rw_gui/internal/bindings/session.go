@@ -9,8 +9,10 @@ import (
 
 // SessionBinding 暴露给前端的登录态操作。
 type SessionBinding struct {
-	ctx context.Context
-	svc *session.Service
+	ctx        context.Context
+	svc        *session.Service
+	appName    string
+	appVersion string
 }
 
 // NewSessionBinding 创建 SessionBinding。
@@ -20,6 +22,16 @@ func NewSessionBinding(svc *session.Service) *SessionBinding {
 
 // SetContext 由 Lifecycle.Startup 注入应用根 ctx。
 func (b *SessionBinding) SetContext(ctx context.Context) { b.ctx = ctx }
+
+// SetAppInfo 由 Container.Wire 注入应用名称与版本号。
+//
+// 为什么注入式:app 包已 import bindings(constant 在 app/version.go),反向 import
+// 会形成循环。注入式让 binding 持有字符串副本,前端 AppInfo 仍返回与 main.go
+// 窗口标题同一来源的值。
+func (b *SessionBinding) SetAppInfo(name, version string) {
+	b.appName = name
+	b.appVersion = version
+}
 
 // LoginRequestDTO 登录请求。
 type LoginRequestDTO struct {
@@ -63,6 +75,15 @@ func (b *SessionBinding) Status() SessionInfoDTO {
 	info := b.svc.Status(b.ctx)
 	return SessionInfoDTO{
 		LoggedIn: info.LoggedIn, URL: info.URL, TenantID: info.TenantID,
+	}
+}
+
+// AppInfo 返回应用名称和版本号。
+func (b *SessionBinding) AppInfo() AppInfoDTO {
+	return AppInfoDTO{
+		Name:    b.appName,
+		Version: b.appVersion,
+		Title:   b.appName + "v" + b.appVersion,
 	}
 }
 

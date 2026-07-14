@@ -97,6 +97,13 @@ type PublicErrorDTO struct {
 	Kind    string `json:"kind"`
 }
 
+// AppInfoDTO 应用信息。
+type AppInfoDTO struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Title   string `json:"title"`
+}
+
 // Error 让 *PublicErrorDTO 满足 error 接口(Wails 生成签名要求 error,而不是 struct)。
 func (e *PublicErrorDTO) Error() string {
 	if e.Code != "" {

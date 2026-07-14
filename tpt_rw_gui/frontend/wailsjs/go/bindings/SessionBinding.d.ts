@@ -3,9 +3,13 @@
 import {bindings} from '../models';
 import {context} from '../models';
 
+export function AppInfo():Promise<bindings.AppInfoDTO>;
+
 export function Login(arg1:bindings.LoginRequestDTO):Promise<bindings.SessionInfoDTO>;
 
 export function Logout():Promise<void>;
+
+export function SetAppInfo(arg1:string,arg2:string):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 

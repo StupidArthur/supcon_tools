@@ -38,4 +38,5 @@ func NewContainer() (*Container, error) {
 func (c *Container) Wire() {
 	c.Lifecycle.Register(c.SessionBinding)
 	c.Lifecycle.Register(c.RWBinding)
+	c.SessionBinding.SetAppInfo(AppName, AppVersion)
 }

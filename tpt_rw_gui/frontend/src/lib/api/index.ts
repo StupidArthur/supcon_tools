@@ -40,6 +40,7 @@ export interface SessionApi {
   }) => Promise<SessionInfo>;
   logout: () => Promise<void>;
   status: () => Promise<SessionInfo>;
+  appInfo: () => Promise<{ name: string; version: string; title: string }>;
 }
 
 export interface RwApi {
@@ -76,6 +77,7 @@ export const sessionApi: SessionApi = {
   login: SessionBinding.Login,
   logout: SessionBinding.Logout,
   status: SessionBinding.Status,
+  appInfo: SessionBinding.AppInfo,
 };
 
 export const rwApi: RwApi = {

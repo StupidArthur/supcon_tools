@@ -94,9 +94,13 @@ function LoginBlock({ info, onLoggedIn }: { info: SessionInfo; onLoggedIn: (i: S
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo>({ loggedIn: false, url: '', tenantId: '' });
+  const [appTitle, setAppTitle] = useState('DataHub读写值验证工具v0.1');
   const handleAuthError = () => {
     setSession({ loggedIn: false, url: '', tenantId: '' });
   };
+  useEffect(() => {
+    sessionApi.appInfo().then((info) => setAppTitle(info.title)).catch(() => {});
+  }, []);
   useEffect(() => {
     if (!session.loggedIn) return;
     let stopped = false;
@@ -120,8 +124,8 @@ export default function App() {
       <div className="min-h-screen bg-background p-6">
         <div className="mx-auto max-w-5xl space-y-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">TPT 值读写验证</h1>
-            <span className="text-xs text-muted-foreground">v0.1 designed by @yuzechao</span>
+            <h1 className="text-lg font-semibold">{appTitle}</h1>
+            <span className="text-xs text-muted-foreground">designed by @yuzechao</span>
           </div>
           <LoginBlock info={session} onLoggedIn={setSession} />
           <VerifyPanel disabled={!session.loggedIn} onAuthError={handleAuthError} />

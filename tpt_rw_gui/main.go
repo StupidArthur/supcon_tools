@@ -22,7 +22,7 @@ func main() {
 	container.Wire()
 
 	if err := wails.Run(&options.App{
-		Title:  "TPT 值读写验证",
+		Title:  app.AppTitle(),
 		Width:  1280,
 		Height: 960,
 		AssetServer: &assetserver.Options{
