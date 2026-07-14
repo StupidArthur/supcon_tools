@@ -188,8 +188,22 @@ def dual_ds_isolation(ctx, cc, meta) -> CaseStatus:
     from ua_test_harness.fixtures.datasource import change_state
     from ua_test_harness.fixtures.tag import read_rt, write_tag
     from ua_test_harness.ua2_helpers import try_add_tag
+    from ua_test_harness.provisioning.ua2_baseline import ensure_ua2_baseline
 
     ensure_mock_ready(ctx, "functional")
+    # 启动 empty mock (18967) 并 provision 共享 DS
+    if not mock_control._port_listening("127.0.0.1", 18967):
+        import subprocess, sys
+        from pathlib import Path
+        mock_dir = Path(__file__).resolve().parents[1] / "ua_mocker"
+        subprocess.Popen(
+            [sys.executable, "main.py", str(mock_dir / "ua2_empty.yaml")],
+            cwd=str(mock_dir),
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        mock_control.wait_ready("functional", timeout=30.0, ctx=ctx)  # reuse polling
+    ensure_ua2_baseline(ctx)
+
     ensure_logged_in(ctx)
     types = require_shared_datasource(ctx, "types")
     empty = require_shared_datasource(ctx, "empty")

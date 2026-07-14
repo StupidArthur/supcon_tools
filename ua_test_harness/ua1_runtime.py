@@ -312,12 +312,6 @@ def _dispatch_ua1_3(ctx, cc, meta) -> CaseStatus:
 
 
 def _dispatch_ua1_4(ctx, cc, meta) -> CaseStatus:
-    from ua_test_harness.known_blocked import blocked_reason
-
-    reason = blocked_reason(meta["id"])
-    if reason:
-        ctx.bag[f"blocked_{meta['id']}"] = reason
-        return CaseStatus.BLOCKED
     from ua_test_harness.ua1_precise import dual_ds_isolation
     return dual_ds_isolation(ctx, cc, meta)
 

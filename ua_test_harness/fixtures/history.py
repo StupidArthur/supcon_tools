@@ -43,6 +43,7 @@ class HistoryFixtureFactory:
             for i in range(count)
         ]
         import_tag_value(self.api, items)
+        time.sleep(3)  # 等 TPT 处理导入
         return {"count": count, "tagName": tag_name}
 
     def create_write_dataset(self, tag_name: str, count: int = 5) -> dict:
@@ -61,9 +62,9 @@ class HistoryFixtureFactory:
             begin_ms = int(time.time() * 1000) - 24 * 3600 * 1000
         if end_ms is None:
             end_ms = int(time.time() * 1000) + 60 * 1000
-        from datetime import datetime, timezone
-        beg_str = datetime.fromtimestamp(begin_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        end_str = datetime.fromtimestamp(end_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        from datetime import datetime
+        beg_str = datetime.fromtimestamp(begin_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
+        end_str = datetime.fromtimestamp(end_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
         raw = get_history_value(
             self.api,
             tag_names=[tag_name],
