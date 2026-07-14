@@ -37,6 +37,8 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
   // 列表区诊断状态:idle=未发起 / loading=正在筛 / empty=筛后 0 条 / error=失败
   const [tagStatus, setTagStatus] = useState<'idle' | 'loading' | 'empty' | 'error'>('idle');
   const [tagErrMsg, setTagErrMsg] = useState('');
+  const [tagPage, setTagPage] = useState(0);
+  const TAG_PAGE_SIZE = 10;
 
   // 打开时拉数据源
   useEffect(() => {
@@ -67,6 +69,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
     setPickedId(null);
     setTagStatus('idle');
     setTagErrMsg('');
+    setTagPage(0);
   }, [dsId, open]);
 
   // Enter / 点筛选 → 调 listTags,并明确每个分支的诊断状态
@@ -84,6 +87,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
       });
       setTags(list);
       setPickedId(null);
+      setTagPage(0);
       setTagStatus(list.length === 0 ? 'empty' : 'idle');
     } catch (e) {
       const msg = (e as Error).message;
@@ -109,10 +113,15 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
     onClose();
   }
 
+  const tagStart = tagPage * TAG_PAGE_SIZE;
+  const tagEnd = tagStart + TAG_PAGE_SIZE;
+  const pagedTags = tags.slice(tagStart, tagEnd);
+  const totalPages = Math.ceil(tags.length / TAG_PAGE_SIZE);
+
   return (
     <Dialog open={open} onClose={onClose} title="选择位号">
       <Card className="border-0 shadow-none">
-        <CardContent className="flex h-full flex-col gap-3 p-0">
+        <CardContent className="space-y-3 p-0">
           <label className="block text-sm">
             数据源
             <select
@@ -150,7 +159,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto rounded border border-border">
+          <div className="max-h-[26rem] overflow-y-auto rounded border border-border">
             {dsId === null ? (
               <div className="p-3 text-center text-sm text-muted-foreground">请先选择数据源</div>
             ) : tagStatus === 'loading' ? (
@@ -164,7 +173,7 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
             ) : tags.length === 0 ? (
               <div className="p-3 text-center text-sm text-muted-foreground">输入关键字后点"筛选"(空关键字也行)</div>
             ) : (
-              tags.map((t) => (
+              pagedTags.map((t) => (
                 <label
                   key={t.id}
                   className="flex cursor-pointer items-center gap-2 border-b border-border p-2 text-sm last:border-b-0 hover:bg-muted/40"
@@ -184,7 +193,31 @@ export function TagPickerDialog({ open, onClose, onConfirm }: Props) {
             )}
           </div>
 
-          <div className="flex shrink-0 justify-end gap-2 pt-2">
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 text-sm">
+              <Button
+                variant="outline"
+                className="h-7 px-2"
+                disabled={tagPage === 0}
+                onClick={() => setTagPage((p) => p - 1)}
+              >
+                上一页
+              </Button>
+              <span className="text-muted-foreground">
+                {tagPage + 1} / {totalPages} 页(共 {tags.length} 条)
+              </span>
+              <Button
+                variant="outline"
+                className="h-7 px-2"
+                disabled={tagPage >= totalPages - 1}
+                onClick={() => setTagPage((p) => p + 1)}
+              >
+                下一页
+              </Button>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>取消</Button>
             <Button disabled={pickedId === null} onClick={confirm}>确认</Button>
           </div>
