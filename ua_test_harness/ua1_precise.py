@@ -193,17 +193,18 @@ def dual_ds_isolation(ctx, cc, meta) -> CaseStatus:
     ensure_mock_ready(ctx, "functional")
     ensure_logged_in(ctx)
 
-    # 启动 empty mock (18967) 如果没跑
-    if not mock_control._port_listening("127.0.0.1", 18967):
-        import subprocess, sys
-        from pathlib import Path
-        mock_dir = Path(__file__).resolve().parents[1] / "ua_mocker"
-        subprocess.Popen(
-            [sys.executable, "main.py", str(mock_dir / "ua2_empty.yaml")],
-            cwd=str(mock_dir),
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        )
-        time.sleep(5)
+    # 启动共享 mock: types(18965) + empty(18967) 如果没跑
+    import subprocess, sys
+    from pathlib import Path
+    mock_dir = Path(__file__).resolve().parents[1] / "ua_mocker"
+    for port, yaml_name in [(18965, "ua2_types.yaml"), (18967, "ua2_empty.yaml")]:
+        if not mock_control._port_listening("127.0.0.1", port):
+            subprocess.Popen(
+                [sys.executable, "main.py", str(mock_dir / yaml_name)],
+                cwd=str(mock_dir),
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            time.sleep(5)
 
     # 直接查 TPT 已有的共享 DS,不检查 endpoint(可能指向 18965 或 18960)
     api = _api(ctx)
