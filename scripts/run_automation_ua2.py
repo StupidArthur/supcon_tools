@@ -166,6 +166,7 @@ def resolve_selected_cases(
     skip_verified: bool,
     chapter_timeout_sec: float,
     skip_prereqs: bool,
+    include_partial: bool = False,
 ) -> tuple[list[str], dict[str, Any]]:
     """Pick STRICT_IMPLEMENTED cases; exclude PARTIAL/exploration."""
     meta: dict[str, Any] = {"selectionMode": "default"}
@@ -176,7 +177,26 @@ def resolve_selected_cases(
         if row.get("verificationStatus") in VERIFIED_STATUSES
     }
 
-    if cases_arg:
+    from ua_test_harness.case_fidelity import STRICT_IMPLEMENTED
+
+    if include_partial and chapter:
+        # Include ALL cases (STRICT + PARTIAL) for this chapter
+        from ua_test_harness.case_inventory import load_documented_cases
+        from pathlib import Path
+        rows, _ = load_documented_cases(Path(__file__).resolve().parents[1])
+        pool = sorted(r["id"] for r in rows if r["id"].startswith(f"{chapter}-"))
+        meta["selectionMode"] = "chapter"
+        meta["chapter"] = chapter
+        meta["strictPoolSize"] = len([c for c in pool if c in STRICT_IMPLEMENTED])
+        meta["includedPartial"] = len([c for c in pool if c not in STRICT_IMPLEMENTED])
+        effective_skip_verified = skip_verified
+    elif include_partial and cases_arg:
+        requested = [c.strip() for c in cases_arg.split(",") if c.strip()]
+        pool = requested
+        meta["selectionMode"] = "cases"
+        meta["requested"] = requested
+        effective_skip_verified = skip_verified
+    elif cases_arg:
         requested = [c.strip() for c in cases_arg.split(",") if c.strip()]
         meta["selectionMode"] = "cases"
         meta["requested"] = requested
@@ -193,10 +213,12 @@ def resolve_selected_cases(
         meta["selectionMode"] = "default_batch"
         effective_skip_verified = False  # legacy 首批 16 始终可跑(含已 VERIFIED)
 
-    from ua_test_harness.case_fidelity import STRICT_IMPLEMENTED
-
-    strict_pool = [cid for cid in pool if cid in STRICT_IMPLEMENTED]
-    meta["excludedPartial"] = [cid for cid in pool if cid not in STRICT_IMPLEMENTED]
+    if not include_partial:
+        strict_pool = [cid for cid in pool if cid in STRICT_IMPLEMENTED]
+        meta["excludedPartial"] = [cid for cid in pool if cid not in STRICT_IMPLEMENTED]
+    else:
+        strict_pool = pool  # include all
+        meta["excludedPartial"] = []
 
     if effective_skip_verified:
         candidates = [cid for cid in strict_pool if cid not in verified_ids]
@@ -631,6 +653,11 @@ def main() -> int:
         default="",
         help="写入 overnight-findings 的批次标签",
     )
+    parser.add_argument(
+        "--include-partial",
+        action="store_true",
+        help="包含 PARTIAL 探索类 case(默认只跑 STRICT_IMPLEMENTED)",
+    )
     args = parser.parse_args()
 
     if args.cases and args.chapter:
@@ -644,6 +671,7 @@ def main() -> int:
         skip_verified=not args.rerun_verified,
         chapter_timeout_sec=args.chapter_timeout_sec,
         skip_prereqs=args.skip_prereqs,
+        include_partial=args.include_partial,
     )
     if not selected_cases:
         print("ERROR: no cases selected (pool empty or all verified?)")
