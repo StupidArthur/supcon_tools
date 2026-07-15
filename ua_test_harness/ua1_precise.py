@@ -188,10 +188,12 @@ def dual_ds_isolation(ctx, cc, meta) -> CaseStatus:
     from ua_test_harness.fixtures.datasource import change_state
     from ua_test_harness.fixtures.tag import read_rt, write_tag
     from ua_test_harness.ua2_helpers import try_add_tag
-    from ua_test_harness.provisioning.ua2_baseline import ensure_ua2_baseline
+    from tpt_api.datahub import list_ds_info
 
     ensure_mock_ready(ctx, "functional")
-    # 启动 empty mock (18967) 并 provision 共享 DS
+    ensure_logged_in(ctx)
+
+    # 启动 empty mock (18967) 如果没跑
     if not mock_control._port_listening("127.0.0.1", 18967):
         import subprocess, sys
         from pathlib import Path
@@ -201,13 +203,29 @@ def dual_ds_isolation(ctx, cc, meta) -> CaseStatus:
             cwd=str(mock_dir),
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
-        mock_control.wait_ready("functional", timeout=30.0, ctx=ctx)  # reuse polling
-    ensure_ua2_baseline(ctx)
+        time.sleep(5)
 
-    ensure_logged_in(ctx)
-    types = require_shared_datasource(ctx, "types")
-    empty = require_shared_datasource(ctx, "empty")
-    t_id, e_id = int(types["id"]), int(empty["id"])
+    # 直接查 TPT 已有的共享 DS,不检查 endpoint(可能指向 18965 或 18960)
+    api = _api(ctx)
+    all_ds = list_ds_info(api, page=1, page_size=500)
+    types_row = empty_row = None
+    for d in (all_ds or {}).get("records") or []:
+        if d.get("dsName") == "ua_shared_ua2_types_ds":
+            types_row = d
+        if d.get("dsName") == "ua_shared_ua2_empty_ds":
+            empty_row = d
+    if not types_row:
+        raise AssertFail("UA-1-4: ua_shared_ua2_types_ds 不存在,先跑 UA-2 baseline")
+    if not empty_row:
+        raise AssertFail("UA-1-4: ua_shared_ua2_empty_ds 不存在,先跑 UA-2 baseline")
+    # 确保 empty DS enabled + alive
+    if not empty_row.get("alive"):
+        change_state(ctx, int(empty_row["id"]), True)
+        time.sleep(5)
+    if not types_row.get("alive"):
+        change_state(ctx, int(types_row["id"]), True)
+        time.sleep(5)
+    t_id, e_id = int(types_row["id"]), int(empty_row["id"])
     cid = meta["id"]
     num = int(cid.split("-")[-1])
 
@@ -296,9 +314,9 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
     change_state(ctx, ds["id"], True)
     wait_alive(ctx, ds["id"], timeout=60.0)
     ds_id = int(ds["id"])
-    # functional mock: ns=1, 节点名 mock_* (不是 ua2_fixture_map 的 ns=2 ua2_*)
-    FUNC_NS = 1
-    node = "mock_Int32_r_1"
+    # smoke.yaml: ns=2, 节点 smoke_change_1(Int32,只读)/ smoke_static_1(Double,可写)
+    FUNC_NS = 2
+    node = "smoke_change_1"
     browse_name = tpt_tag_base_name(FUNC_NS, node)
 
     try:
@@ -376,7 +394,7 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
             return CaseStatus.PASS
 
         if num == 10:
-            wnode = "mock_Double_w_1"
+            wnode = "smoke_static_1"
             wbase = tpt_tag_base_name(FUNC_NS, wnode)
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestWrite, tag_name=wbase, tag_value="123.45")
             after = opcua_read(endpoint, wnode, namespace_index=FUNC_NS)
@@ -384,14 +402,14 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
             return CaseStatus.OBSERVED
 
         if num == 11:
-            rnode = "mock_Int32_r_1"
+            rnode = "smoke_change_1"
             rbase = tpt_tag_base_name(FUNC_NS, rnode)
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestWrite, tag_name=rbase, tag_value="1")
             ctx.bag[cid] = resp
             return CaseStatus.OBSERVED
 
         if num == 12:
-            wbase = tpt_tag_base_name(FUNC_NS, "mock_Double_w_1")
+            wbase = tpt_tag_base_name(FUNC_NS, "smoke_static_1")
             resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestWrite, tag_name=wbase, tag_value="abc")
             ctx.bag[cid] = resp
             check_true("type_mismatch", not resp.get("isAllSuccess", True))
