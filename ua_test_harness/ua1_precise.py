@@ -330,7 +330,10 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
         if num == 2:
             change_state(ctx, ds_id, False)
             time.sleep(2)
-            resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestEnumerate)
+            try:
+                resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestEnumerate)
+            except Exception as e:
+                resp = {"error": str(e)}
             ctx.bag[cid] = resp
             return CaseStatus.OBSERVED
 
@@ -366,7 +369,10 @@ def test_ds_info_case(ctx, cc, meta) -> CaseStatus:
 
         if num == 7:
             change_state(ctx, ds_id, False)
-            resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestReadRT, tag_name=browse_name)
+            try:
+                resp = test_ds_info(_api(ctx), ds_id, test_type=DsTestReadRT, tag_name=browse_name)
+            except Exception as e:
+                resp = {"error": str(e)}
             ctx.bag[cid] = resp
             return CaseStatus.OBSERVED
 
