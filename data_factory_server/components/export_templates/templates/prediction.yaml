@@ -1,0 +1,7 @@
+name: prediction
+defaults:
+  header_rows: 2
+  title_names: "timeStamp,时间戳"
+  time_format: "%Y-%m-%d %H:%M:%S"
+  file_format: "csv"
+  sheet_name: "控制器"

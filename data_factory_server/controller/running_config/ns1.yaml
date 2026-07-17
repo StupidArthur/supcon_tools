@@ -1,0 +1,33 @@
+program:
+  - name: sin1
+    type: SINE_WAVE
+    init_args:
+      amplitude: 1.0
+      period: 2000
+      phase: 0.0
+      offset: 1.0
+    display_args: ["out[2]"]
+    expression: sin1.execute()
+  - name: source_flow
+    type: VARIABLE
+    expression: source_flow = 0.18
+    display_args: ["source_flow[0.2]"]
+  - name: valve_1
+    type: VALVE
+    init_args:
+      full_travel_time: 10
+    display_args: ["current_opening", "target_opening", "outlet_flow[0.2]"]
+    expression: valve_1.execute(target_opening=pid_1.MV, inlet_flow=source_flow)
+  - name: tank_1
+    type: CYLINDRICAL_TANK
+    init_args: {}
+    display_args: ["level[2]", "inlet_flow[0.2]", "outlet_flow[0.2]"]
+    expression: tank_1.execute(inlet_flow=valve_1.outlet_flow)
+  - name: pid_1
+    type: PID
+    init_args:
+      PB: 12
+      TI: 30
+      TD: 0.15
+    display_args: ["MV[100]", "PV[2]", "SV[2]"]
+    expression: pid_1.execute(PV=tank_1.level, SV=sin1.out)

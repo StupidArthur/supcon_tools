@@ -1,0 +1,7 @@
+name: ai
+defaults:
+  header_rows: 2
+  title_names: "Timestamp,时间戳"
+  time_format: "%Y/%m/%d %H:%M:%S"
+  file_format: "xlsx"
+  sheet_name: "sheet1"

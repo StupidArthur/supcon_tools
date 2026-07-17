@@ -1,0 +1,47 @@
+instances:
+  - id: mpc_1
+    type: simulation
+    source: controller/running_config/mpc_1.yaml
+  - id: assess_c_1
+    type: simulation
+    source: controller/running_config/assess_c_1.yaml
+  - id: ns_lag
+    type: simulation
+    source: controller/running_config/ns_lag.yaml
+  - id: page_tank_1
+    type: simulation
+    source: controller/running_config/page_tank_1.yaml
+  - id: page_tank_2
+    type: simulation
+    source: controller/running_config/page_tank_2.yaml
+  - id: page_tank_3
+    type: simulation
+    source: controller/running_config/page_tank_3.yaml
+  - id: page_tank_4
+    type: simulation
+    source: controller/running_config/page_tank_4.yaml
+  - id: page_tank_5
+    type: simulation
+    source: controller/running_config/page_tank_5.yaml
+  - id: page_tank_6
+    type: simulation
+    source: controller/running_config/page_tank_6.yaml
+  - id: page_tank_7
+    type: simulation
+    source: controller/running_config/page_tank_7.yaml
+  - id: page_tank_8
+    type: simulation
+    source: controller/running_config/page_tank_8.yaml
+  - id: page_tank_9
+    type: simulation
+    source: controller/running_config/page_tank_9.yaml
+  - id: page_tank_10
+    type: simulation
+    source: controller/running_config/page_tank_10.yaml
+
+
+storage:
+  sample_interval: 1.0
+
+opcua:
+  publish_interval: 0.5
