@@ -1317,3 +1317,1149 @@
 
 **UA-1-6 重跑** (`output/automation_ua2_ua16_20260713_183801`):
 - PASS=3 OBSERVED=3 FAIL=2 ERROR=4 (UA-1-6-13 未入本批 limit=12)
+
+---
+
+## 真跑批次 — overnight_UA-1-1_20260714_203011 (2026-07-14 20:31)
+
+**产物**: `output/automation_ua2_ua11_20260714_203011`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-1", "strictPoolSize": 9, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 4, "selectedCases": ["UA-1-1-01", "UA-1-1-02", "UA-1-1-03", "UA-1-1-04"], "remainingAfterBatch": 5}
+**结果**: PASS=4 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — overnight_UA-1-2_20260714_203011 (2026-07-14 20:35)
+
+**产物**: `output/automation_ua2_ua12_20260714_203138`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-2", "strictPoolSize": 6, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 6, "selectedCases": ["UA-1-2-01", "UA-1-2-02", "UA-1-2-03", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=6 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-2-01`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_549500 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_549500 timeout after 30.0s; last=None
+- `UA-1-2-02`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_885200 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_885200 timeout after 30.0s; last=None
+- `UA-1-2-03`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_706300 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_706300 timeout after 30.0s; last=None
+- `UA-1-2-06`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_550000 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_550000 timeout after 30.0s; last=None
+- `UA-1-2-07`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_997600 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_997600 timeout after 30.0s; last=None
+- `UA-1-2-08`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_491600 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_491600 timeout after 30.0s; last=None
+
+---
+
+## 真跑批次 — overnight_UA-1-3_20260714_203011 (2026-07-14 20:35)
+
+**产物**: `output/automation_ua2_ua13_20260714_203504`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 8, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-01`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-02`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-03`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-04`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-05`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-06`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-07`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-08`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+
+---
+
+## 真跑批次 — overnight_UA-1-4_20260714_203011 (2026-07-14 20:36)
+
+**产物**: `output/automation_ua2_ua14_20260714_203532`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-4", "strictPoolSize": 6, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 6, "selectedCases": ["UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — overnight_UA-1-5_20260714_203011 (2026-07-15 08:50)
+
+**产物**: `output/automation_ua2_ua15_20260715_085033`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-5", "strictPoolSize": 2, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 2, "selectedCases": ["UA-1-5-01", "UA-1-5-07"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — overnight_UA-1-6_20260714_203011 (2026-07-15 08:51)
+
+**产物**: `output/automation_ua2_ua16_20260715_085049`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-6", "strictPoolSize": 13, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 11, "selectedCases": ["UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11"], "remainingAfterBatch": 2}
+**结果**: PASS=3 FAIL=1 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-6-06`: assert: [failed] not true.
+  - step `None`: [failed] not true.
+
+---
+
+## 真跑批次 — overnight_UA-2-1_20260714_203011 (2026-07-15 08:55)
+
+**产物**: `output/automation_ua2_ua21_20260715_085138`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "excludedPartial": [], "skippedVerified": [], "autoBatchLimit": 17, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007", "UA-2-1-008", "UA-2-1-009", "UA-2-1-010", "UA-2-1-011", "UA-2-1-012", "UA-2-1-013", "UA-2-1-014", "UA-2-1-016", "UA-2-1-017", "UA-2-1-018"], "remainingAfterBatch": 71}
+**结果**: PASS=2 FAIL=2 BLOCKED=13 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-005`: assert: ds 103 alive=False timeout
+  - step `None`: ds 103 alive=False timeout
+
+---
+
+## 真跑批次 — overnight_UA-1-1_20260715_085043 (2026-07-15 08:57)
+
+**产物**: `output/automation_ua2_ua11_20260715_085043`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-1", "strictPoolSize": 9, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-1-01", "UA-1-1-02", "UA-1-1-03", "UA-1-1-04", "UA-1-1-05", "UA-1-1-06", "UA-1-1-07", "UA-1-1-08", "UA-1-1-12"], "remainingAfterBatch": 0}
+**结果**: PASS=6 FAIL=3 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-1-03`: assert: [ds_a_alive] not true.
+  - step `None`: [ds_a_alive] not true.
+- `UA-1-1-07`: assert: [ds_alive] not true.
+  - step `None`: [ds_alive] not true.
+- `UA-1-1-08`: assert: [ds_alive] not true.
+  - step `None`: [ds_alive] not true.
+
+---
+
+## 真跑批次 — overnight_UA-1-2_20260715_085043 (2026-07-15 08:58)
+
+**产物**: `output/automation_ua2_ua12_20260715_085757`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-2", "strictPoolSize": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-2-01", "UA-1-2-02", "UA-1-2-03", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"], "remainingAfterBatch": 0}
+**结果**: PASS=5 FAIL=0 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — overnight_UA-1-3_20260715_085043 (2026-07-15 08:59)
+
+**产物**: `output/automation_ua2_ua13_20260715_085838`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-01`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-02`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-03`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-04`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-05`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-06`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-07`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-08`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+
+---
+
+## 真跑批次 — overnight_UA-1-4_20260715_085043 (2026-07-15 09:05)
+
+**产物**: `output/automation_ua2_ua14_20260715_085908`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-4", "strictPoolSize": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=6 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-4-01`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_01_ua1_UA_1_4_0_4a1_776500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_01_ua1_UA_1_4_0_4a1_776500
+- `UA-1-4-02`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_02_ua1_UA_1_4_0_4a2_459000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_02_ua1_UA_1_4_0_4a2_459000
+- `UA-1-4-03`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_03_ua1_UA_1_4_0_4a3_822700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_03_ua1_UA_1_4_0_4a3_822700
+- `UA-1-4-04`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_04_ua1_UA_1_4_0_4a4_748800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_04_ua1_UA_1_4_0_4a4_748800
+- `UA-1-4-05`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_05_ua1_UA_1_4_0_4a5_582000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_05_ua1_UA_1_4_0_4a5_582000
+- `UA-1-4-06`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_06_ua1_UA_1_4_0_4a6_132900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_06_ua1_UA_1_4_0_4a6_132900
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:10)
+
+**产物**: `output/automation_ua2_ua15_20260715_090946`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-5", "strictPoolSize": 2, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-5-01", "UA-1-5-07"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=1800.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:10)
+
+**产物**: `output/automation_ua2_ua16_20260715_091001`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-6", "strictPoolSize": 13, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13"], "remainingAfterBatch": 0}
+**结果**: PASS=4 FAIL=1 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-6-06`: assert: [failed] not true.
+  - step `None`: [failed] not true.
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:23)
+
+**产物**: `output/automation_ua2_ua21_20260715_091050`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007", "UA-2-1-008", "UA-2-1-009", "UA-2-1-010", "UA-2-1-011", "UA-2-1-012", "UA-2-1-013", "UA-2-1-014", "UA-2-1-016", "UA-2-1-017", "UA-2-1-018", "UA-2-1-019", "UA-2-1-021", "UA-2-1-022", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-041", "UA-2-1-042", "UA-2-1-043", "UA-2-1-044", "UA-2-1-045", "UA-2-1-046", "UA-2-1-047", "UA-2-1-048", "UA-2-1-049", "UA-2-1-050", "UA-2-1-051", "UA-2-1-052", "UA-2-1-053", "UA-2-1-054", "UA-2-1-055", "UA-2-1-056", "UA-2-1-057", "UA-2-1-058", "UA-2-1-059", "UA-2-1-060", "UA-2-1-061", "UA-2-1-062", "UA-2-1-063", "UA-2-1-064", "UA-2-1-065", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-076", "UA-2-1-077", "UA-2-1-078", "UA-2-1-079", "UA-2-1-080", "UA-2-1-082", "UA-2-1-084", "UA-2-1-085", "UA-2-1-086", "UA-2-1-091", "UA-2-1-092", "UA-2-1-095", "UA-2-1-098", "UA-2-1-099", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-105", "UA-2-1-106", "UA-2-1-107", "UA-2-1-108"], "remainingAfterBatch": 0}
+**结果**: PASS=45 FAIL=23 BLOCKED=18 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-002`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-005`: assert: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_462800
+  - step `None`: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_462800
+- `UA-2-1-031`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-032`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-033`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-036`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-037`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-038`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-066`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-071`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-072`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-073`: assert: [bad_date_rejected] not true.
+  - step `None`: [bad_date_rejected] not true.
+- `UA-2-1-074`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-076`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_076_ua2_UA_2_1_0_076_259600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_076_ua2_UA_2_1_0_076_259600
+- `UA-2-1-077`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_077_ua2_UA_2_1_0_077_782300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_077_ua2_UA_2_1_0_077_782300
+- `UA-2-1-079`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_079_ua2_UA_2_1_0_079_653000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_079_ua2_UA_2_1_0_079_653000
+- `UA-2-1-080`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_080_ua2_UA_2_1_0_080_213500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_080_ua2_UA_2_1_0_080_213500
+- `UA-2-1-085`: assert: [write_failed_or_ineffective] not true.
+  - step `None`: [write_failed_or_ineffective] not true.
+- `UA-2-1-086`: assert: [default_frequency] expected=10 actual=1
+  - step `None`: [default_frequency] expected=10 actual=1
+- `UA-2-1-091`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_28600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_28600
+- `UA-2-1-092`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_56800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_56800
+- `UA-2-1-104`: assert: [history_has_points] not true.
+  - step `None`: [history_has_points] not true.
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:26)
+
+**产物**: `output/automation_ua2_ua22_20260715_092320`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-2", "strictPoolSize": 55, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-2-001", "UA-2-2-002", "UA-2-2-003", "UA-2-2-004", "UA-2-2-005", "UA-2-2-006", "UA-2-2-008", "UA-2-2-011", "UA-2-2-012", "UA-2-2-014", "UA-2-2-015", "UA-2-2-016", "UA-2-2-017", "UA-2-2-018", "UA-2-2-019", "UA-2-2-020", "UA-2-2-022", "UA-2-2-023", "UA-2-2-024", "UA-2-2-025", "UA-2-2-026", "UA-2-2-027", "UA-2-2-028", "UA-2-2-029", "UA-2-2-030", "UA-2-2-031", "UA-2-2-032", "UA-2-2-033", "UA-2-2-034", "UA-2-2-035", "UA-2-2-036", "UA-2-2-037", "UA-2-2-038", "UA-2-2-039", "UA-2-2-040", "UA-2-2-041", "UA-2-2-042", "UA-2-2-045", "UA-2-2-048", "UA-2-2-049", "UA-2-2-050", "UA-2-2-051", "UA-2-2-052", "UA-2-2-054", "UA-2-2-055", "UA-2-2-056", "UA-2-2-057", "UA-2-2-058", "UA-2-2-059", "UA-2-2-060", "UA-2-2-061", "UA-2-2-062", "UA-2-2-065", "UA-2-2-066", "UA-2-2-067"], "remainingAfterBatch": 0}
+**结果**: PASS=49 FAIL=4 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-2-036`: assert: [quality_field] not true.
+  - step `None`: [quality_field] not true.
+- `UA-2-2-039`: assert: [tagTime_parseable] not true.
+  - step `None`: [tagTime_parseable] not true.
+- `UA-2-2-040`: assert: [value_stable] expected=None actual=77.7
+  - step `None`: [value_stable] expected=None actual=77.7
+- `UA-2-2-055`: assert: [no_dup_bases] expected=520 actual=26
+  - step `None`: [no_dup_bases] expected=520 actual=26
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:30)
+
+**产物**: `output/automation_ua2_ua23_20260715_092615`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-3", "strictPoolSize": 25, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-3-001", "UA-2-3-002", "UA-2-3-003", "UA-2-3-004", "UA-2-3-005", "UA-2-3-006", "UA-2-3-007", "UA-2-3-008", "UA-2-3-009", "UA-2-3-010", "UA-2-3-011", "UA-2-3-013", "UA-2-3-014", "UA-2-3-015", "UA-2-3-016", "UA-2-3-017", "UA-2-3-019", "UA-2-3-020", "UA-2-3-021", "UA-2-3-025", "UA-2-3-026", "UA-2-3-028", "UA-2-3-029", "UA-2-3-030", "UA-2-3-031"], "remainingAfterBatch": 0}
+**结果**: PASS=14 FAIL=7 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-3-001`: assert: [column_count] expected=21 actual=24
+  - step `None`: [column_count] expected=21 actual=24
+- `UA-2-3-002`: assert: [column_count] expected=21 actual=24
+  - step `None`: [column_count] expected=21 actual=24
+- `UA-2-3-003`: assert: [column_count] expected=21 actual=24
+  - step `None`: [column_count] expected=21 actual=24
+- `UA-2-3-006`: assert: [header_cols] expected=21 actual=24
+  - step `None`: [header_cols] expected=21 actual=24
+- `UA-2-3-008`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_490800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_490800
+- `UA-2-3-021`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_829100
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_829100
+- `UA-2-3-028`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_336700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_336700
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:33)
+
+**产物**: `output/automation_ua2_ua24_20260715_093050`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-4", "strictPoolSize": 15, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-4-001", "UA-2-4-002", "UA-2-4-003", "UA-2-4-004", "UA-2-4-009", "UA-2-4-010", "UA-2-4-013", "UA-2-4-014", "UA-2-4-015", "UA-2-4-016", "UA-2-4-017", "UA-2-4-020", "UA-2-4-021", "UA-2-4-024", "UA-2-4-026"], "remainingAfterBatch": 0}
+**结果**: PASS=13 FAIL=2 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-4-009`: assert: [write_blocked_after_soft_delete] not true.
+  - step `None`: [write_blocked_after_soft_delete] not true.
+- `UA-2-4-016`: assert: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_191600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_191600
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:34)
+
+**产物**: `output/automation_ua2_ua25_20260715_093314`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-5", "strictPoolSize": 18, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-5-001", "UA-2-5-002", "UA-2-5-003", "UA-2-5-004", "UA-2-5-005", "UA-2-5-009", "UA-2-5-010", "UA-2-5-011", "UA-2-5-014", "UA-2-5-015", "UA-2-5-016", "UA-2-5-018", "UA-2-5-022", "UA-2-5-023", "UA-2-5-024", "UA-2-5-025", "UA-2-5-026", "UA-2-5-027"], "remainingAfterBatch": 0}
+**结果**: PASS=17 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:36)
+
+**产物**: `output/automation_ua2_ua31_20260715_093407`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-1", "strictPoolSize": 14, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-008", "UA-3-1-011", "UA-3-1-013", "UA-3-1-014", "UA-3-1-015", "UA-3-1-016", "UA-3-1-018", "UA-3-1-019"], "remainingAfterBatch": 0}
+**结果**: PASS=7 FAIL=5 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-002`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-004`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-005`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-006`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:39)
+
+**产物**: `output/automation_ua2_ua32_20260715_093617`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-2", "strictPoolSize": 15, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-2-001", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-006", "UA-3-2-007", "UA-3-2-008", "UA-3-2-009", "UA-3-2-012", "UA-3-2-013", "UA-3-2-014", "UA-3-2-019", "UA-3-2-020", "UA-3-2-021"], "remainingAfterBatch": 0}
+**结果**: PASS=8 FAIL=5 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-2-002`: assert: [by_id_hit] not true.
+  - step `None`: [by_id_hit] not true.
+- `UA-3-2-005`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-2-013`: assert: [by_id_hit] not true.
+  - step `None`: [by_id_hit] not true.
+- `UA-3-2-020`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_020_ua2_UA_3_2_0_020_421800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_020_ua2_UA_3_2_0_020_421800
+- `UA-3-2-021`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_021_ua2_UA_3_2_0_021_224300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_021_ua2_UA_3_2_0_021_224300
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:40)
+
+**产物**: `output/automation_ua2_ua33_20260715_093918`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-3", "strictPoolSize": 16, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-3-001", "UA-3-3-002", "UA-3-3-003", "UA-3-3-004", "UA-3-3-005", "UA-3-3-006", "UA-3-3-007", "UA-3-3-009", "UA-3-3-010", "UA-3-3-011", "UA-3-3-012", "UA-3-3-013", "UA-3-3-015", "UA-3-3-017", "UA-3-3-018", "UA-3-3-019"], "remainingAfterBatch": 0}
+**结果**: PASS=14 FAIL=1 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-3-003`: assert: [opcua_matches_rt] not true.
+  - step `None`: [opcua_matches_rt] not true.
+
+---
+
+## 真跑批次 — batch_20260715_090946 (2026-07-15 09:41)
+
+**产物**: `output/automation_ua2_ua34_20260715_094033`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-4", "strictPoolSize": 7, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-4-007", "UA-3-4-008"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=0 BLOCKED=5 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:22)
+
+**产物**: `output/automation_ua2_ua11_20260715_102030`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-1", "strictPoolSize": 9, "includedPartial": 3, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-1-01", "UA-1-1-02", "UA-1-1-03", "UA-1-1-04", "UA-1-1-05", "UA-1-1-06", "UA-1-1-07", "UA-1-1-08", "UA-1-1-09", "UA-1-1-10", "UA-1-1-11", "UA-1-1-12"], "remainingAfterBatch": 0}
+**结果**: PASS=12 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:26)
+
+**产物**: `output/automation_ua2_ua12_20260715_102221`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-2", "strictPoolSize": 6, "includedPartial": 2, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-2-01", "UA-1-2-02", "UA-1-2-03", "UA-1-2-04", "UA-1-2-05", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-2-01`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_870500 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_870500 timeout after 30.0s; last=None
+- `UA-1-2-02`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_745200 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_745200 timeout after 30.0s; last=None
+- `UA-1-2-03`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_200600 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_200600 timeout after 30.0s; last=None
+- `UA-1-2-04`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_04_550800 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_04_550800 timeout after 30.0s; last=None
+- `UA-1-2-05`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_05_292000 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_05_292000 timeout after 30.0s; last=None
+- `UA-1-2-06`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_474400 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_474400 timeout after 30.0s; last=None
+- `UA-1-2-07`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_136100 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_136100 timeout after 30.0s; last=None
+- `UA-1-2-08`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_812400 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_812400 timeout after 30.0s; last=None
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:27)
+
+**产物**: `output/automation_ua2_ua13_20260715_102654`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "includedPartial": 0, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-01`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-02`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-03`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-04`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-05`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-06`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-07`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-08`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:33)
+
+**产物**: `output/automation_ua2_ua14_20260715_102724`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-4", "strictPoolSize": 6, "includedPartial": 0, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=6 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-4-01`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_01_ua1_UA_1_4_0_4a1_15100
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_01_ua1_UA_1_4_0_4a1_15100
+- `UA-1-4-02`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_02_ua1_UA_1_4_0_4a2_978800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_02_ua1_UA_1_4_0_4a2_978800
+- `UA-1-4-03`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_03_ua1_UA_1_4_0_4a3_375800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_03_ua1_UA_1_4_0_4a3_375800
+- `UA-1-4-04`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_04_ua1_UA_1_4_0_4a4_432200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_04_ua1_UA_1_4_0_4a4_432200
+- `UA-1-4-05`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_05_ua1_UA_1_4_0_4a5_189500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_05_ua1_UA_1_4_0_4a5_189500
+- `UA-1-4-06`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_06_ua1_UA_1_4_0_4a6_111500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_06_ua1_UA_1_4_0_4a6_111500
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:34)
+
+**产物**: `output/automation_ua2_ua15_20260715_103350`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-5", "strictPoolSize": 2, "includedPartial": 7, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-5-01", "UA-1-5-02", "UA-1-5-03", "UA-1-5-04", "UA-1-5-05", "UA-1-5-06", "UA-1-5-07", "UA-1-5-08", "UA-1-5-09"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=7 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-5-02`: assert: automation datasource name must use an owned prefix: 'ua1_5_02_ua1_UA_1_5_02_145900'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_02_ua1_UA_1_5_02_145900'
+- `UA-1-5-03`: assert: automation datasource name must use an owned prefix: 'ua1_5_03_ua1_UA_1_5_03_898600'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_03_ua1_UA_1_5_03_898600'
+- `UA-1-5-04`: assert: automation datasource name must use an owned prefix: 'ua1_5_04_ua1_UA_1_5_04_766300'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_04_ua1_UA_1_5_04_766300'
+- `UA-1-5-05`: assert: automation datasource name must use an owned prefix: 'ua1_5_05_ua1_UA_1_5_05_215900'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_05_ua1_UA_1_5_05_215900'
+- `UA-1-5-06`: assert: automation datasource name must use an owned prefix: 'ua1_5_06_ua1_UA_1_5_06_518600'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_06_ua1_UA_1_5_06_518600'
+- `UA-1-5-08`: assert: automation datasource name must use an owned prefix: 'ua1_5_08a_ua1_UA_1_5_08_829500'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_08a_ua1_UA_1_5_08_829500'
+- `UA-1-5-09`: assert: automation datasource name must use an owned prefix: 'ua1_5_09_ua1_UA_1_5_09_970900'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_09_ua1_UA_1_5_09_970900'
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua16_20260715_103419`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-6", "strictPoolSize": 13, "includedPartial": 0, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13"], "remainingAfterBatch": 0}
+**结果**: PASS=3 FAIL=2 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3000.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-6-05`: assert: getRTValue timeout for ua_case_ua2_UA_1_6_05_ua1_UA_1_6_0_65_662500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_6_05_ua1_UA_1_6_0_65_662500
+- `UA-1-6-06`: assert: [failed] not true.
+  - step `None`: [failed] not true.
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua21_20260715_103612`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007", "UA-2-1-008", "UA-2-1-009", "UA-2-1-010", "UA-2-1-011", "UA-2-1-012", "UA-2-1-013", "UA-2-1-014", "UA-2-1-015", "UA-2-1-016", "UA-2-1-017", "UA-2-1-018", "UA-2-1-019", "UA-2-1-020", "UA-2-1-021", "UA-2-1-022", "UA-2-1-023", "UA-2-1-024", "UA-2-1-025", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-041", "UA-2-1-042", "UA-2-1-043", "UA-2-1-044", "UA-2-1-045", "UA-2-1-046", "UA-2-1-047", "UA-2-1-048", "UA-2-1-049", "UA-2-1-050", "UA-2-1-051", "UA-2-1-052", "UA-2-1-053", "UA-2-1-054", "UA-2-1-055", "UA-2-1-056", "UA-2-1-057", "UA-2-1-058", "UA-2-1-059", "UA-2-1-060", "UA-2-1-061", "UA-2-1-062", "UA-2-1-063", "UA-2-1-064", "UA-2-1-065", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-069", "UA-2-1-070", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-075", "UA-2-1-076", "UA-2-1-077", "UA-2-1-078", "UA-2-1-079", "UA-2-1-080", "UA-2-1-081", "UA-2-1-082", "UA-2-1-083", "UA-2-1-084", "UA-2-1-085", "UA-2-1-086", "UA-2-1-087", "UA-2-1-088", "UA-2-1-089", "UA-2-1-090", "UA-2-1-091", "UA-2-1-092", "UA-2-1-093", "UA-2-1-094", "UA-2-1-095", "UA-2-1-096", "UA-2-1-097", "UA-2-1-098", "UA-2-1-099", "UA-2-1-100", "UA-2-1-101", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-105", "UA-2-1-106", "UA-2-1-107", "UA-2-1-108", "UA-2-1-109", "UA-2-1-110", "UA-2-1-111", "UA-2-1-112"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua22_20260715_103618`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-2", "strictPoolSize": 55, "includedPartial": 12, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-2-001", "UA-2-2-002", "UA-2-2-003", "UA-2-2-004", "UA-2-2-005", "UA-2-2-006", "UA-2-2-007", "UA-2-2-008", "UA-2-2-009", "UA-2-2-010", "UA-2-2-011", "UA-2-2-012", "UA-2-2-013", "UA-2-2-014", "UA-2-2-015", "UA-2-2-016", "UA-2-2-017", "UA-2-2-018", "UA-2-2-019", "UA-2-2-020", "UA-2-2-021", "UA-2-2-022", "UA-2-2-023", "UA-2-2-024", "UA-2-2-025", "UA-2-2-026", "UA-2-2-027", "UA-2-2-028", "UA-2-2-029", "UA-2-2-030", "UA-2-2-031", "UA-2-2-032", "UA-2-2-033", "UA-2-2-034", "UA-2-2-035", "UA-2-2-036", "UA-2-2-037", "UA-2-2-038", "UA-2-2-039", "UA-2-2-040", "UA-2-2-041", "UA-2-2-042", "UA-2-2-043", "UA-2-2-044", "UA-2-2-045", "UA-2-2-046", "UA-2-2-047", "UA-2-2-048", "UA-2-2-049", "UA-2-2-050", "UA-2-2-051", "UA-2-2-052", "UA-2-2-053", "UA-2-2-054", "UA-2-2-055", "UA-2-2-056", "UA-2-2-057", "UA-2-2-058", "UA-2-2-059", "UA-2-2-060", "UA-2-2-061", "UA-2-2-062", "UA-2-2-063", "UA-2-2-064", "UA-2-2-065", "UA-2-2-066", "UA-2-2-067"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua23_20260715_103624`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-3", "strictPoolSize": 25, "includedPartial": 7, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-3-001", "UA-2-3-002", "UA-2-3-003", "UA-2-3-004", "UA-2-3-005", "UA-2-3-006", "UA-2-3-007", "UA-2-3-008", "UA-2-3-009", "UA-2-3-010", "UA-2-3-011", "UA-2-3-012", "UA-2-3-013", "UA-2-3-014", "UA-2-3-015", "UA-2-3-016", "UA-2-3-017", "UA-2-3-018", "UA-2-3-019", "UA-2-3-020", "UA-2-3-021", "UA-2-3-022", "UA-2-3-023", "UA-2-3-024", "UA-2-3-025", "UA-2-3-026", "UA-2-3-027", "UA-2-3-028", "UA-2-3-029", "UA-2-3-030", "UA-2-3-031", "UA-2-3-032"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua24_20260715_103630`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-4", "strictPoolSize": 15, "includedPartial": 12, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-4-001", "UA-2-4-002", "UA-2-4-003", "UA-2-4-004", "UA-2-4-005", "UA-2-4-006", "UA-2-4-007", "UA-2-4-008", "UA-2-4-009", "UA-2-4-010", "UA-2-4-011", "UA-2-4-012", "UA-2-4-013", "UA-2-4-014", "UA-2-4-015", "UA-2-4-016", "UA-2-4-017", "UA-2-4-018", "UA-2-4-019", "UA-2-4-020", "UA-2-4-021", "UA-2-4-022", "UA-2-4-023", "UA-2-4-024", "UA-2-4-025", "UA-2-4-026", "UA-2-4-027"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua25_20260715_103636`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-5", "strictPoolSize": 18, "includedPartial": 9, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-5-001", "UA-2-5-002", "UA-2-5-003", "UA-2-5-004", "UA-2-5-005", "UA-2-5-006", "UA-2-5-007", "UA-2-5-008", "UA-2-5-009", "UA-2-5-010", "UA-2-5-011", "UA-2-5-012", "UA-2-5-013", "UA-2-5-014", "UA-2-5-015", "UA-2-5-016", "UA-2-5-017", "UA-2-5-018", "UA-2-5-019", "UA-2-5-020", "UA-2-5-021", "UA-2-5-022", "UA-2-5-023", "UA-2-5-024", "UA-2-5-025", "UA-2-5-026", "UA-2-5-027"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua31_20260715_103642`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-1", "strictPoolSize": 14, "includedPartial": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-007", "UA-3-1-008", "UA-3-1-009", "UA-3-1-010", "UA-3-1-011", "UA-3-1-012", "UA-3-1-013", "UA-3-1-014", "UA-3-1-015", "UA-3-1-016", "UA-3-1-017", "UA-3-1-018", "UA-3-1-019", "UA-3-1-020"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua32_20260715_103648`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-2", "strictPoolSize": 15, "includedPartial": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-2-001", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-006", "UA-3-2-007", "UA-3-2-008", "UA-3-2-009", "UA-3-2-010", "UA-3-2-011", "UA-3-2-012", "UA-3-2-013", "UA-3-2-014", "UA-3-2-015", "UA-3-2-016", "UA-3-2-017", "UA-3-2-018", "UA-3-2-019", "UA-3-2-020", "UA-3-2-021"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:36)
+
+**产物**: `output/automation_ua2_ua33_20260715_103654`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-3", "strictPoolSize": 16, "includedPartial": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-3-001", "UA-3-3-002", "UA-3-3-003", "UA-3-3-004", "UA-3-3-005", "UA-3-3-006", "UA-3-3-007", "UA-3-3-008", "UA-3-3-009", "UA-3-3-010", "UA-3-3-011", "UA-3-3-012", "UA-3-3-013", "UA-3-3-014", "UA-3-3-015", "UA-3-3-016", "UA-3-3-017", "UA-3-3-018", "UA-3-3-019", "UA-3-3-020", "UA-3-3-021", "UA-3-3-022"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:37)
+
+**产物**: `output/automation_ua2_ua34_20260715_103700`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-4", "strictPoolSize": 7, "includedPartial": 1, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-4-006", "UA-3-4-007", "UA-3-4-008"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:37)
+
+**产物**: `output/automation_ua2_ua35_20260715_103706`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-5", "strictPoolSize": 1, "includedPartial": 11, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-5-001", "UA-3-5-002", "UA-3-5-003", "UA-3-5-004", "UA-3-5-005", "UA-3-5-006", "UA-3-5-007", "UA-3-5-008", "UA-3-5-009", "UA-3-5-010", "UA-3-5-011", "UA-3-5-012"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_102029 (2026-07-15 10:37)
+
+**产物**: `output/automation_ua2_ua36_20260715_103712`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-6", "strictPoolSize": 6, "includedPartial": 9, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-6-001", "UA-3-6-002", "UA-3-6-003", "UA-3-6-004", "UA-3-6-005", "UA-3-6-006", "UA-3-6-007", "UA-3-6-008", "UA-3-6-009", "UA-3-6-010", "UA-3-6-011", "UA-3-6-012", "UA-3-6-013", "UA-3-6-014", "UA-3-6-015"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:20)
+
+**产物**: `output/automation_ua2_ua21_20260715_112016`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007", "UA-2-1-008", "UA-2-1-009", "UA-2-1-010", "UA-2-1-011", "UA-2-1-012", "UA-2-1-013", "UA-2-1-014", "UA-2-1-015", "UA-2-1-016", "UA-2-1-017", "UA-2-1-018", "UA-2-1-019", "UA-2-1-020", "UA-2-1-021", "UA-2-1-022", "UA-2-1-023", "UA-2-1-024", "UA-2-1-025", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-041", "UA-2-1-042", "UA-2-1-043", "UA-2-1-044", "UA-2-1-045", "UA-2-1-046", "UA-2-1-047", "UA-2-1-048", "UA-2-1-049", "UA-2-1-050", "UA-2-1-051", "UA-2-1-052", "UA-2-1-053", "UA-2-1-054", "UA-2-1-055", "UA-2-1-056", "UA-2-1-057", "UA-2-1-058", "UA-2-1-059", "UA-2-1-060", "UA-2-1-061", "UA-2-1-062", "UA-2-1-063", "UA-2-1-064", "UA-2-1-065", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-069", "UA-2-1-070", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-075", "UA-2-1-076", "UA-2-1-077", "UA-2-1-078", "UA-2-1-079", "UA-2-1-080", "UA-2-1-081", "UA-2-1-082", "UA-2-1-083", "UA-2-1-084", "UA-2-1-085", "UA-2-1-086", "UA-2-1-087", "UA-2-1-088", "UA-2-1-089", "UA-2-1-090", "UA-2-1-091", "UA-2-1-092", "UA-2-1-093", "UA-2-1-094", "UA-2-1-095", "UA-2-1-096", "UA-2-1-097", "UA-2-1-098", "UA-2-1-099", "UA-2-1-100", "UA-2-1-101", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-105", "UA-2-1-106", "UA-2-1-107", "UA-2-1-108", "UA-2-1-109", "UA-2-1-110", "UA-2-1-111", "UA-2-1-112"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:20)
+
+**产物**: `output/automation_ua2_ua21_20260715_112051`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 5, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005"], "remainingAfterBatch": 107}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=600.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:21)
+
+**产物**: `output/automation_ua2_ua21_20260715_112111`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 3, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003"], "remainingAfterBatch": 109}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=300.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:21)
+
+**产物**: `output/automation_ua2_ua21_20260715_112150`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 3, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003"], "remainingAfterBatch": 109}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=120.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:24)
+
+**产物**: `output/automation_ua2_ua21_20260715_112429`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 3, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003"], "remainingAfterBatch": 109}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=300.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:25)
+
+**产物**: `output/automation_ua2_ua21_20260715_112518`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 3, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003"], "remainingAfterBatch": 109}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=300.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:25)
+
+**产物**: `output/automation_ua2_ua21_20260715_112540`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 3, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003"], "remainingAfterBatch": 109}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=300.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — UA-2 真跑 baseline BLOCKED (2026-07-15 11:26)
+
+**产物**: `output/automation_ua2_ua21_20260715_112618`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 3, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003"], "remainingAfterBatch": 109}
+**结果**: PASS=0 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=120.0
+
+**环境 BLOCKED**: `BaselineError: shared empty datasource 'ua_shared_ua2_empty_ds' has 1 active tag(s); BLOCKED` — 本批 case 未执行
+
+**case 执行**: 0 条（见上 BLOCKED 或 mock 失败）
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 11:48)
+
+**产物**: `output/automation_ua2_ua21_20260715_112824`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-1", "strictPoolSize": 88, "includedPartial": 24, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-1-001", "UA-2-1-002", "UA-2-1-003", "UA-2-1-004", "UA-2-1-005", "UA-2-1-006", "UA-2-1-007", "UA-2-1-008", "UA-2-1-009", "UA-2-1-010", "UA-2-1-011", "UA-2-1-012", "UA-2-1-013", "UA-2-1-014", "UA-2-1-015", "UA-2-1-016", "UA-2-1-017", "UA-2-1-018", "UA-2-1-019", "UA-2-1-020", "UA-2-1-021", "UA-2-1-022", "UA-2-1-023", "UA-2-1-024", "UA-2-1-025", "UA-2-1-026", "UA-2-1-027", "UA-2-1-028", "UA-2-1-029", "UA-2-1-030", "UA-2-1-031", "UA-2-1-032", "UA-2-1-033", "UA-2-1-034", "UA-2-1-035", "UA-2-1-036", "UA-2-1-037", "UA-2-1-038", "UA-2-1-039", "UA-2-1-040", "UA-2-1-041", "UA-2-1-042", "UA-2-1-043", "UA-2-1-044", "UA-2-1-045", "UA-2-1-046", "UA-2-1-047", "UA-2-1-048", "UA-2-1-049", "UA-2-1-050", "UA-2-1-051", "UA-2-1-052", "UA-2-1-053", "UA-2-1-054", "UA-2-1-055", "UA-2-1-056", "UA-2-1-057", "UA-2-1-058", "UA-2-1-059", "UA-2-1-060", "UA-2-1-061", "UA-2-1-062", "UA-2-1-063", "UA-2-1-064", "UA-2-1-065", "UA-2-1-066", "UA-2-1-067", "UA-2-1-068", "UA-2-1-069", "UA-2-1-070", "UA-2-1-071", "UA-2-1-072", "UA-2-1-073", "UA-2-1-074", "UA-2-1-075", "UA-2-1-076", "UA-2-1-077", "UA-2-1-078", "UA-2-1-079", "UA-2-1-080", "UA-2-1-081", "UA-2-1-082", "UA-2-1-083", "UA-2-1-084", "UA-2-1-085", "UA-2-1-086", "UA-2-1-087", "UA-2-1-088", "UA-2-1-089", "UA-2-1-090", "UA-2-1-091", "UA-2-1-092", "UA-2-1-093", "UA-2-1-094", "UA-2-1-095", "UA-2-1-096", "UA-2-1-097", "UA-2-1-098", "UA-2-1-099", "UA-2-1-100", "UA-2-1-101", "UA-2-1-102", "UA-2-1-103", "UA-2-1-104", "UA-2-1-105", "UA-2-1-106", "UA-2-1-107", "UA-2-1-108", "UA-2-1-109", "UA-2-1-110", "UA-2-1-111", "UA-2-1-112"], "remainingAfterBatch": 0}
+**结果**: PASS=47 FAIL=27 BLOCKED=18 TIMEOUT=0 chapterTimeoutSec=7200.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-1-001`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-002`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-005`: assert: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_864300
+  - step `None`: queryWithQuality timeout for ua_case_ua2_UA_2_1_005_ua2_UA_2_1_0_005_864300
+- `UA-2-1-026`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-027`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-028`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-029`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-032`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-033`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-034`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-037`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-038`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-066`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-071`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-072`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-073`: assert: [bad_date_rejected] not true.
+  - step `None`: [bad_date_rejected] not true.
+- `UA-2-1-074`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-2-1-076`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_076_ua2_UA_2_1_0_076_325900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_076_ua2_UA_2_1_0_076_325900
+- `UA-2-1-077`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_077_ua2_UA_2_1_0_077_437800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_077_ua2_UA_2_1_0_077_437800
+- `UA-2-1-079`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_079_ua2_UA_2_1_0_079_734300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_079_ua2_UA_2_1_0_079_734300
+- `UA-2-1-080`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_080_ua2_UA_2_1_0_080_480400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_080_ua2_UA_2_1_0_080_480400
+- `UA-2-1-085`: assert: [write_failed_or_ineffective] not true.
+  - step `None`: [write_failed_or_ineffective] not true.
+- `UA-2-1-086`: assert: [default_frequency] expected=10 actual=1
+  - step `None`: [default_frequency] expected=10 actual=1
+- `UA-2-1-091`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_281100
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_091_ua2_UA_2_1_0_091_281100
+- `UA-2-1-092`: assert: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_847800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_1_092_ua2_UA_2_1_0_092_847800
+- `UA-2-1-102`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-2-1-104`: assert: [history_has_points] not true.
+  - step `None`: [history_has_points] not true.
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 11:52)
+
+**产物**: `output/automation_ua2_ua22_20260715_114818`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-2", "strictPoolSize": 55, "includedPartial": 12, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-2-001", "UA-2-2-002", "UA-2-2-003", "UA-2-2-004", "UA-2-2-005", "UA-2-2-006", "UA-2-2-007", "UA-2-2-008", "UA-2-2-009", "UA-2-2-010", "UA-2-2-011", "UA-2-2-012", "UA-2-2-013", "UA-2-2-014", "UA-2-2-015", "UA-2-2-016", "UA-2-2-017", "UA-2-2-018", "UA-2-2-019", "UA-2-2-020", "UA-2-2-021", "UA-2-2-022", "UA-2-2-023", "UA-2-2-024", "UA-2-2-025", "UA-2-2-026", "UA-2-2-027", "UA-2-2-028", "UA-2-2-029", "UA-2-2-030", "UA-2-2-031", "UA-2-2-032", "UA-2-2-033", "UA-2-2-034", "UA-2-2-035", "UA-2-2-036", "UA-2-2-037", "UA-2-2-038", "UA-2-2-039", "UA-2-2-040", "UA-2-2-041", "UA-2-2-042", "UA-2-2-043", "UA-2-2-044", "UA-2-2-045", "UA-2-2-046", "UA-2-2-047", "UA-2-2-048", "UA-2-2-049", "UA-2-2-050", "UA-2-2-051", "UA-2-2-052", "UA-2-2-053", "UA-2-2-054", "UA-2-2-055", "UA-2-2-056", "UA-2-2-057", "UA-2-2-058", "UA-2-2-059", "UA-2-2-060", "UA-2-2-061", "UA-2-2-062", "UA-2-2-063", "UA-2-2-064", "UA-2-2-065", "UA-2-2-066", "UA-2-2-067"], "remainingAfterBatch": 0}
+**结果**: PASS=52 FAIL=3 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=5400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-2-039`: assert: [tagTime_parseable] not true.
+  - step `None`: [tagTime_parseable] not true.
+- `UA-2-2-040`: assert: [value_stable] expected=None actual=77.7
+  - step `None`: [value_stable] expected=None actual=77.7
+- `UA-2-2-055`: assert: [no_dup_bases] expected=520 actual=26
+  - step `None`: [no_dup_bases] expected=520 actual=26
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 11:56)
+
+**产物**: `output/automation_ua2_ua23_20260715_115202`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-3", "strictPoolSize": 25, "includedPartial": 7, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-3-001", "UA-2-3-002", "UA-2-3-003", "UA-2-3-004", "UA-2-3-005", "UA-2-3-006", "UA-2-3-007", "UA-2-3-008", "UA-2-3-009", "UA-2-3-010", "UA-2-3-011", "UA-2-3-012", "UA-2-3-013", "UA-2-3-014", "UA-2-3-015", "UA-2-3-016", "UA-2-3-017", "UA-2-3-018", "UA-2-3-019", "UA-2-3-020", "UA-2-3-021", "UA-2-3-022", "UA-2-3-023", "UA-2-3-024", "UA-2-3-025", "UA-2-3-026", "UA-2-3-027", "UA-2-3-028", "UA-2-3-029", "UA-2-3-030", "UA-2-3-031", "UA-2-3-032"], "remainingAfterBatch": 0}
+**结果**: PASS=15 FAIL=7 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-3-001`: assert: [column_count] expected=21 actual=24
+  - step `None`: [column_count] expected=21 actual=24
+- `UA-2-3-002`: assert: [column_count] expected=21 actual=24
+  - step `None`: [column_count] expected=21 actual=24
+- `UA-2-3-003`: assert: [column_count] expected=21 actual=24
+  - step `None`: [column_count] expected=21 actual=24
+- `UA-2-3-006`: assert: [header_cols] expected=21 actual=24
+  - step `None`: [header_cols] expected=21 actual=24
+- `UA-2-3-008`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_79000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_008_ua2_UA_2_3_0_t0_79000
+- `UA-2-3-021`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_838900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_021_ua2_UA_2_3_0_t0_838900
+- `UA-2-3-028`: assert: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_704200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_3_028_ua2_UA_2_3_0_t0_704200
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 11:59)
+
+**产物**: `output/automation_ua2_ua24_20260715_115654`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-4", "strictPoolSize": 15, "includedPartial": 12, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-4-001", "UA-2-4-002", "UA-2-4-003", "UA-2-4-004", "UA-2-4-005", "UA-2-4-006", "UA-2-4-007", "UA-2-4-008", "UA-2-4-009", "UA-2-4-010", "UA-2-4-011", "UA-2-4-012", "UA-2-4-013", "UA-2-4-014", "UA-2-4-015", "UA-2-4-016", "UA-2-4-017", "UA-2-4-018", "UA-2-4-019", "UA-2-4-020", "UA-2-4-021", "UA-2-4-022", "UA-2-4-023", "UA-2-4-024", "UA-2-4-025", "UA-2-4-026", "UA-2-4-027"], "remainingAfterBatch": 0}
+**结果**: PASS=14 FAIL=2 BLOCKED=2 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-2-4-009`: assert: [write_blocked_after_soft_delete] not true.
+  - step `None`: [write_blocked_after_soft_delete] not true.
+- `UA-2-4-016`: assert: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_398200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_2_4_016_ua2_UA_2_4_0_r0_398200
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:04)
+
+**产物**: `output/automation_ua2_ua25_20260715_115955`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-2-5", "strictPoolSize": 18, "includedPartial": 9, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-2-5-001", "UA-2-5-002", "UA-2-5-003", "UA-2-5-004", "UA-2-5-005", "UA-2-5-006", "UA-2-5-007", "UA-2-5-008", "UA-2-5-009", "UA-2-5-010", "UA-2-5-011", "UA-2-5-012", "UA-2-5-013", "UA-2-5-014", "UA-2-5-015", "UA-2-5-016", "UA-2-5-017", "UA-2-5-018", "UA-2-5-019", "UA-2-5-020", "UA-2-5-021", "UA-2-5-022", "UA-2-5-023", "UA-2-5-024", "UA-2-5-025", "UA-2-5-026", "UA-2-5-027"], "remainingAfterBatch": 0}
+**结果**: PASS=10 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:07)
+
+**产物**: `output/automation_ua2_ua31_20260715_120429`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-1", "strictPoolSize": 14, "includedPartial": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-1-001", "UA-3-1-002", "UA-3-1-003", "UA-3-1-004", "UA-3-1-005", "UA-3-1-006", "UA-3-1-007", "UA-3-1-008", "UA-3-1-009", "UA-3-1-010", "UA-3-1-011", "UA-3-1-012", "UA-3-1-013", "UA-3-1-014", "UA-3-1-015", "UA-3-1-016", "UA-3-1-017", "UA-3-1-018", "UA-3-1-019", "UA-3-1-020"], "remainingAfterBatch": 0}
+**结果**: PASS=9 FAIL=7 BLOCKED=2 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-1-002`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-004`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-005`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-006`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-1-007`: assert: precise_frequency: unsupported UA-3-1-007
+  - step `None`: precise_frequency: unsupported UA-3-1-007
+- `UA-3-1-009`: assert: precise_frequency: unsupported UA-3-1-009
+  - step `None`: precise_frequency: unsupported UA-3-1-009
+- `UA-3-1-010`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:15)
+
+**产物**: `output/automation_ua2_ua32_20260715_120722`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-2", "strictPoolSize": 15, "includedPartial": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-2-001", "UA-3-2-002", "UA-3-2-003", "UA-3-2-004", "UA-3-2-005", "UA-3-2-006", "UA-3-2-007", "UA-3-2-008", "UA-3-2-009", "UA-3-2-010", "UA-3-2-011", "UA-3-2-012", "UA-3-2-013", "UA-3-2-014", "UA-3-2-015", "UA-3-2-016", "UA-3-2-017", "UA-3-2-018", "UA-3-2-019", "UA-3-2-020", "UA-3-2-021"], "remainingAfterBatch": 0}
+**结果**: PASS=7 FAIL=11 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-2-002`: assert: [by_id_hit] not true.
+  - step `None`: [by_id_hit] not true.
+- `UA-3-2-005`: assert: [opcua_matches_rt2] not true.
+  - step `None`: [opcua_matches_rt2] not true.
+- `UA-3-2-010`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_010_ua2_UA_3_2_0_210_92600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_010_ua2_UA_3_2_0_210_92600
+- `UA-3-2-011`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_011_ua2_UA_3_2_0_211_627400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_011_ua2_UA_3_2_0_211_627400
+- `UA-3-2-012`: assert: [has_quality] not true.
+  - step `None`: [has_quality] not true.
+- `UA-3-2-013`: assert: [by_id_hit] not true.
+  - step `None`: [by_id_hit] not true.
+- `UA-3-2-016`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_016_ua2_UA_3_2_0_216_184100
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_016_ua2_UA_3_2_0_216_184100
+- `UA-3-2-017`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_017_ua2_UA_3_2_0_217_119800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_017_ua2_UA_3_2_0_217_119800
+- `UA-3-2-018`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_018_ua2_UA_3_2_0_217_612800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_018_ua2_UA_3_2_0_217_612800
+- `UA-3-2-020`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_020_ua2_UA_3_2_0_020_491900
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_020_ua2_UA_3_2_0_020_491900
+- `UA-3-2-021`: assert: getRTValue timeout for ua_case_ua2_UA_3_2_021_ua2_UA_3_2_0_021_55000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_2_021_ua2_UA_3_2_0_021_55000
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:18)
+
+**产物**: `output/automation_ua2_ua33_20260715_121542`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-3", "strictPoolSize": 16, "includedPartial": 6, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-3-001", "UA-3-3-002", "UA-3-3-003", "UA-3-3-004", "UA-3-3-005", "UA-3-3-006", "UA-3-3-007", "UA-3-3-008", "UA-3-3-009", "UA-3-3-010", "UA-3-3-011", "UA-3-3-012", "UA-3-3-013", "UA-3-3-014", "UA-3-3-015", "UA-3-3-016", "UA-3-3-017", "UA-3-3-018", "UA-3-3-019", "UA-3-3-020", "UA-3-3-021", "UA-3-3-022"], "remainingAfterBatch": 0}
+**结果**: PASS=14 FAIL=3 BLOCKED=1 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-3-003`: assert: [opcua_matches_rt] not true.
+  - step `None`: [opcua_matches_rt] not true.
+- `UA-3-3-008`: assert: [rt_matches_write] not true.
+  - step `None`: [rt_matches_write] not true.
+- `UA-3-3-021`: assert: getRTValue timeout for ua_case_ua2_UA_3_3_021_ua2_UA_3_3_0_321_569600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_3_021_ua2_UA_3_3_0_321_569600
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:19)
+
+**产物**: `output/automation_ua2_ua34_20260715_121816`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-4", "strictPoolSize": 7, "includedPartial": 1, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-4-001", "UA-3-4-002", "UA-3-4-003", "UA-3-4-004", "UA-3-4-005", "UA-3-4-006", "UA-3-4-007", "UA-3-4-008"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=0 BLOCKED=6 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:26)
+
+**产物**: `output/automation_ua2_ua35_20260715_121902`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-5", "strictPoolSize": 1, "includedPartial": 11, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-5-001", "UA-3-5-002", "UA-3-5-003", "UA-3-5-004", "UA-3-5-005", "UA-3-5-006", "UA-3-5-007", "UA-3-5-008", "UA-3-5-009", "UA-3-5-010", "UA-3-5-011", "UA-3-5-012"], "remainingAfterBatch": 0}
+**结果**: PASS=1 FAIL=6 BLOCKED=4 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-5-001`: assert: getRTValue timeout for ua_case_ua2_UA_3_5_001_ua2_UA_3_5_0_001_538400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_5_001_ua2_UA_3_5_0_001_538400
+- `UA-3-5-002`: assert: getRTValue timeout for ua_case_ua2_UA_3_5_002_ua2_UA_3_5_0_b000_962000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_5_002_ua2_UA_3_5_0_b000_962000
+- `UA-3-5-003`: assert: getRTValue timeout for ua_case_ua2_UA_3_5_003_ua2_UA_3_5_0_003_830500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_5_003_ua2_UA_3_5_0_003_830500
+- `UA-3-5-004`: assert: getRTValue timeout for ua_case_ua2_UA_3_5_004_ua2_UA_3_5_0_b000_653200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_5_004_ua2_UA_3_5_0_b000_653200
+- `UA-3-5-011`: assert: getRTValue timeout for ua_case_ua2_UA_3_5_011_ua2_UA_3_5_0_511_284600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_5_011_ua2_UA_3_5_0_511_284600
+- `UA-3-5-012`: assert: getRTValue timeout for ua_case_ua2_UA_3_5_012_ua2_UA_3_5_0_512_488700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_5_012_ua2_UA_3_5_0_512_488700
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:33)
+
+**产物**: `output/automation_ua2_ua36_20260715_122640`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-3-6", "strictPoolSize": 6, "includedPartial": 9, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-3-6-001", "UA-3-6-002", "UA-3-6-003", "UA-3-6-004", "UA-3-6-005", "UA-3-6-006", "UA-3-6-007", "UA-3-6-008", "UA-3-6-009", "UA-3-6-010", "UA-3-6-011", "UA-3-6-012", "UA-3-6-013", "UA-3-6-014", "UA-3-6-015"], "remainingAfterBatch": 0}
+**结果**: PASS=1 FAIL=5 BLOCKED=5 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-3-6-001`: assert: getRTValue timeout for ua_case_ua2_UA_3_6_001_ua2_UA_3_6_0_001_331700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_6_001_ua2_UA_3_6_0_001_331700
+- `UA-3-6-002`: assert: getRTValue timeout for ua_case_ua2_UA_3_6_002_ua2_UA_3_6_0_002_538400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_6_002_ua2_UA_3_6_0_002_538400
+- `UA-3-6-003`: assert: getRTValue timeout for ua_case_ua2_UA_3_6_003_ua2_UA_3_6_0_p000_898600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_6_003_ua2_UA_3_6_0_p000_898600
+- `UA-3-6-008`: assert: getRTValue timeout for ua_case_ua2_UA_3_6_008_ua2_UA_3_6_0_608_683500
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_6_008_ua2_UA_3_6_0_608_683500
+- `UA-3-6-015`: assert: getRTValue timeout for ua_case_ua2_UA_3_6_015_ua2_UA_3_6_0_615_493400
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_3_6_015_ua2_UA_3_6_0_615_493400
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:35)
+
+**产物**: `output/automation_ua2_ua11_20260715_123354`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-1", "strictPoolSize": 9, "includedPartial": 3, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-1-01", "UA-1-1-02", "UA-1-1-03", "UA-1-1-04", "UA-1-1-05", "UA-1-1-06", "UA-1-1-07", "UA-1-1-08", "UA-1-1-09", "UA-1-1-10", "UA-1-1-11", "UA-1-1-12"], "remainingAfterBatch": 0}
+**结果**: PASS=12 FAIL=0 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL**: 无
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:39)
+
+**产物**: `output/automation_ua2_ua12_20260715_123504`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-2", "strictPoolSize": 6, "includedPartial": 2, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-2-01", "UA-1-2-02", "UA-1-2-03", "UA-1-2-04", "UA-1-2-05", "UA-1-2-06", "UA-1-2-07", "UA-1-2-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-2-01`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_880500 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_01_880500 timeout after 30.0s; last=None
+- `UA-1-2-02`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_186700 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_02_186700 timeout after 30.0s; last=None
+- `UA-1-2-03`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_253800 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_03_253800 timeout after 30.0s; last=None
+- `UA-1-2-04`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_04_830200 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_04_830200 timeout after 30.0s; last=None
+- `UA-1-2-05`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_05_430000 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_05_430000 timeout after 30.0s; last=None
+- `UA-1-2-06`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_256100 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_06_256100 timeout after 30.0s; last=None
+- `UA-1-2-07`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_107900 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_07_107900 timeout after 30.0s; last=None
+- `UA-1-2-08`: assert: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_13400 timeout after 30.0s; last=None
+  - step `None`: rt_changed:ua_auto_ua1_tag_ua1_UA_1_2_08_13400 timeout after 30.0s; last=None
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:40)
+
+**产物**: `output/automation_ua2_ua13_20260715_123936`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-3", "strictPoolSize": 8, "includedPartial": 0, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-3-01", "UA-1-3-02", "UA-1-3-03", "UA-1-3-04", "UA-1-3-05", "UA-1-3-06", "UA-1-3-07", "UA-1-3-08"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=8 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-3-01`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-02`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-03`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-04`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-05`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-06`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-07`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+- `UA-1-3-08`: assert: [changing] not true.
+  - step `None`: [changing] not true.
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:46)
+
+**产物**: `output/automation_ua2_ua14_20260715_124005`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-4", "strictPoolSize": 6, "includedPartial": 0, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-4-01", "UA-1-4-02", "UA-1-4-03", "UA-1-4-04", "UA-1-4-05", "UA-1-4-06"], "remainingAfterBatch": 0}
+**结果**: PASS=0 FAIL=6 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3600.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-4-01`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_01_ua1_UA_1_4_0_4a1_161300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_01_ua1_UA_1_4_0_4a1_161300
+- `UA-1-4-02`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_02_ua1_UA_1_4_0_4a2_779000
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_02_ua1_UA_1_4_0_4a2_779000
+- `UA-1-4-03`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_03_ua1_UA_1_4_0_4a3_715200
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_03_ua1_UA_1_4_0_4a3_715200
+- `UA-1-4-04`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_04_ua1_UA_1_4_0_4a4_567700
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_04_ua1_UA_1_4_0_4a4_567700
+- `UA-1-4-05`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_05_ua1_UA_1_4_0_4a5_466300
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_05_ua1_UA_1_4_0_4a5_466300
+- `UA-1-4-06`: assert: getRTValue timeout for ua_case_ua2_UA_1_4_06_ua1_UA_1_4_0_4a6_39600
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_4_06_ua1_UA_1_4_0_4a6_39600
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:47)
+
+**产物**: `output/automation_ua2_ua15_20260715_124633`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-5", "strictPoolSize": 2, "includedPartial": 7, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-5-01", "UA-1-5-02", "UA-1-5-03", "UA-1-5-04", "UA-1-5-05", "UA-1-5-06", "UA-1-5-07", "UA-1-5-08", "UA-1-5-09"], "remainingAfterBatch": 0}
+**结果**: PASS=2 FAIL=7 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=2400.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-5-02`: assert: automation datasource name must use an owned prefix: 'ua1_5_02_ua1_UA_1_5_02_867100'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_02_ua1_UA_1_5_02_867100'
+- `UA-1-5-03`: assert: automation datasource name must use an owned prefix: 'ua1_5_03_ua1_UA_1_5_03_542200'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_03_ua1_UA_1_5_03_542200'
+- `UA-1-5-04`: assert: automation datasource name must use an owned prefix: 'ua1_5_04_ua1_UA_1_5_04_702000'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_04_ua1_UA_1_5_04_702000'
+- `UA-1-5-05`: assert: automation datasource name must use an owned prefix: 'ua1_5_05_ua1_UA_1_5_05_836000'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_05_ua1_UA_1_5_05_836000'
+- `UA-1-5-06`: assert: automation datasource name must use an owned prefix: 'ua1_5_06_ua1_UA_1_5_06_786000'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_06_ua1_UA_1_5_06_786000'
+- `UA-1-5-08`: assert: automation datasource name must use an owned prefix: 'ua1_5_08a_ua1_UA_1_5_08_351700'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_08a_ua1_UA_1_5_08_351700'
+- `UA-1-5-09`: assert: automation datasource name must use an owned prefix: 'ua1_5_09_ua1_UA_1_5_09_498900'
+  - step `None`: automation datasource name must use an owned prefix: 'ua1_5_09_ua1_UA_1_5_09_498900'
+
+---
+
+## 真跑批次 — full419_20260715_112824 (2026-07-15 12:48)
+
+**产物**: `output/automation_ua2_ua16_20260715_124702`
+**选择**: {"selectionMode": "chapter", "chapter": "UA-1-6", "strictPoolSize": 13, "includedPartial": 0, "excludedPartial": [], "skippedVerified": [], "limitApplied": 999, "selectedCases": ["UA-1-6-01", "UA-1-6-02", "UA-1-6-03", "UA-1-6-04", "UA-1-6-05", "UA-1-6-06", "UA-1-6-07", "UA-1-6-08", "UA-1-6-09", "UA-1-6-10", "UA-1-6-11", "UA-1-6-12", "UA-1-6-13"], "remainingAfterBatch": 0}
+**结果**: PASS=3 FAIL=2 BLOCKED=0 TIMEOUT=0 chapterTimeoutSec=3000.0
+
+**产品 FAIL triage** (VERIFIED_FAIL 保留):
+- `UA-1-6-05`: assert: getRTValue timeout for ua_case_ua2_UA_1_6_05_ua1_UA_1_6_0_65_601800
+  - step `None`: getRTValue timeout for ua_case_ua2_UA_1_6_05_ua1_UA_1_6_0_65_601800
+- `UA-1-6-06`: assert: [failed] not true.
+  - step `None`: [failed] not true.

@@ -1,0 +1,621 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-11T16:57:13Z",
+  "chapters": [
+    {
+      "id": "UA-1-1",
+      "title": "UA-1-1",
+      "cases": [
+        {
+          "id": "UA-1-1-001",
+          "title": "基础数据源连接建立",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "datasource",
+            "ua-1"
+          ],
+          "timeoutSec": 120,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "确保 functional mock ready"
+            },
+            {
+              "stepId": "ensure-login",
+              "title": "登录 TPT"
+            },
+            {
+              "stepId": "add-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "enable-ds",
+              "title": "启用并等待 alive"
+            },
+            {
+              "stepId": "check-alive",
+              "title": "断言 alive=true"
+            }
+          ],
+          "assertions": [
+            "数据源添加成功后 enable,alive=true"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
+          "lineno": 28
+        }
+      ]
+    },
+    {
+      "id": "UA-1-2",
+      "title": "UA-1-2",
+      "cases": [
+        {
+          "id": "UA-1-2-001",
+          "title": "数据源启用与禁用",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "datasource",
+            "ua-1"
+          ],
+          "timeoutSec": 180,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "确保 mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "disable",
+              "title": "禁用"
+            },
+            {
+              "stepId": "check-offline",
+              "title": "断言 alive=false"
+            },
+            {
+              "stepId": "enable",
+              "title": "重新启用"
+            },
+            {
+              "stepId": "check-online",
+              "title": "断言 alive=true"
+            }
+          ],
+          "assertions": [
+            "disable 后 alive=false,enable 后 alive=true"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
+          "lineno": 55
+        }
+      ]
+    },
+    {
+      "id": "UA-1-3",
+      "title": "UA-1-3",
+      "cases": [
+        {
+          "id": "UA-1-3-001",
+          "title": "数据源断线与恢复",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "datasource",
+            "reconnect",
+            "ua-1"
+          ],
+          "timeoutSec": 240,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "确保 mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "check-online",
+              "title": "断言 alive=true"
+            },
+            {
+              "stepId": "stop-mock",
+              "title": "停 mock"
+            },
+            {
+              "stepId": "check-offline",
+              "title": "断言 alive=false"
+            },
+            {
+              "stepId": "start-mock",
+              "title": "重启 mock"
+            },
+            {
+              "stepId": "check-online-again",
+              "title": "断言 alive=true 自动恢复"
+            }
+          ],
+          "assertions": [
+            "停 mock 后 alive=false,重启后自动恢复 alive=true"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_1\\test_datasource.py",
+          "lineno": 95
+        }
+      ]
+    },
+    {
+      "id": "UA-2-1",
+      "title": "UA-2-1",
+      "cases": [
+        {
+          "id": "UA-2-1-001",
+          "title": "位号新增闭环",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "tag",
+            "ua-2"
+          ],
+          "timeoutSec": 180,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增 Double 位号"
+            },
+            {
+              "stepId": "query-tag",
+              "title": "查询位号存在"
+            }
+          ],
+          "assertions": [
+            "add_tag 返回 id;tag_page 能查到该 name"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_2\\test_tags.py",
+          "lineno": 15
+        }
+      ]
+    },
+    {
+      "id": "UA-2-2",
+      "title": "UA-2-2",
+      "cases": [
+        {
+          "id": "UA-2-2-001",
+          "title": "位号查询",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "tag",
+            "query",
+            "ua-2"
+          ],
+          "timeoutSec": 120,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增位号"
+            },
+            {
+              "stepId": "query-by-name",
+              "title": "按名称查"
+            }
+          ],
+          "assertions": [
+            "按名称 page 能查到"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_2\\test_tags.py",
+          "lineno": 46
+        }
+      ]
+    },
+    {
+      "id": "UA-2-4",
+      "title": "UA-2-4",
+      "cases": [
+        {
+          "id": "UA-2-4-001",
+          "title": "位号软删除与恢复",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "tag",
+            "recycle",
+            "ua-2"
+          ],
+          "timeoutSec": 180,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增位号"
+            },
+            {
+              "stepId": "soft-delete",
+              "title": "软删除"
+            },
+            {
+              "stepId": "recycle-contains",
+              "title": "断言在回收站"
+            },
+            {
+              "stepId": "restore",
+              "title": "恢复"
+            },
+            {
+              "stepId": "active-contains",
+              "title": "断言可重新查得"
+            }
+          ],
+          "assertions": [
+            "软删后回收站可查;恢复后正常 query 命中"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_2\\test_tags.py",
+          "lineno": 75
+        }
+      ]
+    },
+    {
+      "id": "UA-3-1",
+      "title": "UA-3-1",
+      "cases": [
+        {
+          "id": "UA-3-1-001",
+          "title": "新增读取位号后自动开始采集",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "rt",
+            "collect",
+            "ua-3"
+          ],
+          "timeoutSec": 180,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增 Double 位号"
+            },
+            {
+              "stepId": "wait-rt",
+              "title": "轮询 RT 出现值"
+            }
+          ],
+          "assertions": [
+            "新增读取位号后 RT 在 rtVisibilitySec 内出现有效值"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
+          "lineno": 19
+        },
+        {
+          "id": "UA-3-1-013types",
+          "title": "13 类型参数化采集",
+          "kind": "exploratory",
+          "implemented": true,
+          "tags": [
+            "rt",
+            "ua-3",
+            "13-types"
+          ],
+          "timeoutSec": 600,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "loop-types",
+              "title": "遍历 13 种类型 add + 采集"
+            }
+          ],
+          "assertions": [
+            "每种类型 RT 在 timeout 内出现值;不串类型"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_13_types.py",
+          "lineno": 25
+        }
+      ]
+    },
+    {
+      "id": "UA-3-2",
+      "title": "UA-3-2",
+      "cases": [
+        {
+          "id": "UA-3-2-001",
+          "title": "实时库按名称读取",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "rt",
+            "ua-3"
+          ],
+          "timeoutSec": 120,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增 Double 位号"
+            },
+            {
+              "stepId": "rt-read",
+              "title": "等 RT 出现值并读出"
+            }
+          ],
+          "assertions": [
+            "getRTValue 返回 quality 有效、tagTime/appTime 可解析"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
+          "lineno": 54
+        },
+        {
+          "id": "UA-3-2-012",
+          "title": "数据库模式读取",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "rt",
+            "db-mode",
+            "ua-3"
+          ],
+          "timeoutSec": 120,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增位号"
+            },
+            {
+              "stepId": "rt-read",
+              "title": "等待 RT 出现"
+            },
+            {
+              "stepId": "db-read",
+              "title": "isFromDB=true 读取"
+            }
+          ],
+          "assertions": [
+            "从 DB 模式可读出最近一条 RT"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
+          "lineno": 91
+        }
+      ]
+    },
+    {
+      "id": "UA-3-3",
+      "title": "UA-3-3",
+      "cases": [
+        {
+          "id": "UA-3-3-001",
+          "title": "单个位号写入",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "write",
+            "ua-3"
+          ],
+          "timeoutSec": 120,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增可写 Double 位号"
+            },
+            {
+              "stepId": "write",
+              "title": "写值"
+            },
+            {
+              "stepId": "readback",
+              "title": "读回与写入值一致"
+            }
+          ],
+          "assertions": [
+            "writeTagValues 后 RT 等到对应值"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
+          "lineno": 128
+        }
+      ]
+    },
+    {
+      "id": "UA-3-4",
+      "title": "UA-3-4",
+      "cases": [
+        {
+          "id": "UA-3-4-001",
+          "title": "方式 B 造数与基础历史查询",
+          "kind": "regression",
+          "implemented": true,
+          "tags": [
+            "history",
+            "ua-3"
+          ],
+          "timeoutSec": 240,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增 Double 位号"
+            },
+            {
+              "stepId": "fixture",
+              "title": "方式 B import 历史"
+            },
+            {
+              "stepId": "query",
+              "title": "getHistoryValue 查询"
+            }
+          ],
+          "assertions": [
+            "导入 N 条,getHistoryValue 返回 >= N 条"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
+          "lineno": 169
+        }
+      ]
+    },
+    {
+      "id": "UA-3-5",
+      "title": "UA-3-5",
+      "cases": [
+        {
+          "id": "UA-3-5-001",
+          "title": "单个位号实时读响应时间",
+          "kind": "response_time",
+          "implemented": true,
+          "tags": [
+            "rt",
+            "response-time",
+            "ua-3"
+          ],
+          "timeoutSec": 120,
+          "destructive": false,
+          "exclusiveResources": [],
+          "docPath": "",
+          "description": "",
+          "steps": [
+            {
+              "stepId": "ensure-mock",
+              "title": "mock ready"
+            },
+            {
+              "stepId": "create-ds",
+              "title": "创建数据源"
+            },
+            {
+              "stepId": "add-tag",
+              "title": "新增 Double 位号"
+            },
+            {
+              "stepId": "warm-up",
+              "title": "预热一次读取"
+            },
+            {
+              "stepId": "measure",
+              "title": "连续 5 次 RT 测量"
+            }
+          ],
+          "assertions": [
+            "5 次 RT 响应时间均记录为 metric"
+          ],
+          "filePath": "ua_test_harness\\tests\\ua_3\\test_collection.py",
+          "lineno": 201
+        }
+      ]
+    }
+  ]
+}

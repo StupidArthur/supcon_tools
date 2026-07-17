@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "generatedAt": "2026-07-13T10:39:56Z",
+  "generatedAt": "2026-07-15T04:48:54Z",
   "repoRoot": "F:\\github\\supcon_tools",
   "summary": {
     "expectedTotal": 419,
@@ -15,10 +15,10 @@
     "documentWarnings": 1,
     "orphanImplementations": 0,
     "structureOk": true,
-    "verified": 203,
-    "verifiedFail": 65,
-    "verifiedBlocked": 26,
-    "notVerified": 125
+    "verified": 189,
+    "verifiedFail": 108,
+    "verifiedBlocked": 64,
+    "notVerified": 58
   },
   "duplicates": [],
   "malformed": [],
@@ -51,8 +51,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-01\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-01\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -82,8 +82,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-02\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-02\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -113,8 +113,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-03\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-03\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -144,8 +144,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-04\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-04\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -176,8 +176,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-05\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-05\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -208,8 +208,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-06\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-06\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -240,8 +240,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-07\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-07\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -272,8 +272,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-08\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-08\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -303,7 +303,10 @@
           "quality"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-09\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-10",
@@ -332,7 +335,10 @@
           "quality"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-10\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-11",
@@ -361,7 +367,10 @@
           "quality"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-11\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-1-1-12",
@@ -390,8 +399,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:12:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260713_181113\\cases\\UA-1-1-12\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:35:03Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua11_20260715_123354\\cases\\UA-1-1-12\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -423,8 +432,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-01\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-01\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -456,8 +465,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-02\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-02\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -489,8 +498,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-03\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-03\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -521,7 +530,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-04\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-05",
@@ -551,7 +563,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-05\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-2-06",
@@ -582,8 +597,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-06\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-06\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -615,8 +630,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-07\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-07\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -648,8 +663,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-2-08\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:39:35Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua12_20260715_123504\\cases\\UA-1-2-08\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -681,8 +696,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-01\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-01\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -714,8 +729,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-02\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-02\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -747,8 +762,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-03\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-03\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -780,8 +795,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-04\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-04\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -813,8 +828,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-05\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-05\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -846,8 +861,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-06\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-06\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -879,8 +894,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-07\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-07\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -912,8 +927,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:37:25Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260713_183656\\cases\\UA-1-3-08\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:40:04Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua13_20260715_123936\\cases\\UA-1-3-08\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -944,10 +959,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-4-01\\run\\report.json",
-      "runStatus": "BLOCKED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:46:32Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua14_20260715_124005\\cases\\UA-1-4-01\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-4-02",
@@ -977,10 +992,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-4-02\\run\\report.json",
-      "runStatus": "BLOCKED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:46:32Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua14_20260715_124005\\cases\\UA-1-4-02\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-4-03",
@@ -1010,10 +1025,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-4-03\\run\\report.json",
-      "runStatus": "BLOCKED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:46:32Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua14_20260715_124005\\cases\\UA-1-4-03\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-4-04",
@@ -1043,10 +1058,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-4-04\\run\\report.json",
-      "runStatus": "BLOCKED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:46:32Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua14_20260715_124005\\cases\\UA-1-4-04\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-4-05",
@@ -1076,10 +1091,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-4-05\\run\\report.json",
-      "runStatus": "BLOCKED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:46:32Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua14_20260715_124005\\cases\\UA-1-4-05\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-4-06",
@@ -1109,10 +1124,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-4-06\\run\\report.json",
-      "runStatus": "BLOCKED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:46:32Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua14_20260715_124005\\cases\\UA-1-4-06\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-01",
@@ -1143,8 +1158,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-5-01\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-01\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -1175,7 +1190,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-02\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-03",
@@ -1205,7 +1223,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-03\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-04",
@@ -1235,7 +1256,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-04\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-05",
@@ -1265,7 +1289,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-05\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-06",
@@ -1295,7 +1322,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-06\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-07",
@@ -1326,8 +1356,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:18:11Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_181317\\cases\\UA-1-5-07\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-07\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -1358,7 +1388,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-08\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-5-09",
@@ -1388,7 +1421,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:47:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua15_20260715_124633\\cases\\UA-1-5-09\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-1-6-01",
@@ -1419,8 +1455,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-01\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-01\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -1452,8 +1488,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-02\\run\\report.json",
+      "verifiedAt": "2026-07-15T00:51:37Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_085049\\cases\\UA-1-6-02\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -1518,8 +1554,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-04\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-04\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -1551,8 +1587,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-05\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-05\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -1584,8 +1620,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-06\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-06\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -1617,8 +1653,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-07\\run\\report.json",
+      "verifiedAt": "2026-07-15T00:51:37Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_085049\\cases\\UA-1-6-07\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -1683,8 +1719,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-09\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-09\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -1716,8 +1752,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-10\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-10\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -1782,8 +1818,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T10:39:55Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260713_183801\\cases\\UA-1-6-12\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-12\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -1814,10 +1850,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T10:30:54Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_182939\\cases\\UA-1-6-13\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:48:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua16_20260715_124702\\cases\\UA-1-6-13\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-1-001",
@@ -1848,8 +1884,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-001\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -1880,10 +1916,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-002\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-002\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-003",
@@ -1914,8 +1950,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-003\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -1947,8 +1983,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-004\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -1980,8 +2016,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-005\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -2013,8 +2049,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-006\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-006\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -2045,10 +2081,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-007\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-007\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-008",
@@ -2078,10 +2114,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-008\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-008\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-009",
@@ -2111,10 +2147,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-009\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-009\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-010",
@@ -2144,10 +2180,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-010\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-010\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-011",
@@ -2177,10 +2213,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-011\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-011\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-012",
@@ -2210,10 +2246,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-012\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-012\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-013",
@@ -2243,10 +2279,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-013\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-013\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-014",
@@ -2276,10 +2312,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-014\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-014\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-015",
@@ -2309,7 +2345,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-015\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-016",
@@ -2339,10 +2378,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-016\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-016\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-017",
@@ -2372,10 +2411,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-1-017\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-017\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-018",
@@ -2405,10 +2444,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-018\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-018\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-019",
@@ -2438,10 +2477,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-019\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-019\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-020",
@@ -2471,7 +2510,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-020\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-021",
@@ -2501,10 +2543,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-1-021\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-021\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-022",
@@ -2534,10 +2576,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-1-022\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-022\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-1-023",
@@ -2658,8 +2700,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-026\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-026\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -2691,8 +2733,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-027\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-027\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -2724,8 +2766,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-028\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-028\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -2756,10 +2798,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-029\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-029\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-030",
@@ -2789,10 +2831,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-030\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-030\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-031",
@@ -2822,10 +2864,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-031\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-031\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-032",
@@ -2855,10 +2897,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-032\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-032\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-033",
@@ -2888,10 +2930,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-033\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-033\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-034",
@@ -2921,10 +2963,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-034\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-034\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-035",
@@ -2954,10 +2996,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-035\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-035\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-036",
@@ -2987,10 +3029,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-036\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-036\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-037",
@@ -3020,10 +3062,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-037\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-037\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-038",
@@ -3054,8 +3096,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-038\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-038\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -3087,8 +3129,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-039\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-039\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3120,8 +3162,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-040\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-040\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3153,8 +3195,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-041\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-041\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3186,8 +3228,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-042\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-042\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3219,8 +3261,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-043\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-043\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3252,8 +3294,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-044\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-044\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3285,8 +3327,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-045\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-045\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3318,8 +3360,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-046\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-046\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3351,8 +3393,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-047\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-047\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3384,8 +3426,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-048\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-048\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3417,8 +3459,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-049\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-049\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3450,8 +3492,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-050\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-050\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3483,8 +3525,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-051\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-051\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3516,8 +3558,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-052\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-052\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3549,8 +3591,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-053\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-053\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3582,8 +3624,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-054\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-054\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3615,8 +3657,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-055\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-055\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3648,8 +3690,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-056\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-056\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3681,8 +3723,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-057\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-057\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3714,8 +3756,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-058\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-058\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3747,8 +3789,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-059\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-059\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3780,8 +3822,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-060\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-060\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3813,8 +3855,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:20:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_141718\\cases\\UA-2-1-061\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-061\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3846,8 +3888,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-062\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-062\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3879,8 +3921,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-063\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-063\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3912,8 +3954,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-064\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-064\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3945,8 +3987,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-065\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-065\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -3978,8 +4020,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-066\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-066\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4011,8 +4053,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-067\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-067\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -4044,8 +4086,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-068\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-068\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -4076,7 +4118,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-069\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-070",
@@ -4106,7 +4151,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-070\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-071",
@@ -4137,8 +4185,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-071\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-071\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4170,8 +4218,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-072\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-072\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4203,8 +4251,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-073\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-073\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4236,8 +4284,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-074\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-074\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4268,7 +4316,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-075\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-076",
@@ -4298,10 +4349,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-076\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-076\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-077",
@@ -4331,10 +4382,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-077\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-077\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-078",
@@ -4394,10 +4445,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-079\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-079\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-080",
@@ -4427,10 +4478,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-080\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-080\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-1-081",
@@ -4491,8 +4542,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-082\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-082\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -4523,7 +4574,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-083\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-1-084",
@@ -4554,8 +4608,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-084\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-084\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -4587,8 +4641,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-085\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-085\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4620,8 +4674,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-086\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-086\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4773,8 +4827,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-091\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-091\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4806,8 +4860,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-092\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-092\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -4899,8 +4953,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-095\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-095\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -4992,8 +5046,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-098\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-098\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5025,8 +5079,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-099\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-099\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5118,8 +5172,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-102\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-102\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -5151,8 +5205,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-103\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-103\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5184,8 +5238,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T05:59:37Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_134824\\cases\\UA-2-1-104\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-104\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -5217,8 +5271,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-105\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-105\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5250,8 +5304,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-106\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-106\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5283,8 +5337,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T05:07:58Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260713_130117\\cases\\UA-2-1-107\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:48:18Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua21_20260715_112824\\cases\\UA-2-1-107\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5466,8 +5520,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-001\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5499,8 +5553,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-002\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -5532,8 +5586,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-003\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5565,8 +5619,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-004\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5598,8 +5652,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-005\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5631,8 +5685,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-006\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-006\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5694,8 +5748,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-008\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-008\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5787,8 +5841,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-011\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-011\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5820,8 +5874,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-012\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-012\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5883,8 +5937,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-014\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-014\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5916,8 +5970,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-015\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-015\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5949,8 +6003,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-016\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-016\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -5982,8 +6036,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-017\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-017\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6015,8 +6069,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-018\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-018\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6048,8 +6102,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-019\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-019\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6081,8 +6135,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-020\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-020\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6144,8 +6198,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-022\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-022\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6177,8 +6231,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-023\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-023\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6210,8 +6264,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-024\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-024\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6243,8 +6297,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-025\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-025\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6276,8 +6330,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-026\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-026\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6309,8 +6363,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-027\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-027\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6342,8 +6396,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-028\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-028\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6375,8 +6429,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-029\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-029\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6408,8 +6462,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-030\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-030\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6441,8 +6495,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-031\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-031\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6474,8 +6528,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-032\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-032\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6507,8 +6561,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-2-033\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-033\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6540,8 +6594,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-034\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-034\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6573,8 +6627,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-035\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-035\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6605,10 +6659,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-036\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-036\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-2-037",
@@ -6639,8 +6693,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-037\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-037\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6672,8 +6726,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-038\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-038\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6705,8 +6759,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-039\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-039\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -6738,8 +6792,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-040\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-040\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -6771,8 +6825,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-041\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-041\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6804,8 +6858,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-042\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-042\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -6897,8 +6951,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-045\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-045\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -6929,7 +6983,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-046\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-2-047",
@@ -6959,7 +7016,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-047\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-2-048",
@@ -6990,8 +7050,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-048\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-048\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7023,8 +7083,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-049\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-049\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7056,8 +7116,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-050\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-050\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7089,8 +7149,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-051\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-051\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7122,8 +7182,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-052\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-052\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7154,7 +7214,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-053\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-2-054",
@@ -7185,8 +7248,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-054\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-054\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7218,8 +7281,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-055\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-055\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -7251,8 +7314,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-056\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-056\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7284,8 +7347,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-057\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-057\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7317,8 +7380,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-058\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-058\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7350,8 +7413,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-059\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-059\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7383,8 +7446,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-060\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-060\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7416,8 +7479,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:57:13Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_145651\\cases\\UA-2-2-061\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-061\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7449,8 +7512,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:57:13Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_145651\\cases\\UA-2-2-062\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-062\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7542,8 +7605,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-065\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-065\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7575,8 +7638,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-066\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-066\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7608,8 +7671,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:30:43Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260713_142746\\cases\\UA-2-2-067\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:52:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua22_20260715_114818\\cases\\UA-2-2-067\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7640,10 +7703,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-001\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-001\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-3-002",
@@ -7673,10 +7736,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-002\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-002\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-3-003",
@@ -7706,10 +7769,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-003\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-003\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-3-004",
@@ -7773,8 +7836,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-005\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7805,10 +7868,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-006\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-006\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-2-3-007",
@@ -7839,8 +7902,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-007\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-007\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -7872,8 +7935,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-008\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-008\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -7905,8 +7968,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-009\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-009\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -7938,8 +8001,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:20:23Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260713_145740\\cases\\UA-2-3-010\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-010\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8034,8 +8097,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-013\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-013\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8066,10 +8129,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-014\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-014\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-3-015",
@@ -8100,8 +8163,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-015\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-015\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8133,8 +8196,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-016\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-016\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8166,8 +8229,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-017\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-017\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8229,8 +8292,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-019\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-019\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8262,8 +8325,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-020\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-020\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8295,8 +8358,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-021\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-021\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -8418,8 +8481,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-025\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-025\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8451,8 +8514,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-026\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-026\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8514,8 +8577,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T07:31:44Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_152721\\cases\\UA-2-3-028\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-028\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -8547,8 +8610,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:20:23Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260713_145740\\cases\\UA-2-3-029\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-029\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8580,8 +8643,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:20:23Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260713_145740\\cases\\UA-2-3-030\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-030\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8613,8 +8676,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T07:20:23Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260713_145740\\cases\\UA-2-3-031\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-031\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8645,7 +8708,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:56:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua23_20260715_115202\\cases\\UA-2-3-032\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-4-001",
@@ -8676,8 +8742,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-4-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-001\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8709,8 +8775,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-002\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8742,8 +8808,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-003\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8775,8 +8841,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-004\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8928,8 +8994,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-009\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-009\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -8961,8 +9027,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-010\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-010\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -8993,7 +9059,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-011\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-4-012",
@@ -9023,7 +9092,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-012\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-2-4-013",
@@ -9054,8 +9126,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-4-013\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-013\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9087,8 +9159,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-014\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-014\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9120,8 +9192,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-015\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-015\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9153,8 +9225,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-016\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-016\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -9186,8 +9258,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-017\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-017\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9279,8 +9351,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-4-020\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-020\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9312,8 +9384,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:57:13Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_145651\\cases\\UA-2-4-021\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-021\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9405,8 +9477,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T02:04:07Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_20260713_100136\\cases\\UA-2-4-024\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-024\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9468,8 +9540,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T06:47:04Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260713_144441\\cases\\UA-2-4-026\\run\\report.json",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-026\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9500,7 +9572,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T03:59:54Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua24_20260715_115654\\cases\\UA-2-4-027\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-2-5-001",
@@ -9531,8 +9606,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-001\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9564,8 +9639,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-002\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9597,8 +9672,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-003\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9630,8 +9705,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-004\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9663,8 +9738,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-005\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9786,8 +9861,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-009\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-009\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9819,8 +9894,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-010\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-010\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9852,8 +9927,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-011\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-011\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9945,8 +10020,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-014\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-014\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -9977,10 +10052,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-015\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-015\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-016",
@@ -10010,10 +10085,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-016\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-016\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-017",
@@ -10043,7 +10118,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-017\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-018",
@@ -10073,10 +10151,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-018\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-018\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-019",
@@ -10106,7 +10184,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-019\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-020",
@@ -10136,7 +10217,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-020\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-021",
@@ -10166,7 +10250,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-021\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-022",
@@ -10196,10 +10283,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-022\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-022\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-023",
@@ -10229,10 +10316,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-023\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-023\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-024",
@@ -10262,10 +10349,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-024\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-024\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-025",
@@ -10295,7 +10382,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-025\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-026",
@@ -10325,10 +10415,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-026\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-026\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-2-5-027",
@@ -10359,8 +10449,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:09:06Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260713_160805\\cases\\UA-2-5-027\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:04:28Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua25_20260715_115955\\cases\\UA-2-5-027\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10391,10 +10481,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-001\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-001\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-3-1-002",
@@ -10425,8 +10515,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-002\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -10457,10 +10547,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-003\\run\\report.json",
-      "runStatus": "FAIL"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-003\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-3-1-004",
@@ -10491,8 +10581,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-004\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -10523,10 +10613,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-005\\run\\report.json",
-      "runStatus": "PASS"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-005\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-1-006",
@@ -10557,8 +10647,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-006\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-006\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -10589,7 +10679,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-007\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-1-008",
@@ -10620,8 +10713,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-1-008\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-008\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10652,7 +10745,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-009\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-1-010",
@@ -10682,7 +10778,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-010\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-1-011",
@@ -10713,8 +10812,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:22:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260713_161852\\cases\\UA-3-1-011\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-011\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10776,8 +10875,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:22:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260713_161852\\cases\\UA-3-1-013\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-013\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10809,8 +10908,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:22:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260713_161852\\cases\\UA-3-1-014\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-014\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10842,8 +10941,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:22:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260713_161852\\cases\\UA-3-1-015\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-015\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10875,8 +10974,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:22:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260713_161852\\cases\\UA-3-1-016\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-016\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -10907,7 +11006,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-017\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-3-1-018",
@@ -10971,8 +11073,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:22:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260713_161852\\cases\\UA-3-1-019\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-019\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -11003,7 +11105,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:07:21Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua31_20260715_120429\\cases\\UA-3-1-020\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-2-001",
@@ -11034,8 +11139,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-001\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11067,8 +11172,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-002\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -11100,8 +11205,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-003\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -11133,8 +11238,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-004\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11166,8 +11271,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-005\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -11199,8 +11304,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-006\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-006\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11232,8 +11337,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-007\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-007\\run\\report.json",
       "runStatus": "ERROR"
     },
     {
@@ -11265,8 +11370,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-008\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-008\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11298,8 +11403,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-009\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-009\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11330,7 +11435,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-010\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-2-011",
@@ -11360,7 +11468,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-011\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-2-012",
@@ -11391,8 +11502,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-012\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-012\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -11424,8 +11535,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-013\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-013\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -11457,8 +11568,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-014\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-014\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11519,7 +11630,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-016\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-2-017",
@@ -11549,7 +11663,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-017\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-2-018",
@@ -11579,7 +11696,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-018\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-2-019",
@@ -11610,8 +11730,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-2-019\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-019\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11642,10 +11762,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-020\\run\\report.json",
-      "runStatus": "ERROR"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-020\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-2-021",
@@ -11675,10 +11795,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:30:29Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260713_162235\\cases\\UA-3-2-021\\run\\report.json",
-      "runStatus": "ERROR"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:15:41Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua32_20260715_120722\\cases\\UA-3-2-021\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-3-001",
@@ -11709,8 +11829,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-001\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11742,8 +11862,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-002\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11775,8 +11895,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_FAIL",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-3-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-003\\run\\report.json",
       "runStatus": "FAIL"
     },
     {
@@ -11808,8 +11928,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-004\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11841,8 +11961,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-005\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11874,8 +11994,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-006\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-006\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11907,8 +12027,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-007\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-007\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -11939,7 +12059,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-008\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-3-009",
@@ -11970,8 +12093,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-009\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-009\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12003,8 +12126,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-3-010\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-010\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12036,8 +12159,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-3-011\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-011\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12069,8 +12192,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-012\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-012\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12102,8 +12225,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-013\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-013\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12165,8 +12288,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-015\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-015\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12228,8 +12351,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:55:42Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165223\\cases\\UA-3-3-017\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-017\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12261,8 +12384,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:33:33Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260713_163208\\cases\\UA-3-3-018\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-018\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12294,8 +12417,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:57:03Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165636\\cases\\UA-3-3-019\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-019\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -12356,7 +12479,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:18:15Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua33_20260715_121542\\cases\\UA-3-3-021\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-3-022",
@@ -12417,8 +12543,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:57:03Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165636\\cases\\UA-3-4-001\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-001\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -12450,8 +12576,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:57:03Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165636\\cases\\UA-3-4-002\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-002\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -12483,8 +12609,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:57:03Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165636\\cases\\UA-3-4-003\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-003\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -12516,8 +12642,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:57:03Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165636\\cases\\UA-3-4-004\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-004\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -12549,8 +12675,8 @@
         ]
       },
       "verificationStatus": "VERIFIED_BLOCKED",
-      "verifiedAt": "2026-07-13T08:57:03Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_default_20260713_165636\\cases\\UA-3-4-005\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-005\\run\\report.json",
       "runStatus": "BLOCKED"
     },
     {
@@ -12581,7 +12707,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-006\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-4-007",
@@ -12612,8 +12741,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:34:12Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260713_163334\\cases\\UA-3-4-007\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-007\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12647,8 +12776,8 @@
         ]
       },
       "verificationStatus": "VERIFIED",
-      "verifiedAt": "2026-07-13T08:34:12Z",
-      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260713_163334\\cases\\UA-3-4-008\\run\\report.json",
+      "verifiedAt": "2026-07-15T04:19:01Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua34_20260715_121816\\cases\\UA-3-4-008\\run\\report.json",
       "runStatus": "PASS"
     },
     {
@@ -12679,7 +12808,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-001\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-5-002",
@@ -12709,7 +12841,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-002\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-5-003",
@@ -12739,7 +12874,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-003\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-5-004",
@@ -12769,7 +12907,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-004\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-5-005",
@@ -12799,7 +12940,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-005\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-3-5-006",
@@ -12829,7 +12973,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-006\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-3-5-007",
@@ -12859,7 +13006,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-007\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-5-008",
@@ -12889,7 +13039,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-008\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-5-009",
@@ -12919,7 +13072,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-009\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-5-010",
@@ -12949,7 +13105,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-010\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-5-011",
@@ -12979,7 +13138,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-011\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-5-012",
@@ -13009,7 +13171,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:26:40Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua35_20260715_121902\\cases\\UA-3-5-012\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-6-001",
@@ -13039,7 +13204,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-001\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-6-002",
@@ -13069,7 +13237,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-002\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-6-003",
@@ -13099,7 +13270,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-003\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-6-004",
@@ -13129,7 +13303,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-004\\run\\report.json",
+      "runStatus": "ERROR"
     },
     {
       "id": "UA-3-6-005",
@@ -13219,7 +13396,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-007\\run\\report.json",
+      "runStatus": "PASS"
     },
     {
       "id": "UA-3-6-008",
@@ -13249,7 +13429,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-008\\run\\report.json",
+      "runStatus": "FAIL"
     },
     {
       "id": "UA-3-6-009",
@@ -13309,7 +13492,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-010\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-6-011",
@@ -13339,7 +13525,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-011\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-6-012",
@@ -13369,7 +13558,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-012\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-6-013",
@@ -13399,7 +13591,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-013\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-6-014",
@@ -13429,7 +13624,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_BLOCKED",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-014\\run\\report.json",
+      "runStatus": "BLOCKED"
     },
     {
       "id": "UA-3-6-015",
@@ -13459,7 +13657,10 @@
           "shared-executor"
         ]
       },
-      "verificationStatus": "NOT_VERIFIED"
+      "verificationStatus": "VERIFIED_FAIL",
+      "verifiedAt": "2026-07-15T04:33:53Z",
+      "runReportPath": "F:\\github\\supcon_tools\\output\\automation_ua2_ua36_20260715_122640\\cases\\UA-3-6-015\\run\\report.json",
+      "runStatus": "FAIL"
     }
   ]
 }
