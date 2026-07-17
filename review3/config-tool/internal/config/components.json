@@ -1,0 +1,563 @@
+[
+  {
+    "type": "LIST_WAVE",
+    "category": "algorithm",
+    "displayName": "列表波",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "输出值"
+      },
+      {
+        "name": "wave_list",
+        "desc": "波形定义列表"
+      }
+    ],
+    "params": [
+      {
+        "name": "wave_list",
+        "default": [
+          [
+            0.0,
+            1.0
+          ]
+        ],
+        "desc": "波形定义列表"
+      }
+    ],
+    "doc": "\n# 列表波生成算法\n\n根据配置的列表值和时间点，循环播放列表波形。\n\n## 特点\n\n- 根据配置的列表值和时间点，循环播放列表波形\n- 支持任意自定义波形模式\n- 播放完整个列表后，循环从头开始\n\n## 使用示例\n\n```yaml\n- name: list1\n  type: LIST_WAVE\n  init_args:\n    wave_list:\n      - [10.0, 5.0]    # 值为10，持续5秒\n      - [20.0, 3.0]    # 值为20，持续3秒\n      - [0.0, 2.0]     # 值为0，持续2秒\n  expression: list1.execute()\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| wave_list | 波形列表，格式 `[(v1, t1), (v2, t2), ...]`，v 为幅值、t 为持续时间（秒），init_args | [(0.0, 1.0)] |\n| out | 当前段输出值，快照位号 | 由 execute() 每步按 wave_list 切换 |\n"
+  },
+  {
+    "type": "PID",
+    "category": "algorithm",
+    "displayName": "PID控制器",
+    "inputs": [
+      {
+        "name": "PV",
+        "type": "float",
+        "connectable": true,
+        "desc": "过程变量(当前值)"
+      },
+      {
+        "name": "SV",
+        "type": "float",
+        "connectable": true,
+        "desc": "设定值(目标值)"
+      },
+      {
+        "name": "MODE",
+        "type": "float",
+        "connectable": false,
+        "desc": "运行模式(1=运算,非1=跳过)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "MV",
+        "desc": "操作变量(输出值)"
+      },
+      {
+        "name": "PV",
+        "desc": "过程变量(当前值)"
+      },
+      {
+        "name": "SV",
+        "desc": "设定值(目标值)"
+      },
+      {
+        "name": "PB",
+        "desc": "比例带"
+      },
+      {
+        "name": "TI",
+        "desc": "积分时间(s)"
+      },
+      {
+        "name": "TD",
+        "desc": "微分时间(s)"
+      },
+      {
+        "name": "H",
+        "desc": "输出上限"
+      },
+      {
+        "name": "L",
+        "desc": "输出下限"
+      },
+      {
+        "name": "MODE",
+        "desc": "运行模式(1=运算,非1=本周期跳过)"
+      }
+    ],
+    "params": [
+      {
+        "name": "PB",
+        "default": 12.0,
+        "desc": "比例带"
+      },
+      {
+        "name": "TI",
+        "default": 30.0,
+        "desc": "积分时间(s)"
+      },
+      {
+        "name": "TD",
+        "default": 0.15,
+        "desc": "微分时间(s)"
+      },
+      {
+        "name": "PV",
+        "default": 0.0,
+        "desc": "过程变量(当前值)"
+      },
+      {
+        "name": "SV",
+        "default": 0.0,
+        "desc": "设定值(目标值)"
+      },
+      {
+        "name": "MV",
+        "default": 0.0,
+        "desc": "操作变量(输出值)"
+      },
+      {
+        "name": "H",
+        "default": 100.0,
+        "desc": "输出上限"
+      },
+      {
+        "name": "L",
+        "default": 0.0,
+        "desc": "输出下限"
+      },
+      {
+        "name": "MODE",
+        "default": 1,
+        "desc": "运行模式(1=运算,非1=本周期跳过)"
+      }
+    ],
+    "doc": "\n# PID控制算法\n\n通用的PID（比例-积分-微分）控制算法，用于过程控制。\n\n## 特点\n\n- **输入**：PV（过程变量）、SV（设定值）\n- **输出**：MV（操作变量）\n- **控制方式**：比例项 + 积分项 + 微分项\n- **MODE**：`1` 时按公式计算 MV；非 `1` 时本周期不执行 PID 运算（不更新 MV、积分与微分状态）。\n\n## 控制公式\n\n- 比例项：`p_term = PB * error`\n- 积分项：`i_term = PB / TI * integral`（当 TI > 0 时）\n- 微分项：`d_term = PB * TD * (error - last_error) / cycle_time`\n- 输出：`MV = p_term + i_term + d_term`（限制在 [L, H] 范围内）\n\n## 使用示例\n\n```yaml\n- name: pid1\n  type: PID\n  init_args:\n    PB: 120\n    TI: 30\n    TD: 0.15\n    SV: 1.0\n    H: 100.0\n    L: 0.0\n    MODE: 1\n  expression: pid1.execute(PV=tank1.level, SV=sin1.out)\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| PB | 比例带，控制器的比例增益参数，init_args | 12.0 |\n| TI | 积分时间（秒），用于消除稳态误差，init_args | 30.0 |\n| TD | 微分时间（秒），用于改善动态响应，init_args | 0.15 |\n| PV | 过程变量，每周期可由 `execute(PV=...)` 更新，快照位号 | init_args 默认 0.0 |\n| SV | 设定值，每周期可由 `execute(SV=...)` 更新，快照位号 | init_args 默认 0.0 |\n| MV | 操作变量（控制器输出），运行中计算，快照位号 | init_args 默认 0.0 |\n| H | 输出上限，MV 的最大值，init_args | 100.0 |\n| L | 输出下限，MV 的最小值，init_args | 0.0 |\n| MODE | 运行模式：`1` 执行 PID 运算；非 `1` 本周期跳过运算（MV 等不更新），init_args | 1 |\n"
+  },
+  {
+    "type": "RANDOM",
+    "category": "algorithm",
+    "displayName": "随机数生成器",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "输出值(随机)"
+      }
+    ],
+    "params": [
+      {
+        "name": "L",
+        "default": 0.0,
+        "desc": "L"
+      },
+      {
+        "name": "H",
+        "default": 100.0,
+        "desc": "H"
+      },
+      {
+        "name": "max_step",
+        "default": 3.0,
+        "desc": "max_step"
+      }
+    ],
+    "doc": "\n# 随机数生成算法\n\n生成在指定范围内随机变化的数值，支持最大步进限制。\n\n## 特点\n\n- 在 [L, H] 范围内生成随机数\n- 每次变化不超过 max_step（避免突变）\n- 使用 NumPy 预生成技术（支持超大并发计算）\n\n## 使用示例\n\n```yaml\n- name: random1\n  type: RANDOM\n  init_args:\n    L: 0.0\n    H: 100.0\n    max_step: 3.0\n  expression: random1.execute()\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| L | 随机数下界，init_args | 0.0 |\n| H | 随机数上界，init_args | 100.0 |\n| max_step | 最大步进，单次变化绝对值上限，init_args | 3.0 |\n| out | 当前输出值，快照位号 | 由 execute() 每步在 [L,H] 内随机游走 |\n"
+  },
+  {
+    "type": "SINE_WAVE",
+    "category": "algorithm",
+    "displayName": "正弦波",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "输出值"
+      },
+      {
+        "name": "amplitude",
+        "desc": "振幅"
+      },
+      {
+        "name": "offset",
+        "desc": "纵向偏移"
+      }
+    ],
+    "params": [
+      {
+        "name": "amplitude",
+        "default": 100.0,
+        "desc": "振幅"
+      },
+      {
+        "name": "period",
+        "default": 1200.0,
+        "desc": "period"
+      },
+      {
+        "name": "phase",
+        "default": 0.0,
+        "desc": "phase"
+      },
+      {
+        "name": "offset",
+        "default": 0.0,
+        "desc": "纵向偏移"
+      }
+    ],
+    "doc": "\n# 正弦波生成算法\n\n根据配置的周期（秒）和控制器周期，生成正弦波信号，支持纵向偏移。\n\n## 特点\n\n- 根据周期（秒）和控制器周期，计算每个周期应该生成的角度\n- 输出公式：`out = offset + amplitude * sin(2π * (cycle_count / cycles_per_period) + phase)`\n- 支持相位偏移与纵向偏移，可生成不同相位与基线的正弦波\n\n## 使用示例\n\n```yaml\n- name: sin1\n  type: SINE_WAVE\n  init_args:\n    amplitude: 100.0\n    period: 1200\n    phase: 0.0\n    offset: 0.0\n  expression: sin1.execute()\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| amplitude | 振幅，正弦波的最大值，init_args | 100.0 |\n| period | 周期（秒），一个完整正弦波的时间长度，init_args | 1200.0 |\n| phase | 相位（弧度），正弦波的初始相位偏移，init_args | 0.0 |\n| offset | 纵向偏移，波形基线，init_args | 0.0 |\n| out | 当前周期输出值，快照位号 | 由 execute() 每步更新 |\n"
+  },
+  {
+    "type": "SQUARE_WAVE",
+    "category": "algorithm",
+    "displayName": "方波",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "输出值"
+      },
+      {
+        "name": "amplitude",
+        "desc": "振幅"
+      },
+      {
+        "name": "period",
+        "desc": "周期(s)"
+      },
+      {
+        "name": "phase",
+        "desc": "相位偏移(0~1)"
+      }
+    ],
+    "params": [
+      {
+        "name": "amplitude",
+        "default": 100.0,
+        "desc": "振幅"
+      },
+      {
+        "name": "period",
+        "default": 1200.0,
+        "desc": "周期(s)"
+      },
+      {
+        "name": "phase",
+        "default": 0.0,
+        "desc": "相位偏移(0~1)"
+      }
+    ],
+    "doc": "\n# 方波生成算法\n\n根据配置的周期（秒）和控制器周期，生成方波信号。\n\n## 特点\n\n- 根据周期（秒）和控制器周期，生成方波信号\n- 输出：在半个周期内为 amplitude，在另外半个周期内为 -amplitude\n- 支持相位偏移，可以生成不同相位的方波\n\n## 使用示例\n\n```yaml\n- name: square1\n  type: SQUARE_WAVE\n  init_args:\n    amplitude: 100.0\n    period: 1200\n    phase: 0.0\n  expression: square1.execute()\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| amplitude | 振幅，方波的最大值，init_args | 100.0 |\n| period | 周期（秒），一个完整方波的时间长度，init_args | 1200.0 |\n| phase | 相位偏移（0~1），周期内偏移比例，init_args | 0.0 |\n| out | 当前周期输出值，快照位号 | 由 execute() 每步更新 |\n"
+  },
+  {
+    "type": "TAG",
+    "category": "algorithm",
+    "displayName": "信号标签",
+    "inputs": [
+      {
+        "name": "in_value",
+        "type": "float",
+        "connectable": true,
+        "desc": "输入值"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "in_value",
+        "desc": "输入值"
+      },
+      {
+        "name": "out",
+        "desc": "输出值"
+      }
+    ],
+    "params": [
+      {
+        "name": "in_value",
+        "default": 0.0,
+        "desc": "输入值"
+      },
+      {
+        "name": "out",
+        "default": 0.0,
+        "desc": "输出值"
+      }
+    ],
+    "doc": "\n# TAG 信号程序\n\n用于统一位号架构中的“可写输入 + 可读输出”场景。\n\n## 特点\n\n- 统一输入/输出位号：`in_value` 与 `out`\n- 默认每周期透传：`out = in_value`\n- 支持 `execute(in_value=...)` 在表达式中进行信号连接\n\n## 使用示例\n\n```yaml\n- name: tag_setpoint\n  type: TAG\n  init_args:\n    in_value: 1.0\n  expression: tag_setpoint.execute()\n\n- name: tag_copy\n  type: TAG\n  expression: tag_copy.execute(in_value=tag_setpoint.out)\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| in_value | 输入值，支持外部写值 | 0.0 |\n| out | 输出值，默认透传 in_value | 0.0 |\n"
+  },
+  {
+    "type": "TRIANGLE_WAVE",
+    "category": "algorithm",
+    "displayName": "三角波",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "输出值"
+      },
+      {
+        "name": "amplitude",
+        "desc": "振幅"
+      },
+      {
+        "name": "period",
+        "desc": "周期(s)"
+      },
+      {
+        "name": "phase",
+        "desc": "相位偏移(0~1)"
+      }
+    ],
+    "params": [
+      {
+        "name": "amplitude",
+        "default": 100.0,
+        "desc": "振幅"
+      },
+      {
+        "name": "period",
+        "default": 1200.0,
+        "desc": "周期(s)"
+      },
+      {
+        "name": "phase",
+        "default": 0.0,
+        "desc": "相位偏移(0~1)"
+      }
+    ],
+    "doc": "\n# 三角波生成算法\n\n根据配置的周期（秒）和控制器周期，生成三角波信号。\n\n## 特点\n\n- 根据周期（秒）和控制器周期，生成三角波信号\n- 输出：从 -amplitude 线性增长到 amplitude，然后线性下降回 -amplitude\n- 支持相位偏移，可以生成不同相位的三角波\n\n## 使用示例\n\n```yaml\n- name: triangle1\n  type: TRIANGLE_WAVE\n  init_args:\n    amplitude: 100.0\n    period: 1200\n    phase: 0.0\n  expression: triangle1.execute()\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| amplitude | 振幅，三角波的最大值，init_args | 100.0 |\n| period | 周期（秒），一个完整三角波的时间长度，init_args | 1200.0 |\n| phase | 相位偏移（0~1），周期内偏移比例，init_args | 0.0 |\n| out | 当前周期输出值，快照位号 | 由 execute() 每步更新 |\n"
+  },
+  {
+    "type": "CYLINDRICAL_TANK",
+    "category": "model",
+    "displayName": "圆柱水箱",
+    "inputs": [
+      {
+        "name": "inlet_flow",
+        "type": "float",
+        "connectable": true,
+        "desc": "入口流量(m³/s)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "level",
+        "desc": "当前水位(m)"
+      },
+      {
+        "name": "inlet_flow",
+        "desc": "入口流量(m³/s)"
+      },
+      {
+        "name": "outlet_flow",
+        "desc": "出口流量(m³/s)"
+      },
+      {
+        "name": "height",
+        "desc": "水箱高度(m)"
+      },
+      {
+        "name": "radius",
+        "desc": "水箱半径(m)"
+      },
+      {
+        "name": "outlet_area",
+        "desc": "出水口面积(m²)"
+      },
+      {
+        "name": "initial_level",
+        "desc": "初始水位(m)"
+      }
+    ],
+    "params": [
+      {
+        "name": "height",
+        "default": 2.0,
+        "desc": "水箱高度(m)"
+      },
+      {
+        "name": "radius",
+        "default": 0.5,
+        "desc": "水箱半径(m)"
+      },
+      {
+        "name": "outlet_area",
+        "default": 0.001,
+        "desc": "出水口面积(m²)"
+      },
+      {
+        "name": "initial_level",
+        "default": 0.0,
+        "desc": "初始水位(m)"
+      }
+    ],
+    "doc": "\n# 圆柱体水箱模型\n\n基于托里拆利定律实现液位动态计算；入口流量由外部传入，便于与阀门或其它水箱级联。\n\n## 物理模型\n\n- 圆柱体水箱，液位均匀\n- 入口体积流量 `inlet_flow`（m³/s）由 DSL 表达式从上游设备传入\n- 底部出水口流量由托里拆利定律计算：`v = sqrt(2gh)`，出口体积流量 = `outlet_area * v`\n\n## 使用示例（阀门 + 水箱）\n\n```yaml\n- name: source_flow\n  type: VARIABLE\n  expression: source_flow = 0.18\n- name: valve1\n  type: VALVE\n  init_args:\n    full_travel_time: 10.0\n  expression: valve1.execute(target_opening=pid1.MV, inlet_flow=source_flow)\n- name: tank1\n  type: CYLINDRICAL_TANK\n  init_args:\n    height: 10.0\n    radius: 1.0\n    initial_level: 0.0\n  expression: tank1.execute(inlet_flow=valve1.outlet_flow)\n```\n\n## 级联水箱\n\n```yaml\n- name: tank_upper\n  type: CYLINDRICAL_TANK\n  expression: tank_upper.execute(inlet_flow=valve1.outlet_flow)\n- name: tank_lower\n  type: CYLINDRICAL_TANK\n  expression: tank_lower.execute(inlet_flow=tank_upper.outlet_flow)\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| height | 水箱高度（米），init_args | 2.0 |\n| radius | 水箱半径（米），init_args | 0.5 |\n| outlet_area | 出水口面积（平方米），init_args | 0.001 |\n| initial_level | 初始水位（米），init_args | 0.0 |\n| inlet_flow | 入口体积流量（m³/s），每周期 `execute(inlet_flow=...)` 传入，并写入快照 | 默认 0.0，常接阀门或上游水箱的 outlet_flow |\n| level | 当前水位（米），运行中更新，快照位号 | 初始等于 initial_level |\n| outlet_flow | 出口体积流量（m³/s），由托里拆利定律计算，快照位号 | 运行中计算，可接下游水箱 inlet_flow |\n"
+  },
+  {
+    "type": "VALVE",
+    "category": "model",
+    "displayName": "阀门",
+    "inputs": [
+      {
+        "name": "target_opening",
+        "type": "float",
+        "connectable": true,
+        "desc": "目标开度(%)"
+      },
+      {
+        "name": "inlet_flow",
+        "type": "float",
+        "connectable": true,
+        "desc": "入口流量(m³/s)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "current_opening",
+        "desc": "当前开度(%)"
+      },
+      {
+        "name": "target_opening",
+        "desc": "目标开度(%)"
+      },
+      {
+        "name": "inlet_flow",
+        "desc": "入口流量(m³/s)"
+      },
+      {
+        "name": "outlet_flow",
+        "desc": "出口流量(m³/s)"
+      },
+      {
+        "name": "flow_coefficient",
+        "desc": "流量系数"
+      },
+      {
+        "name": "min_opening",
+        "desc": "最小开度(%)"
+      },
+      {
+        "name": "max_opening",
+        "desc": "最大开度(%)"
+      },
+      {
+        "name": "full_travel_time",
+        "desc": "满行程时间(s)"
+      },
+      {
+        "name": "initial_opening",
+        "desc": "初始开度(%)"
+      }
+    ],
+    "params": [
+      {
+        "name": "min_opening",
+        "default": 0.0,
+        "desc": "最小开度(%)"
+      },
+      {
+        "name": "max_opening",
+        "default": 100.0,
+        "desc": "最大开度(%)"
+      },
+      {
+        "name": "full_travel_time",
+        "default": 10.0,
+        "desc": "满行程时间(s)"
+      },
+      {
+        "name": "initial_opening",
+        "default": 0.0,
+        "desc": "初始开度(%)"
+      },
+      {
+        "name": "flow_coefficient",
+        "default": 1.0,
+        "desc": "流量系数"
+      }
+    ],
+    "doc": "\n# 阀门模型\n\n模拟阀门的开度变化（有延迟），并根据入口流量与当前开度计算出口流量。\n\n## 特点\n\n- 有目标开度（target_opening）和当前开度（current_opening）\n- 当前开度会逐渐向目标开度移动（有延迟）\n- 移动速度由 full_travel_time 控制（满行程时间）\n- `outlet_flow = flow_coefficient * inlet_flow * opening_ratio`，其中 opening_ratio 为当前开度在 min~max 之间的归一化比例\n\n## 使用示例\n\n```yaml\n- name: source_flow\n  type: VARIABLE\n  expression: source_flow = 0.18\n- name: valve1\n  type: VALVE\n  init_args:\n    min_opening: 0.0\n    max_opening: 100.0\n    full_travel_time: 10.0\n    initial_opening: 0.0\n    flow_coefficient: 1.0\n  expression: valve1.execute(target_opening=pid1.MV, inlet_flow=source_flow)\n```\n",
+    "paramsTable": "\n| 参数名 | 含义 | 初值/说明 |\n|--------|------|------------|\n| min_opening | 最小开度（%），init_args | 0.0 |\n| max_opening | 最大开度（%），init_args | 100.0 |\n| full_travel_time | 满行程时间（秒），从最小到最大开度所需时间，init_args | 10.0 |\n| initial_opening | 初始开度（%），init_args | 0.0 |\n| flow_coefficient | 流量系数，满开时出口相对入口的等效比例，init_args | 1.0 |\n| target_opening | 目标开度（%），每周期可由 `execute(target_opening=...)` 更新，快照位号 | 初始为 initial_opening |\n| current_opening | 当前开度（%），按行程速度向目标逼近，快照位号 | 初始为 initial_opening |\n| inlet_flow | 入口体积流量（m³/s），每周期 `execute(inlet_flow=...)` 传入，快照位号 | 默认 0.0 |\n| outlet_flow | 出口体积流量（m³/s），flow_coefficient×inlet_flow×开度比例，快照位号 | 运行中计算 |\n"
+  },
+  {
+    "type": "Variable",
+    "category": "variable",
+    "displayName": "变量",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "变量值"
+      }
+    ],
+    "params": [
+      {
+        "name": "value",
+        "default": 0.0,
+        "desc": "常量值"
+      }
+    ],
+    "doc": "常量变量，持有固定值或由外部 OPC UA 写入。",
+    "paramsTable": ""
+  },
+  {
+    "type": "Expression",
+    "category": "variable",
+    "displayName": "表达式",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "计算结果"
+      }
+    ],
+    "params": [
+      {
+        "name": "formula",
+        "default": "0",
+        "desc": "计算公式（可引用其他位号）"
+      }
+    ],
+    "doc": "表达式变量，按公式计算结果。支持四则运算、函数调用、历史访问。",
+    "paramsTable": ""
+  },
+  {
+    "type": "Lag",
+    "category": "variable",
+    "displayName": "延迟",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "out",
+        "desc": "延迟后的值"
+      }
+    ],
+    "params": [
+      {
+        "name": "source",
+        "default": "",
+        "desc": "被延迟的位号名"
+      },
+      {
+        "name": "delay",
+        "default": 1,
+        "desc": "延迟步数"
+      }
+    ],
+    "doc": "延迟变量，输出指定步数前的历史值。",
+    "paramsTable": ""
+  }
+]

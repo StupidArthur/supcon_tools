@@ -1,0 +1,29 @@
+# 构建产物
+/build/
+
+# 前端依赖
+/frontend/node_modules/
+
+# 前端构建输出
+/frontend/dist/
+
+# Go 构建缓存
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+_batch_export.csv
+_test_batch.csv

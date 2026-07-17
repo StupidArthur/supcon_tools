@@ -1,0 +1,7 @@
+name: mpc
+defaults:
+  header_rows: 2
+  title_names: "时间,1"
+  time_format: "%Y/%m/%d %H:%M:%S"
+  file_format: "xlsx"
+  sheet_name: "控制器"

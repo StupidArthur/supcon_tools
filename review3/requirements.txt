@@ -1,0 +1,15 @@
+# OPCUA Server/Client
+asyncua>=1.1.0
+
+# YAML Configuration
+PyYAML>=6.0
+
+# Date/Time utilities
+python-dateutil>=2.8.0
+
+# Numerical computing (required by random module)
+numpy>=1.20.0
+
+# FastAPI debug interface (used by --api mode for Wails GUI tooling)
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0

@@ -1,0 +1,37 @@
+clock:
+  mode: REALTIME
+  cycle_time: 0.5
+
+program:
+  - name: source_flow
+    type: Variable
+    value: 0.18
+    display_args: []
+
+  - name: valve_1
+    type: VALVE
+    params:
+      full_travel_time: 10
+    display_args: []
+    inputs:
+      target_opening: v_name.MV
+      inlet_flow: source_flow
+
+  - name: tank_1
+    type: CYLINDRICAL_TANK
+    params: {}
+    display_args: []
+    inputs:
+      inlet_flow: valve_1.outlet_flow
+
+  - name: v_name
+    type: PID
+    execute_first: true
+    params:
+      PB: 12
+      TI: 30
+      TD: 0.15
+      SV: 1.0
+    display_args: ["MV[100]", "PV[2]", "SV[2]", "MODE"]
+    inputs:
+      PV: tank_1.level
