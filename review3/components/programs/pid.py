@@ -27,7 +27,7 @@ from components.utils.logger import get_logger
 from controller.instance import InstanceRegistry
 from .base import BaseProgram
 
-logger = get_logger("pid")
+logger = get_logger(name="pid")
 
 
 # 合法的 ECS-700 MODE 数值
@@ -327,6 +327,11 @@ class PID(BaseProgram):
             ("TI", self.TI),
             ("TD", self.TD),
             ("KD", self.KD),
+            ("PV", self.PV),
+            ("SV", self.SV),
+            ("CSV", self.CSV),
+            ("MV", self.MV),
+            ("SWPN", self.SWPN),
             ("SVSCH", self.SVSCH),
             ("SVSCL", self.SVSCL),
             ("MVSCH", self.MVSCH),
@@ -429,23 +434,34 @@ class PID(BaseProgram):
         合法则更新 _last_valid_params，并处理在线量程变化；
         非法则恢复上次有效值并记录日志。
         """
-        # 逐项解析
-        try:
-            pb = float(self.PB)
-            ti = float(self.TI)
-            td = float(self.TD)
-            kd = float(self.KD)
-            sv_sch = float(self.SVSCH)
-            sv_scl = float(self.SVSCL)
-            mv_sch = float(self.MVSCH)
-            mv_scl = float(self.MVSCL)
-            sv_h = float(self.SVH)
-            sv_l = float(self.SVL)
-            mv_h = float(self.MVH)
-            mv_l = float(self.MVL)
-        except (TypeError, ValueError):
-            self._restore_last_valid_params("参数类型无法转换为数值")
-            return
+        # 逐项解析（失败时记录具体参数名和值）
+        converted = {}
+        for name, raw_value in [
+            ("PB", self.PB), ("TI", self.TI), ("TD", self.TD), ("KD", self.KD),
+            ("SVSCH", self.SVSCH), ("SVSCL", self.SVSCL),
+            ("MVSCH", self.MVSCH), ("MVSCL", self.MVSCL),
+            ("SVH", self.SVH), ("SVL", self.SVL),
+            ("MVH", self.MVH), ("MVL", self.MVL),
+        ]:
+            try:
+                converted[name] = float(raw_value)
+            except (TypeError, ValueError):
+                self._restore_last_valid_params(
+                    f"{name}类型无法转换为数值，实际值={raw_value!r}"
+                )
+                return
+        pb = converted["PB"]
+        ti = converted["TI"]
+        td = converted["TD"]
+        kd = converted["KD"]
+        sv_sch = converted["SVSCH"]
+        sv_scl = converted["SVSCL"]
+        mv_sch = converted["MVSCH"]
+        mv_scl = converted["MVSCL"]
+        sv_h = converted["SVH"]
+        sv_l = converted["SVL"]
+        mv_h = converted["MVH"]
+        mv_l = converted["MVL"]
 
         # 有限性
         finite_checks = [
@@ -528,6 +544,12 @@ class PID(BaseProgram):
         except (TypeError, ValueError):
             self._restore_last_valid_params(
                 f"SWPN必须为数值，实际值={self.SWPN!r}"
+            )
+            return
+        # 非有限值（NaN/±Inf）必须恢复上次有效 SWPN，避免 NaN != 0.0 被误判为 1.0
+        if not math.isfinite(swpn_val):
+            self._restore_last_valid_params(
+                f"SWPN非有限数值，实际值={swpn_val}"
             )
             return
         if swpn_val not in (0.0, 1.0):
@@ -626,12 +648,16 @@ class PID(BaseProgram):
         if SWPN is not None:
             try:
                 swpn_val = float(SWPN)
-                if swpn_val in (0.0, 1.0):
-                    self.SWPN = swpn_val
-                else:
-                    self.SWPN = 1.0 if swpn_val != 0.0 else 0.0
             except (TypeError, ValueError):
-                pass
+                return
+            # 非有限值忽略，由 _validate_or_restore_runtime_params 统一恢复
+            if not math.isfinite(swpn_val):
+                return
+            if swpn_val in (0.0, 1.0):
+                self.SWPN = swpn_val
+            else:
+                # 容忍：非0即1（与ECS-700 ON/OFF语义一致）
+                self.SWPN = 1.0 if swpn_val != 0.0 else 0.0
 
     def _capture_local_sv(self, sv_input: Optional[float]) -> None:
         """
@@ -657,6 +683,9 @@ class PID(BaseProgram):
 
         NaN/Inf 不得进入量程换算、限幅和最终 MV。
         非有限值恢复为上次有效值并记录日志。
+
+        注意：_last_valid_mv 不在此处更新。MV 在算法计算后才会确定最终值，
+        因此 _last_valid_mv 必须在每个周期最终 MV 限幅完成后更新（见 execute 各 return 分支）。
         """
         if _is_finite_number(self.PV):
             self._last_valid_pv = float(self.PV)
@@ -670,9 +699,7 @@ class PID(BaseProgram):
             logger.warning("CSV非有限数值，恢复上次有效值: %r", self.CSV)
             self.CSV = self._last_valid_csv
 
-        if _is_finite_number(self.MV):
-            self._last_valid_mv = float(self.MV)
-        else:
+        if not _is_finite_number(self.MV):
             logger.warning("MV非有限数值，恢复上次有效值: %r", self.MV)
             self.MV = self._last_valid_mv
 
@@ -839,6 +866,7 @@ class PID(BaseProgram):
             self.MV = _clamp(float(self.MV), float(self.MVL), float(self.MVH))
             if mode in _MANUAL_MODES:
                 self._track_manual_state(effective_sv)
+            self._last_valid_mv = float(self.MV)
             self._previous_mode = mode
             self._initialized = True
             return
@@ -846,6 +874,7 @@ class PID(BaseProgram):
         # 8. 自动模式只允许 5/6/7
         if mode not in _AUTOMATIC_MODES:
             # 理论上不会到达（_validate 已过滤）
+            self._last_valid_mv = float(self.MV)
             self._previous_mode = mode
             return
 
@@ -916,6 +945,7 @@ class PID(BaseProgram):
         self._prev_error_pct = error_pct
         self._previous_mode = mode
         self._initialized = True
+        self._last_valid_mv = float(self.MV)
 
 
 # 注册算法

@@ -747,3 +747,125 @@ program:
     engine.clock.stop()
     assert int(snapshot["pid1.MODE"]) == 4
     assert abs(snapshot["pid1.MV"] - 35.0) < 0.01, f"MAN 模式 MV 应为 35, 实际 {snapshot['pid1.MV']}"
+
+
+# ----------------------------------------------------------------------
+# 构造时非有限值校验
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf")])
+def test_init_non_finite_pv(bad_val):
+    """构造时 PV 为 NaN/Inf 必须抛 ValueError。"""
+    with pytest.raises(ValueError, match=r"PV 必须为有限数值"):
+        _make_pid(PV=bad_val)
+
+
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf")])
+def test_init_non_finite_sv(bad_val):
+    """构造时 SV 为 NaN/Inf 必须抛 ValueError。"""
+    with pytest.raises(ValueError, match=r"SV 必须为有限数值"):
+        _make_pid(SV=bad_val)
+
+
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf")])
+def test_init_non_finite_csv(bad_val):
+    """构造时 CSV 为 NaN/Inf 必须抛 ValueError。"""
+    with pytest.raises(ValueError, match=r"CSV 必须为有限数值"):
+        _make_pid(CSV=bad_val)
+
+
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf")])
+def test_init_non_finite_mv(bad_val):
+    """构造时 MV 为 NaN/Inf 必须抛 ValueError。"""
+    with pytest.raises(ValueError, match=r"MV 必须为有限数值"):
+        _make_pid(MV=bad_val)
+
+
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf")])
+def test_init_non_finite_swpn(bad_val):
+    """构造时 SWPN 为 NaN/Inf 必须抛 ValueError。"""
+    with pytest.raises(ValueError, match=r"SWPN 必须为有限数值"):
+        _make_pid(SWPN=bad_val)
+
+
+# ----------------------------------------------------------------------
+# 运行时非有限值恢复：最终 MV 始终有限
+# ----------------------------------------------------------------------
+def test_runtime_non_finite_pv_restored():
+    """运行时写入 PV 为 NaN/Inf 后，最终 MV 始终有限。"""
+    pid = _make_pid(MODE=5, PB=100.0, TI=10.0, TD=0.0, SWPN=1,
+                    SV=50.0, PV=50.0, MV=50.0)
+    pid.execute(PV=50.0, SV=50.0)
+    for bad_val in [float("nan"), float("inf"), float("-inf")]:
+        pid.PV = bad_val
+        pid.execute(SV=50.0)
+        assert math.isfinite(pid.MV), f"PV={bad_val} 后 MV={pid.MV} 非有限"
+
+
+def test_runtime_non_finite_csv_restored():
+    """CAS 模式下写入 CSV 为 NaN/Inf 后，最终 MV 始终有限。"""
+    pid = _make_pid(MODE=6, PB=100.0, TI=10.0, TD=0.0, SWPN=1,
+                    SV=50.0, CSV=50.0, PV=50.0, MV=50.0)
+    pid.execute(PV=50.0, CSV=50.0)
+    for bad_val in [float("nan"), float("inf"), float("-inf")]:
+        pid.CSV = bad_val
+        pid.execute(PV=50.0)
+        assert math.isfinite(pid.MV), f"CSV={bad_val} 后 MV={pid.MV} 非有限"
+
+
+def test_runtime_non_finite_mv_restored():
+    """运行时写入 MV 为 NaN/Inf 后，最终 MV 始终有限。"""
+    pid = _make_pid(MODE=5, PB=100.0, TI=10.0, TD=0.0, SWPN=1,
+                    SV=50.0, PV=50.0, MV=50.0)
+    pid.execute(PV=50.0, SV=50.0)
+    for bad_val in [float("nan"), float("inf"), float("-inf")]:
+        pid.MV = bad_val
+        pid.execute(PV=50.0, SV=50.0)
+        assert math.isfinite(pid.MV), f"MV={bad_val} 后 MV={pid.MV} 非有限"
+
+
+# ----------------------------------------------------------------------
+# SWPN 非有限值恢复：不得反转控制方向
+# ----------------------------------------------------------------------
+def test_swpn_non_finite_restored_from_zero():
+    """SWPN=0 写入 NaN/Inf 后应保持 0，不得反转为 1。"""
+    pid = _make_pid(MODE=5, SWPN=0, PB=100.0, TI=0.0, TD=0.0,
+                    SV=50.0, PV=50.0, MV=50.0)
+    pid.execute(PV=50.0, SV=50.0)
+    assert pid.SWPN == 0.0
+    for bad_val in [float("nan"), float("inf"), float("-inf")]:
+        pid.SWPN = bad_val
+        pid.execute(PV=50.0, SV=50.0)
+        assert pid.SWPN == 0.0, f"SWPN={bad_val} 后应恢复 0, 实际 {pid.SWPN}"
+
+
+def test_swpn_non_finite_restored_from_one():
+    """SWPN=1 写入 NaN/Inf 后应保持 1，不得被改变。"""
+    pid = _make_pid(MODE=5, SWPN=1, PB=100.0, TI=0.0, TD=0.0,
+                    SV=50.0, PV=50.0, MV=50.0)
+    pid.execute(PV=50.0, SV=50.0)
+    assert pid.SWPN == 1.0
+    for bad_val in [float("nan"), float("inf"), float("-inf")]:
+        pid.SWPN = bad_val
+        pid.execute(PV=50.0, SV=50.0)
+        assert pid.SWPN == 1.0, f"SWPN={bad_val} 后应恢复 1, 实际 {pid.SWPN}"
+
+
+# ----------------------------------------------------------------------
+# _last_valid_mv 跟踪实际输出
+# ----------------------------------------------------------------------
+def test_last_valid_mv_tracks_actual_output():
+    """AUTO 产生非零 MV 后，写 MV=NaN 切 MAN，应保持最后一次实际有效 MV。"""
+    pid = _make_pid(MODE=5, PB=100.0, TI=0.0, TD=0.0, SWPN=1,
+                    SV=50.0, PV=0.0, MV=0.0)
+    # 冷启动：error = sv - pv = 50, p_delta=50, MV=50
+    pid.execute(PV=0.0)
+    assert pid.MV == pytest.approx(50.0)
+
+    # 写 MV=NaN 并切 MAN
+    pid.MV = float("nan")
+    pid.MODE = 4  # MAN
+    pid.execute(PV=0.0, SV=50.0)
+    # 应恢复到最后一次实际有效 MV=50，而不是初始 MV=0
+    assert pid.MV == pytest.approx(50.0), (
+        f"MAN 模式下 MV=NaN 应恢复最后有效值 50, 实际 {pid.MV}"
+    )
