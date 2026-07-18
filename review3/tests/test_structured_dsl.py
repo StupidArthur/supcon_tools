@@ -69,8 +69,13 @@ def test_params_accepted():
     config = parser.parse_file("config/tank_structured.yaml")
 
     pid = next(item for item in config.program if item.name == "v_name")
-    assert pid.init_args.get("PB") == 12
+    # PB 已迁移到 ECS-700 比例度语义（spec 18.1）
+    assert pid.init_args.get("PB") == 416.67
     assert pid.init_args.get("SV") == 1.0
+    # 新增的工程量程参数
+    assert pid.init_args.get("SVSCH") == 2.0
+    assert pid.init_args.get("MVSCH") == 100.0
+    assert pid.init_args.get("MODE") == 5
 
 
 def test_execute_first_flag():

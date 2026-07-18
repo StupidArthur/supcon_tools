@@ -26,8 +26,21 @@ program:
   - name: v_name
     type: PID
     init_args:
-      PB: 12
-      TI: 30
+      # 按 spec 18.1：2m 水箱 + 0~100% 阀位，PB_new = 100*100/(12*2) ≈ 416.67
+      PB: 416.67
+      TI: 30.0
       TD: 0.15
+      KD: 10.0
+      MODE: 5
+      SWPN: 1
+      SVSCL: 0.0
+      SVSCH: 2.0
+      SVL: 0.0
+      SVH: 2.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      SV: 1.0
     display_args: ["MV[100]", "PV[2]", "SV[2]", "MODE"]
     expression: v_name.execute(PV=tank_1.level, SV=sin1.out)

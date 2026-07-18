@@ -20,6 +20,7 @@ from .list_wave import LIST_WAVE
 from .random import RANDOM
 from .tag import TAG
 from .pid import PID
+from .pid_delete import PID_DELETE
 from .cylindrical_tank import CYLINDRICAL_TANK
 from .valve import VALVE
 
@@ -32,9 +33,23 @@ InstanceRegistry.register_algorithm("TRIANGLE_WAVE", TRIANGLE_WAVE)
 InstanceRegistry.register_algorithm("LIST_WAVE", LIST_WAVE)
 InstanceRegistry.register_algorithm("RANDOM", RANDOM)
 InstanceRegistry.register_algorithm("TAG", TAG)
+# 新 PID 占用 PID 注册名；旧 PID 仅保留为 PID-DELETE / PID_DELETE 待删除
 InstanceRegistry.register_algorithm("PID", PID)
+InstanceRegistry.register_algorithm("PID-DELETE", PID_DELETE)
+InstanceRegistry.register_algorithm("PID_DELETE", PID_DELETE)
 InstanceRegistry.register_model("CYLINDRICAL_TANK", CYLINDRICAL_TANK)
 InstanceRegistry.register_model("VALVE", VALVE)
 
-__all__ = ["SINE_WAVE", "SQUARE_WAVE", "TRIANGLE_WAVE", "LIST_WAVE", "RANDOM", "TAG", "PID", "CYLINDRICAL_TANK", "VALVE"]
+__all__ = [
+    "SINE_WAVE",
+    "SQUARE_WAVE",
+    "TRIANGLE_WAVE",
+    "LIST_WAVE",
+    "RANDOM",
+    "TAG",
+    "PID",
+    "PID_DELETE",
+    "CYLINDRICAL_TANK",
+    "VALVE",
+]
 
