@@ -10,9 +10,12 @@
 - 工程量程换算（SVSCH/SVSCL、MVSCH/MVSCL）+ 操作限幅（SVH/SVL、MVH/MVL）
 - 正反作用 SWPN：0=正作用，1=反作用
 - 不完全微分（TD=0 时关闭）
+- 冷启动自动模式保留首次比例响应
 - 手动类模式 → 自动类模式无扰切换
 - 抗积分饱和（饱和时取消同向积分）
-- 运行时非法参数自动恢复上次有效值
+- 在线量程变化时保持工程量 MV 连续
+- 运行时非法参数自动恢复上次有效值并记录日志
+- NaN/Inf 不得传播到最终 MV
 """
 
 from __future__ import annotations
@@ -20,8 +23,11 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Optional
 
+from components.utils.logger import get_logger
 from controller.instance import InstanceRegistry
 from .base import BaseProgram
+
+logger = get_logger("pid")
 
 
 # 合法的 ECS-700 MODE 数值
@@ -53,6 +59,38 @@ def _clamp(value: float, low: float, high: float) -> float:
     return value
 
 
+def _parse_mode(value: Any) -> Optional[int]:
+    """
+    严格解析 MODE。
+
+    必须同时满足：
+    1. 可转换为 float
+    2. 有限数值
+    3. 本身为整数（is_integer()）
+    4. 位于 1~8
+
+    Returns:
+        合法时返回 int，非法时返回 None。
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(number):
+        return None
+
+    if not number.is_integer():
+        return None
+
+    mode = int(number)
+
+    if mode not in _VALID_MODES:
+        return None
+
+    return mode
+
+
 class PID(BaseProgram):
     """
     工业级 PID 控制器（对齐中控 ECS-700）。
@@ -80,7 +118,7 @@ class PID(BaseProgram):
 - **PB**：比例度（%），`Kp = 100/PB`。PB 越小比例作用越强。要求 PB > 0。
 - **TI**：积分时间（秒），TI=0 时关闭积分。
 - **TD**：微分时间（秒），KD：微分滤波系数（默认 10）。TD=0 时关闭微分。
-- **MODE**：ECS-700 工作模式（1~8）。
+- **MODE**：ECS-700 工作模式（1~8），必须为整数。
 - **SWPN**：正反作用。0=正作用（PV↑→MV↑），1=反作用（PV↑→MV↓）。
 - **AUTO**：MODE 的兼容别名（数值同 MODE，非布尔）。
 - **CAS**：派生状态，MODE=6 时为 1，否则为 0。
@@ -107,6 +145,7 @@ class PID(BaseProgram):
 - AUTO 模式使用本地 `SV`（保存在 `_local_sv`）。
 - CAS/RCAS 模式使用 `CSV`，并镜像到对外 `SV`。
 - 从 CAS 返回 AUTO 时恢复此前保存的 `_local_sv`。
+- CAS 模式下写 `SV` 可以更新"未来返回 AUTO 时使用的本地 SV"，但不能改变当前 CAS 有效设定值。
 
 ## 使用示例
 
@@ -250,6 +289,10 @@ class PID(BaseProgram):
         # 初始化校验
         self._validate_init_params()
 
+        # 规范化 MODE 为整数
+        self.MODE = _parse_mode(self.MODE)
+        self.AUTO = int(self.MODE)
+
         # 内部状态（不暴露到 stored_attributes / OPC UA / YAML）
         self._prev_error_pct: float = 0.0
         self._prev_derivative_state: float = 0.0
@@ -258,6 +301,14 @@ class PID(BaseProgram):
         self._initialized: bool = False
         # 本地 SV（AUTO 模式使用），从初始 SV 取值
         self._local_sv: float = float(self.SV)
+        # 上一周期主动发布到 self.SV 的值，用于识别周期之间是否发生外部写入
+        self._last_published_sv: float = float(self.SV)
+        # SV 量程变化标志（由 _validate_or_restore_runtime_params 设置）
+        self._sv_scale_changed: bool = False
+        # 上次有效的过程量 / 外部设定 / 操作变量（用于 NaN/Inf 恢复）
+        self._last_valid_pv: float = float(self.PV)
+        self._last_valid_csv: float = float(self.CSV)
+        self._last_valid_mv: float = float(self.MV)
         # 上次有效运行参数（运行时非法写值时回退）
         self._last_valid_params: Dict[str, float] = self._snapshot_runtime_params()
 
@@ -272,36 +323,29 @@ class PID(BaseProgram):
             )
 
         checks = [
-            ("PB", self.PB, lambda v: v > 0),
-            ("TI", self.TI, lambda v: v >= 0),
-            ("TD", self.TD, lambda v: v >= 0),
-            ("KD", self.KD, lambda v: v >= 0),
-            ("SVSCH", self.SVSCH, lambda v: True),
-            ("SVSCL", self.SVSCL, lambda v: True),
-            ("MVSCH", self.MVSCH, lambda v: True),
-            ("MVSCL", self.MVSCL, lambda v: True),
-            ("SVH", self.SVH, lambda v: True),
-            ("SVL", self.SVL, lambda v: True),
-            ("MVH", self.MVH, lambda v: True),
-            ("MVL", self.MVL, lambda v: True),
-            ("MODE", self.MODE, lambda v: True),
+            ("PB", self.PB),
+            ("TI", self.TI),
+            ("TD", self.TD),
+            ("KD", self.KD),
+            ("SVSCH", self.SVSCH),
+            ("SVSCL", self.SVSCL),
+            ("MVSCH", self.MVSCH),
+            ("MVSCL", self.MVSCL),
+            ("SVH", self.SVH),
+            ("SVL", self.SVL),
+            ("MVH", self.MVH),
+            ("MVL", self.MVL),
         ]
-        for name, value, _ in checks:
+        for name, value in checks:
             if not _is_finite_number(value):
                 raise ValueError(
                     f"PID参数无效: {name} 必须为有限数值，实际值={value!r}"
                 )
 
         pb = float(self.PB)
-        if pb <= 0:
-            raise ValueError(f"PID参数无效: PB 必须大于0，实际值={self.PB!r}")
-        if float(self.TI) < 0:
-            raise ValueError(f"PID参数无效: TI 必须>=0，实际值={self.TI!r}")
-        if float(self.TD) < 0:
-            raise ValueError(f"PID参数无效: TD 必须>=0，实际值={self.TD!r}")
-        if float(self.KD) < 0:
-            raise ValueError(f"PID参数无效: KD 必须>=0，实际值={self.KD!r}")
-
+        ti = float(self.TI)
+        td = float(self.TD)
+        kd = float(self.KD)
         sv_scl = float(self.SVSCL)
         sv_sch = float(self.SVSCH)
         mv_scl = float(self.MVSCL)
@@ -310,6 +354,15 @@ class PID(BaseProgram):
         sv_h = float(self.SVH)
         mv_l = float(self.MVL)
         mv_h = float(self.MVH)
+
+        if pb <= 0:
+            raise ValueError(f"PID参数无效: PB 必须大于0，实际值={self.PB!r}")
+        if ti < 0:
+            raise ValueError(f"PID参数无效: TI 必须>=0，实际值={self.TI!r}")
+        if td < 0:
+            raise ValueError(f"PID参数无效: TD 必须>=0，实际值={self.TD!r}")
+        if kd < 0:
+            raise ValueError(f"PID参数无效: KD 必须>=0，实际值={self.KD!r}")
 
         if sv_sch <= sv_scl:
             raise ValueError(
@@ -344,15 +397,10 @@ class PID(BaseProgram):
                 f"PID参数无效: MVL 不得大于 MVH，实际值 MVL={mv_l}, MVH={mv_h}"
             )
 
-        try:
-            mode_int = int(self.MODE)
-        except (TypeError, ValueError):
+        mode = _parse_mode(self.MODE)
+        if mode is None:
             raise ValueError(
                 f"PID参数无效: MODE 必须为 1..8 整数，实际值={self.MODE!r}"
-            )
-        if mode_int not in _VALID_MODES:
-            raise ValueError(
-                f"PID参数无效: MODE 必须在 1..8 范围内，实际值={self.MODE!r}"
             )
 
     def _snapshot_runtime_params(self) -> Dict[str, float]:
@@ -378,20 +426,15 @@ class PID(BaseProgram):
         """
         每周期执行前校验运行参数。
 
-        合法则更新 _last_valid_params；非法则恢复上次有效值。
-        AUTO / CAS 的外部写值直接忽略，在本周期重新派生。
+        合法则更新 _last_valid_params，并处理在线量程变化；
+        非法则恢复上次有效值并记录日志。
         """
-        # AUTO / CAS 是派生属性，不允许外部写值改变模式，每周期重新派生
-        # 这里不读 AUTO/CAS，直接以 MODE 为准
-
-        # 逐项校验，任一非法则整体回退到上次有效值
+        # 逐项解析
         try:
             pb = float(self.PB)
             ti = float(self.TI)
             td = float(self.TD)
             kd = float(self.KD)
-            mode_raw = self.MODE
-            swpn = self.SWPN
             sv_sch = float(self.SVSCH)
             sv_scl = float(self.SVSCL)
             mv_sch = float(self.MVSCH)
@@ -401,61 +444,123 @@ class PID(BaseProgram):
             mv_h = float(self.MVH)
             mv_l = float(self.MVL)
         except (TypeError, ValueError):
-            self._restore_last_valid_params()
+            self._restore_last_valid_params("参数类型无法转换为数值")
             return
 
         # 有限性
-        finite_items = {
-            "PB": pb, "TI": ti, "TD": td, "KD": kd,
-            "SVSCH": sv_sch, "SVSCL": sv_scl,
-            "MVSCH": mv_sch, "MVSCL": mv_scl,
-            "SVH": sv_h, "SVL": sv_l,
-            "MVH": mv_h, "MVL": mv_l,
-        }
-        for name, value in finite_items.items():
+        finite_checks = [
+            ("PB", pb), ("TI", ti), ("TD", td), ("KD", kd),
+            ("SVSCH", sv_sch), ("SVSCL", sv_scl),
+            ("MVSCH", mv_sch), ("MVSCL", mv_scl),
+            ("SVH", sv_h), ("SVL", sv_l),
+            ("MVH", mv_h), ("MVL", mv_l),
+        ]
+        for name, value in finite_checks:
             if not math.isfinite(value):
-                self._restore_last_valid_params()
+                self._restore_last_valid_params(f"{name}非有限数值，实际值={value}")
                 return
 
-        # MODE 校验
-        try:
-            mode_int = int(mode_raw)
-        except (TypeError, ValueError):
-            self._restore_last_valid_params()
-            return
-        if mode_int not in _VALID_MODES:
-            self._restore_last_valid_params()
+        # MODE 严格校验
+        mode = _parse_mode(self.MODE)
+        if mode is None:
+            self._restore_last_valid_params(
+                f"MODE必须为1~8整数，实际值={self.MODE!r}"
+            )
             return
 
         # 数值范围
-        if pb <= 0 or ti < 0 or td < 0 or kd < 0:
-            self._restore_last_valid_params()
+        if pb <= 0:
+            self._restore_last_valid_params(f"PB必须大于0，实际值={pb}")
             return
-        if sv_sch <= sv_scl or mv_sch <= mv_scl:
-            self._restore_last_valid_params()
+        if ti < 0:
+            self._restore_last_valid_params(f"TI必须>=0，实际值={ti}")
             return
-        if sv_l < sv_scl or sv_h > sv_sch or sv_l > sv_h:
-            self._restore_last_valid_params()
+        if td < 0:
+            self._restore_last_valid_params(f"TD必须>=0，实际值={td}")
             return
-        if mv_l < mv_scl or mv_h > mv_sch or mv_l > mv_h:
-            self._restore_last_valid_params()
+        if kd < 0:
+            self._restore_last_valid_params(f"KD必须>=0，实际值={kd}")
+            return
+        if sv_sch <= sv_scl:
+            self._restore_last_valid_params(
+                f"SVSCH必须大于SVSCL，SVSCH={sv_sch}，SVSCL={sv_scl}"
+            )
+            return
+        if mv_sch <= mv_scl:
+            self._restore_last_valid_params(
+                f"MVSCH必须大于MVSCL，MVSCH={mv_sch}，MVSCL={mv_scl}"
+            )
+            return
+        if sv_l < sv_scl:
+            self._restore_last_valid_params(
+                f"SVL不得小于SVSCL，SVL={sv_l}，SVSCL={sv_scl}"
+            )
+            return
+        if sv_h > sv_sch:
+            self._restore_last_valid_params(
+                f"SVH不得大于SVSCH，SVH={sv_h}，SVSCH={sv_sch}"
+            )
+            return
+        if sv_l > sv_h:
+            self._restore_last_valid_params(
+                f"SVL不得大于SVH，SVL={sv_l}，SVH={sv_h}"
+            )
+            return
+        if mv_l < mv_scl:
+            self._restore_last_valid_params(
+                f"MVL不得小于MVSCL，MVL={mv_l}，MVSCL={mv_scl}"
+            )
+            return
+        if mv_h > mv_sch:
+            self._restore_last_valid_params(
+                f"MVH不得大于MVSCH，MVH={mv_h}，MVSCH={mv_sch}"
+            )
+            return
+        if mv_l > mv_h:
+            self._restore_last_valid_params(
+                f"MVL不得大于MVH，MVL={mv_l}，MVH={mv_h}"
+            )
             return
 
         # SWPN：允许 0/1 数值或布尔；非法则回退
         try:
-            swpn_val = float(swpn)
+            swpn_val = float(self.SWPN)
         except (TypeError, ValueError):
-            self._restore_last_valid_params()
+            self._restore_last_valid_params(
+                f"SWPN必须为数值，实际值={self.SWPN!r}"
+            )
             return
         if swpn_val not in (0.0, 1.0):
             # 容忍：非0即1（与ECS-700 ON/OFF语义一致）
             swpn_val = 1.0 if swpn_val != 0.0 else 0.0
 
-        # 全部合法，更新上次有效
+        # ----------------------------------------------------------
+        # 全部合法。处理在线量程变化。
+        # ----------------------------------------------------------
+        old_mvscl = self._last_valid_params.get("MVSCL", mv_scl)
+        old_mvsch = self._last_valid_params.get("MVSCH", mv_sch)
+        old_svscl = self._last_valid_params.get("SVSCL", sv_scl)
+        old_svsch = self._last_valid_params.get("SVSCH", sv_sch)
+
+        # MV 量程变化：保持工程量 MV 连续
+        if old_mvscl != mv_scl or old_mvsch != mv_sch:
+            current_mv = _clamp(float(self.MV), mv_l, mv_h)
+            span = mv_sch - mv_scl
+            if span != 0:
+                self._mv_pct = 100.0 * (current_mv - mv_scl) / span
+
+        # SV 量程变化：下一自动周期重新对齐误差历史
+        if old_svscl != sv_scl or old_svsch != sv_sch:
+            self._sv_scale_changed = True
+
+        # 规范化 MODE 为整数
+        self.MODE = mode
         self.SWPN = swpn_val
+
+        # 更新上次有效参数
         self._last_valid_params = {
             "PB": pb, "TI": ti, "TD": td, "KD": kd,
-            "MODE": float(mode_int),
+            "MODE": float(mode),
             "SWPN": swpn_val,
             "SVSCH": sv_sch, "SVSCL": sv_scl,
             "MVSCH": mv_sch, "MVSCL": mv_scl,
@@ -463,10 +568,11 @@ class PID(BaseProgram):
             "MVH": mv_h, "MVL": mv_l,
         }
 
-    def _restore_last_valid_params(self) -> None:
-        """恢复上次有效的运行参数。"""
-        for k, v in self._last_valid_params.items():
-            setattr(self, k, v)
+    def _restore_last_valid_params(self, reason: str) -> None:
+        """恢复上次有效的运行参数，并记录日志。"""
+        logger.warning("PID运行参数无效，已恢复上次有效参数: %s", reason)
+        for key, value in self._last_valid_params.items():
+            setattr(self, key, value)
 
     # ------------------------------------------------------------------
     # 工程量换算
@@ -496,29 +602,26 @@ class PID(BaseProgram):
     def _apply_inputs(
         self,
         PV: Optional[float],
-        SV: Optional[float],
         CSV: Optional[float],
         MODE: Optional[float],
         SWPN: Optional[float],
     ) -> None:
-        """接收本周期输入，None 表示不覆盖。"""
+        """
+        接收本周期输入（不含 SV），None 表示不覆盖。
+
+        SV 的处理由 _capture_local_sv() 独立完成，以区分
+        "execute(SV=...) 显式输入" 和 "UA 直接写 self.SV"。
+        """
         if PV is not None and _is_finite_number(PV):
             self.PV = float(PV)
-
-        # SV：AUTO 模式下视为本地 SV 来源
-        if SV is not None and _is_finite_number(SV):
-            self._local_sv = float(SV)
 
         if CSV is not None and _is_finite_number(CSV):
             self.CSV = float(CSV)
 
         if MODE is not None:
-            try:
-                mode_int = int(MODE)
-                if mode_int in _VALID_MODES:
-                    self.MODE = mode_int
-            except (TypeError, ValueError):
-                pass
+            mode = _parse_mode(MODE)
+            if mode is not None:
+                self.MODE = mode
 
         if SWPN is not None:
             try:
@@ -529,6 +632,49 @@ class PID(BaseProgram):
                     self.SWPN = 1.0 if swpn_val != 0.0 else 0.0
             except (TypeError, ValueError):
                 pass
+
+    def _capture_local_sv(self, sv_input: Optional[float]) -> None:
+        """
+        捕获本地 SV 来源。
+
+        优先级：
+        1. execute(SV=...) 显式输入（有限数值）
+        2. UA/Engine 外部写 self.SV（self.SV != _last_published_sv 且有限）
+        3. 保持原 _local_sv
+
+        CAS 模式下写 SV 也会保存到 _local_sv，但当前有效 SV 仍为 CSV。
+        """
+        if sv_input is not None and _is_finite_number(sv_input):
+            self._local_sv = float(sv_input)
+            return
+
+        if _is_finite_number(self.SV) and float(self.SV) != self._last_published_sv:
+            self._local_sv = float(self.SV)
+
+    def _sanitize_finite_inputs(self) -> None:
+        """
+        检查 PV/CSV/MV 是否为有限数值。
+
+        NaN/Inf 不得进入量程换算、限幅和最终 MV。
+        非有限值恢复为上次有效值并记录日志。
+        """
+        if _is_finite_number(self.PV):
+            self._last_valid_pv = float(self.PV)
+        else:
+            logger.warning("PV非有限数值，恢复上次有效值: %r", self.PV)
+            self.PV = self._last_valid_pv
+
+        if _is_finite_number(self.CSV):
+            self._last_valid_csv = float(self.CSV)
+        else:
+            logger.warning("CSV非有限数值，恢复上次有效值: %r", self.CSV)
+            self.CSV = self._last_valid_csv
+
+        if _is_finite_number(self.MV):
+            self._last_valid_mv = float(self.MV)
+        else:
+            logger.warning("MV非有限数值，恢复上次有效值: %r", self.MV)
+            self.MV = self._last_valid_mv
 
     # ------------------------------------------------------------------
     # 设定值处理
@@ -543,23 +689,27 @@ class PID(BaseProgram):
         sv_l = float(self.SVL)
         sv_h = float(self.SVH)
 
-        if mode == 5:
-            effective = _clamp(self._local_sv, sv_l, sv_h)
-            self._local_sv = effective
-            self.SV = effective
-            return effective
-
         if mode in (6, 7):
             effective = _clamp(float(self.CSV), sv_l, sv_h)
             # 对外 SV 镜像当前有效 CSV
             self.SV = effective
             return effective
 
-        # 非自动模式：保留本地 SV 不镜像
+        # AUTO(5) 和非自动模式(1,2,3,4,8)都使用本地 SV
         effective = _clamp(self._local_sv, sv_l, sv_h)
         self._local_sv = effective
         self.SV = effective
         return effective
+
+    def _publish_mode_state(self, mode: int) -> None:
+        """
+        派生上游兼容状态并记录已发布 SV。
+
+        必须在所有 return 分支前调用。
+        """
+        self.AUTO = mode
+        self.CAS = 1 if mode == 6 else 0
+        self._last_published_sv = float(self.SV)
 
     # ------------------------------------------------------------------
     # 微分
@@ -661,25 +811,30 @@ class PID(BaseProgram):
             PV: 过程变量（None 表示沿用上周期值）
             SV: AUTO 模式本地设定值
             CSV: CAS/RCAS 模式外部设定值
-            MODE: 工作模式（1~8）
+            MODE: 工作模式（1~8 整数）
             SWPN: 正反作用（0/1）
         """
-        # 1. 接收本周期输入
-        self._apply_inputs(PV=PV, SV=SV, CSV=CSV, MODE=MODE, SWPN=SWPN)
+        # 1. 接收本周期输入（不含 SV）
+        self._apply_inputs(PV=PV, CSV=CSV, MODE=MODE, SWPN=SWPN)
 
-        # 2. 校验运行参数；非法时恢复上次有效
+        # 2. 捕获本地 SV（区分 execute 输入 / UA 外部写值 / 沿用原值）
+        self._capture_local_sv(SV)
+
+        # 3. 有限性保护（NaN/Inf 恢复）
+        self._sanitize_finite_inputs()
+
+        # 4. 校验运行参数；非法时恢复上次有效
         self._validate_or_restore_runtime_params()
 
         mode = int(self.MODE)
 
-        # 3. 派生上游兼容状态
-        self.AUTO = mode
-        self.CAS = 1 if mode == 6 else 0
-
-        # 4. 处理设定值来源
+        # 5. 处理设定值来源
         effective_sv = self._resolve_effective_sv(mode)
 
-        # 5. 非自动模式
+        # 6. 派生上游兼容状态 + 记录已发布 SV
+        self._publish_mode_state(mode)
+
+        # 7. 非自动模式
         if mode in _MANUAL_MODES or mode == 1:
             self.MV = _clamp(float(self.MV), float(self.MVL), float(self.MVH))
             if mode in _MANUAL_MODES:
@@ -688,16 +843,17 @@ class PID(BaseProgram):
             self._initialized = True
             return
 
-        # 6. 自动模式只允许 5/6/7
+        # 8. 自动模式只允许 5/6/7
         if mode not in _AUTOMATIC_MODES:
+            # 理论上不会到达（_validate 已过滤）
             self._previous_mode = mode
             return
 
-        # 7. 工程量归一化
+        # 9. 工程量归一化
         pv_pct = self._sv_to_pct(float(self.PV))
         sv_pct = self._sv_to_pct(effective_sv)
 
-        # 8. 正反作用
+        # 10. 正反作用
         if bool(self.SWPN):
             # 反作用
             error_pct = sv_pct - pv_pct
@@ -705,18 +861,34 @@ class PID(BaseProgram):
             # 正作用
             error_pct = pv_pct - sv_pct
 
-        # 9. 无扰切换：首次进入自动 或 从手动类切入自动
-        if not self._initialized or self._previous_mode not in _AUTOMATIC_MODES:
+        # 11. 确定 p_delta / d_delta
+        if not self._initialized:
+            # 情况 A：冷启动自动模式 —— 保留首次比例响应
+            self._mv_pct = self._engineering_mv_to_pct(float(self.MV))
+            self._prev_error_pct = 0.0
+            self._prev_derivative_state = 0.0
+            self._sv_scale_changed = False
+            p_delta = error_pct
+            d_delta = 0.0
+        elif self._previous_mode not in _AUTOMATIC_MODES:
+            # 情况 B：从手动类/停止类切入自动 —— 无扰切换
             self._prepare_bumpless_transfer(error_pct)
-            # 本周期只允许积分增量，避免比例/微分突跳
+            self._sv_scale_changed = False
+            p_delta = 0.0
+            d_delta = 0.0
+        elif self._sv_scale_changed:
+            # 情况 C：SV 量程变化 —— 本周期跳过比例和微分
+            self._prev_error_pct = error_pct
+            self._prev_derivative_state = 0.0
+            self._sv_scale_changed = False
             p_delta = 0.0
             d_delta = 0.0
         else:
-            # 10. 计算增量 PID
+            # 情况 D：连续自动运行
             p_delta = error_pct - self._prev_error_pct
             d_delta = self._calculate_filtered_derivative(error_pct)
 
-        # 积分增量
+        # 12. 积分增量
         ti = float(self.TI)
         if ti > 0:
             i_delta = float(self.cycle_time) / ti * error_pct
@@ -725,7 +897,7 @@ class PID(BaseProgram):
 
         kp = 100.0 / float(self.PB)
 
-        # 11. 抗积分饱和和输出限幅
+        # 13. 抗积分饱和和输出限幅
         self._mv_pct = self._calculate_limited_mv_pct(
             p_delta=p_delta,
             i_delta=i_delta,
@@ -733,14 +905,14 @@ class PID(BaseProgram):
             kp=kp,
         )
 
-        # 12. 转回工程量
+        # 14. 转回工程量
         self.MV = _clamp(
             self._pct_to_engineering_mv(self._mv_pct),
             float(self.MVL),
             float(self.MVH),
         )
 
-        # 13. 更新内部状态
+        # 15. 更新内部状态
         self._prev_error_pct = error_pct
         self._previous_mode = mode
         self._initialized = True
