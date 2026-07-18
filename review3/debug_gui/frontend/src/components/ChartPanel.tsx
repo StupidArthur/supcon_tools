@@ -32,12 +32,12 @@ export function ChartPanel() {
     return batchResult.columns.filter((c) => c !== '_cycle')
   }, [batchResult])
 
-  // 初始化默认选中列
+  // 每次批量结果变化时，重新选择默认显示列
   useEffect(() => {
-    if (plotColumns.length > 0 && selectedCols.length === 0) {
+    if (plotColumns.length > 0) {
       setSelectedCols(defaultSelected(plotColumns))
     }
-  }, [plotColumns, selectedCols.length])
+  }, [plotColumns])
 
   const toggleCol = (col: string) => {
     setSelectedCols((prev) =>

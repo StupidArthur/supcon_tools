@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store/useStore'
 import type { ProgramItem } from '../types'
+import { ConfigEditor } from './ConfigEditor'
+
+type LeftTab = 'params' | 'config'
 
 // 已知的算法类型 -> input_schema 映射（从 review3 components/programs 提取）
 // connectable=false 的参数是可调参数（PB/TI/TD 等）
@@ -71,7 +74,9 @@ function isOutputAttr(item: ProgramItem, attrName: string): boolean {
 export function ParamPanel() {
   const yamlConfig = useStore((s) => s.yamlConfig)
   const batchResult = useStore((s) => s.batchResult)
+  const configPath = useStore((s) => s.configPath)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [tab, setTab] = useState<LeftTab>('params')
 
   // 从批量结果中提取最新值（用于只读显示）
   const latestValues = useMemo(() => {
@@ -79,60 +84,90 @@ export function ParamPanel() {
     return batchResult.rows[batchResult.rows.length - 1]
   }, [batchResult])
 
-  if (!yamlConfig) {
-    return (
-      <div className="w-72 border-r border-border bg-card p-4">
-        <div className="text-xs text-muted-foreground">请先选择 YAML 配置文件</div>
-      </div>
-    )
-  }
-
   const toggleCollapse = (name: string) => {
     setCollapsed((prev) => ({ ...prev, [name]: !prev[name] }))
   }
 
   return (
-    <div className="w-72 overflow-y-auto border-r border-border bg-card">
-      <div className="space-y-2 p-2">
-        {yamlConfig.program.map((item) => {
-          const isCollapsed = collapsed[item.name] ?? false
-          const isVariable = item.type.toUpperCase() === 'VARIABLE'
+    <div className="flex w-96 flex-col border-r border-border bg-card">
+      {/* Tab 切换 */}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setTab('params')}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+            tab === 'params'
+              ? 'border-b-2 border-primary bg-background text-foreground'
+              : 'text-muted-foreground hover:bg-secondary'
+          }`}
+        >
+          参数面板
+        </button>
+        <button
+          onClick={() => setTab('config')}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+            tab === 'config'
+              ? 'border-b-2 border-primary bg-background text-foreground'
+              : 'text-muted-foreground hover:bg-secondary'
+          }`}
+        >
+          配置编辑
+          {!configPath && ' (未选)'}
+        </button>
+      </div>
 
-          return (
-            <div key={item.name} className="rounded-md border border-border">
-              {/* 标题栏 */}
-              <button
-                onClick={() => toggleCollapse(item.name)}
-                className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-medium hover:bg-secondary"
-              >
-                <span>{item.name}</span>
-                <span className="flex items-center gap-1">
-                  <span className="text-muted-foreground">{item.type}</span>
-                  <span className="text-muted-foreground">{isCollapsed ? '▶' : '▼'}</span>
-                </span>
-              </button>
+      {/* Tab 内容 */}
+      {tab === 'config' ? (
+        <div className="flex-1 overflow-hidden">
+          <ConfigEditor />
+        </div>
+      ) : !yamlConfig ? (
+        <div className="flex-1 p-4">
+          <div className="text-xs text-muted-foreground">请先选择 YAML 配置文件</div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-2 p-2">
+            {yamlConfig.program.map((item) => {
+              const isCollapsed = collapsed[item.name] ?? false
+              const isVariable = item.type.toUpperCase() === 'VARIABLE'
 
-              {/* 参数表单 */}
-              {!isCollapsed && (
-                <div className="space-y-1 border-t border-border p-2">
-                  {isVariable ? (
-                    <VariableParamEditor
-                      name={item.name}
-                      expression={item.expression}
-                      latestValue={latestValues[item.name]}
-                    />
-                  ) : (
-                    <InstanceParamEditor
-                      item={item}
-                      latestValues={latestValues}
-                    />
+              return (
+                <div key={item.name} className="rounded-md border border-border">
+                  {/* 标题栏 */}
+                  <button
+                    onClick={() => toggleCollapse(item.name)}
+                    className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-medium hover:bg-secondary"
+                  >
+                    <span>{item.name}</span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-muted-foreground">{item.type}</span>
+                      <span className="text-muted-foreground">{isCollapsed ? '▶' : '▼'}</span>
+                    </span>
+                  </button>
+
+                  {/* 参数表单 */}
+                  {!isCollapsed && (
+                    <div className="space-y-1 border-t border-border p-2">
+                      {isVariable ? (
+                        <VariableParamEditor
+                          name={item.name}
+                          expression={item.expression}
+                          latestValue={latestValues[item.name]}
+                        />
+                      ) : (
+                        <InstanceParamEditor
+                          item={item}
+                          latestValues={latestValues}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

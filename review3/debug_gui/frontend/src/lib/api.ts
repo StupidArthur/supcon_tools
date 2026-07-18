@@ -5,6 +5,7 @@ import {
   ListConfigs, ParseYAMLConfig,
   StartEngine, StartBatch, ReadBatchResult, ExportBatch,
   StopEngine, GetStatus, CleanupTempFile,
+  GetDefaultWorkDir, ReadYAMLContent, WriteYAMLContent,
 } from '../../wailsjs/go/bindings/DebugBinding'
 
 export const debugApi = {
@@ -24,6 +25,10 @@ export const debugApi = {
   stopEngine: StopEngine,
   getStatus: GetStatus,
   cleanupTempFile: CleanupTempFile,
+
+  getDefaultWorkDir: GetDefaultWorkDir,
+  readYAMLContent: ReadYAMLContent,
+  writeYAMLContent: WriteYAMLContent,
 }
 
 export type { YAMLConfig, BatchResult, EngineStatus }

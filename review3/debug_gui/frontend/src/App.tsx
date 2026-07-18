@@ -13,8 +13,12 @@ function App() {
   const setRunning = useStore((s) => s.setRunning)
   const setBatchRunning = useStore((s) => s.setBatchRunning)
   const setBatchResult = useStore((s) => s.setBatchResult)
+  const initDefaultWorkDir = useStore((s) => s.initDefaultWorkDir)
 
   useEffect(() => {
+    // 启动时自动设置默认工作目录（review3 目录）
+    initDefaultWorkDir()
+
     // 监听引擎日志
     EventsOn('engine:log', (line: string) => {
       addLog('engine', line)
@@ -38,7 +42,7 @@ function App() {
         addLog('error', `读取 CSV 失败: ${e}`)
       }
     })
-  }, [addLog, setRunning, setBatchRunning, setBatchResult])
+  }, [addLog, setRunning, setBatchRunning, setBatchResult, initDefaultWorkDir])
 
   return (
     <div className="flex h-screen flex-col">

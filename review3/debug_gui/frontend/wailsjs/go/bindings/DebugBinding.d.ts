@@ -63,3 +63,6 @@ export declare function ExportBatch(params: bindings.BatchParams, exportPath: st
 export declare function StopEngine(): Promise<void>
 export declare function GetStatus(): Promise<bindings.EngineStatus>
 export declare function CleanupTempFile(path: string): Promise<void>
+export declare function GetDefaultWorkDir(): Promise<string>
+export declare function ReadYAMLContent(path: string): Promise<string>
+export declare function WriteYAMLContent(path: string, content: string): Promise<void>

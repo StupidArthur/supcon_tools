@@ -51,3 +51,15 @@ export function GetStatus() {
 export function CleanupTempFile(path) {
   return window['go']['bindings']['DebugBinding']['CleanupTempFile'](path)
 }
+
+export function GetDefaultWorkDir() {
+  return window['go']['bindings']['DebugBinding']['GetDefaultWorkDir']()
+}
+
+export function ReadYAMLContent(path) {
+  return window['go']['bindings']['DebugBinding']['ReadYAMLContent'](path)
+}
+
+export function WriteYAMLContent(path, content) {
+  return window['go']['bindings']['DebugBinding']['WriteYAMLContent'](path, content)
+}

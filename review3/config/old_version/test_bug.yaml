@@ -1,0 +1,13 @@
+program:
+  - name: v1
+    type: SINE_WAVE
+    init_args:
+      amplitude: 100.0
+      period: 1200
+      phase: 0.0
+    display_args: ["out[100]"]
+    expression: v1.execute()
+  - name: v2
+    type: Variable
+    expression: v2 = v1 + 50
+    display_args: ["v2[150]"]

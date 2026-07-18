@@ -88,7 +88,7 @@ def test_execute_first_flag():
 def test_old_syntax_still_works():
     """旧语法 YAML 仍能正常解析。"""
     parser = DSLParser()
-    config = parser.parse_file("config/tank_constant_sv.yaml")
+    config = parser.parse_file("config/old_version/tank_constant_sv.yaml")
 
     assert len(config.program) == 4
     # 旧语法不排序，保持原序

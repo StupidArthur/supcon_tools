@@ -1,8 +1,13 @@
-clock:
-  mode: REALTIME
-  cycle_time: 0.5
-
 program:
+  - name: sin1
+    type: SINE_WAVE
+    params:
+      amplitude: 1.0
+      period: 2000
+      phase: 0.0
+      offset: 1.0
+    display_args: []
+
   - name: source_flow
     type: Variable
     value: 0.18
@@ -31,7 +36,7 @@ program:
       PB: 12
       TI: 30
       TD: 0.15
-      SV: 1.0
     display_args: ["MV[100]", "PV[2]", "SV[2]", "MODE"]
     inputs:
       PV: tank_1.level
+      SV: sin1.out

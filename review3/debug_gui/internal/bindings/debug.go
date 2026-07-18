@@ -228,3 +228,51 @@ func (b *DebugBinding) CleanupTempFile(path string) {
 		os.Remove(path)
 	}
 }
+
+// GetDefaultWorkDir 根据 exe 所在位置推断 review3 工作目录
+// exe 位于 review3/debug_gui/build/bin/，review3 在往上三级
+func (b *DebugBinding) GetDefaultWorkDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	exeDir := filepath.Dir(exe)
+	candidates := []string{
+		filepath.Join(exeDir, "..", "..", ".."), // build/bin -> debug_gui -> review3
+		filepath.Join(exeDir, "..", ".."),       // bin -> debug_gui
+		exeDir,
+	}
+	for _, c := range candidates {
+		abs, err := filepath.Abs(c)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(abs, "standalone_main.py")); err == nil {
+			return abs
+		}
+	}
+	return ""
+}
+
+// ReadYAMLContent 读取 YAML 配置文件的原始文本内容
+func (b *DebugBinding) ReadYAMLContent(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("未指定文件路径")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读取文件失败: %w", err)
+	}
+	return string(data), nil
+}
+
+// WriteYAMLContent 将文本内容写回 YAML 配置文件
+func (b *DebugBinding) WriteYAMLContent(path string, content string) error {
+	if path == "" {
+		return fmt.Errorf("未指定文件路径")
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("写入文件失败: %w", err)
+	}
+	return nil
+}

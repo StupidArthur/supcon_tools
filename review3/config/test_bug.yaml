@@ -1,0 +1,13 @@
+program:
+  - name: v1
+    type: SINE_WAVE
+    params:
+      amplitude: 100.0
+      period: 1200
+      phase: 0.0
+    display_args: ["out[100]"]
+
+  - name: v2
+    type: Expression
+    formula: v1 + 50
+    display_args: ["v2[150]"]

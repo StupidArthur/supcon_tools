@@ -9,6 +9,8 @@ interface Store {
   configPath: string
   configs: string[]
   yamlConfig: YAMLConfig | null
+  yamlContent: string     // YAML 原始文本（编辑器用）
+  yamlDirty: boolean      // 编辑器有未保存改动
 
   // --- 运行参数 ---
   runMode: RunMode
@@ -38,6 +40,11 @@ interface Store {
 
   refreshConfigs: () => Promise<void>
   loadYAMLConfig: (path: string) => Promise<void>
+  loadYAMLContent: (path: string) => Promise<void>
+  saveYAMLContent: (path: string, content: string) => Promise<void>
+  setYamlContent: (content: string) => void
+
+  initDefaultWorkDir: () => Promise<void>
 
   addLog: (source: string, text: string) => void
   clearLogs: () => void
@@ -56,6 +63,8 @@ export const useStore = create<Store>((set, get) => ({
   configPath: '',
   configs: [],
   yamlConfig: null,
+  yamlContent: '',
+  yamlDirty: false,
 
   runMode: 'batch',
   cycles: 1000,
@@ -79,6 +88,18 @@ export const useStore = create<Store>((set, get) => ({
   setOpcPort: (p) => set({ opcPort: p }),
   setClockMode: (m) => set({ clockMode: m }),
 
+  initDefaultWorkDir: async () => {
+    try {
+      const dir = await debugApi.getDefaultWorkDir()
+      if (dir) {
+        set({ workDir: dir })
+        await get().refreshConfigs()
+      }
+    } catch (e) {
+      console.error('initDefaultWorkDir error:', e)
+    }
+  },
+
   refreshConfigs: async () => {
     const { workDir } = get()
     if (!workDir) return
@@ -98,10 +119,40 @@ export const useStore = create<Store>((set, get) => ({
         cycleTime: cfg.clock.cycleTime || 0.5,
         clockMode: cfg.clock.mode || 'REALTIME',
       })
+      // 同时加载原始文本
+      await get().loadYAMLContent(path)
     } catch (e) {
       console.error('loadYAMLConfig error:', e)
     }
   },
+
+  loadYAMLContent: async (path) => {
+    try {
+      const content = await debugApi.readYAMLContent(path)
+      set({ yamlContent: content, yamlDirty: false })
+    } catch (e) {
+      console.error('loadYAMLContent error:', e)
+      set({ yamlContent: '', yamlDirty: false })
+    }
+  },
+
+  saveYAMLContent: async (path, content) => {
+    try {
+      await debugApi.writeYAMLContent(path, content)
+      set({ yamlDirty: false })
+      // 保存后重新解析配置（刷新参数面板）
+      await get().loadYAMLConfig(path)
+    } catch (e) {
+      console.error('saveYAMLContent error:', e)
+      throw e
+    }
+  },
+
+  setYamlContent: (content) =>
+    set((state) => ({
+      yamlContent: content,
+      yamlDirty: content !== state.yamlContent ? true : state.yamlDirty,
+    })),
 
   addLog: (source, text) =>
     set((state) => ({

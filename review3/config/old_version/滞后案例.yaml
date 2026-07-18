@@ -1,0 +1,37 @@
+program:
+  - name: sin1
+    type: SINE_WAVE
+    init_args:
+      amplitude: 100.0
+      period: 1200
+      phase: 0.0
+    display_args: ["out[100]"]
+    expression: sin1.execute()
+  - name: lagging_sin1
+    type: Variable
+    expression: lagging_sin1 = sin1.out[-30]
+    display_args: ["lagging_sin1[100]"]
+  - name: non_sense_1
+    type: RANDOM
+    init_args:
+      L: 0.0
+      H: 100.0
+      max_step: 3.0
+    display_args: ["out[100]"]
+    expression: non_sense_1.execute()
+  - name: non_sense_2
+    type: RANDOM
+    init_args:
+      L: 0.0
+      H: 100.0
+      max_step: 3.0
+    display_args: ["out[100]"]
+    expression: non_sense_2.execute()
+  - name: non_sense_3
+    type: Variable
+    expression: non_sense_3 = non_sense_1[-30] + 2 * non_sense_2
+    display_args: ["non_sense_3[200]"]
+  - name: non_sense_4
+    type: Variable
+    expression: non_sense_4 = sin(non_sense_3)
+    display_args: ["non_sense_4[2]"]

@@ -4,34 +4,26 @@ clock:
 
 program:
   - name: source_flow
-    type: Variable
-    value: 0.18
+    type: VARIABLE
+    expression: source_flow = 0.18
     display_args: []
-
   - name: valve_1
     type: VALVE
-    params:
+    init_args:
       full_travel_time: 10
     display_args: []
-    inputs:
-      target_opening: v_name.MV
-      inlet_flow: source_flow
-
+    expression: valve_1.execute(target_opening=v_name.MV, inlet_flow=source_flow)
   - name: tank_1
     type: CYLINDRICAL_TANK
-    params: {}
+    init_args: {}
     display_args: []
-    inputs:
-      inlet_flow: valve_1.outlet_flow
-
+    expression: tank_1.execute(inlet_flow=valve_1.outlet_flow)
   - name: v_name
     type: PID
-    execute_first: true
-    params:
+    init_args:
       PB: 12
       TI: 30
       TD: 0.15
       SV: 1.0
     display_args: ["MV[100]", "PV[2]", "SV[2]", "MODE"]
-    inputs:
-      PV: tank_1.level
+    expression: v_name.execute(PV=tank_1.level)
