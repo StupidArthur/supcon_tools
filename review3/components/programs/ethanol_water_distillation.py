@@ -2195,34 +2195,39 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         cooling_valve_pct: Optional[float] = None,
         cooling_water_temperature_c: Optional[float] = None,
         steam_supply_pressure_kpa: Optional[float] = None,
+        steam_flow_kg_h: Optional[float] = None,
+        cooling_flow_kg_h: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
         """
-        执行一个周期的精馏塔动态计算（阶段 1 含阀门、分析仪、公用工程位号）。
+        执行一个周期的精馏塔动态计算。
 
-        优先级规则（向后兼容阶段 B/C）：
-        1. 如果传入任何 *_valve_pct 参数，启用阀位模式：
+        输入优先级（todo/5.md §4.4 + 修复指令 §6.3）：
+
+        1. 传入任一 ``*_valve_pct``：进入阀位模式
            - 阀门命令更新，actual_pct 通过一阶响应演化
            - 实际流量 = valve_max_flow_kg_per_h × get_flow_fraction()
-           - 过程阀：质量流量 → 按当前流股组成换算 kmol/s
-           - 公用工程阀（steam/cooling）：保持 kg/h，发布为 steam_flow_kg_h / cooling_flow_kg_h
-           - 同时传入的 *_flow_kgmol_per_s 被忽略
-        2. 如果只传入 *_flow_kgmol_per_s（不传 valve_pct），保持直接流量模式：
-           - 直接使用流量值，绕过阀门动态
-           - 阶段 B/C 测试使用此模式
-        3. 都不传则使用上一周期值
+           - 过程阀质量流量按当前流股组成换算 kmol/s
+           - 公用工程阀（steam/cooling）保持 kg/h
+           - 同时传入的 *_flow_kgmol_per_s / steam_flow_kg_h / cooling_flow_kg_h 被忽略
 
-        阶段 1 重要说明（todo/5.md §4.4）：
-        - steam_flow_kg_h 和 cooling_flow_kg_h 已发布，但尚未参与再沸/冷凝机理
-        - 蒸汽阀输出 ≠ 过程蒸气量 vapor_boilup；阶段 2 通过 Q_R → V_boil 接入
-        - 冷却水流量不影响冷凝能力和塔压；阶段 2 通过 Q_C → V_condense 接入
+        2. 不传任何 *_valve_pct：进入直接实际流量模式
+           - 允许传入 F/R/D/B（kmol/s）和 steam_flow_kg_h/cooling_flow_kg_h
+           - 这些流量直接进入 Q_R/Q_C 真实机理（与阀位模式共享植物方程）
+           - 不传的字段保持上一周期值
+
+        3. ``vapor_boilup_kgmol_per_s``（仅供遗留单元测试，todo/5.md §5.2 bypass）：
+           - 显式传入时启用 direct_vapor_bypass，跳过 Q_R → V_boil 机理
+           - 仅供阶段 B/C 测试复用，不得用于参考稳态生成
+           - 不得用于正式 DSL
+           - 不得用于模式等价性验证
 
         Args:
             feed_flow_kgmol_per_s: 进料摩尔流量 (kmol/s)，直接流量模式。
             reflux_flow_kgmol_per_s: 回流量 (kmol/s)。
             distillate_flow_kgmol_per_s: 塔顶采出 (kmol/s)。
             bottoms_flow_kgmol_per_s: 塔底采出 (kmol/s)。
-            vapor_boilup_kgmol_per_s: 再沸蒸气量 (kmol/s)。
+            vapor_boilup_kgmol_per_s: 再沸蒸气量 (kmol/s)。仅供遗留测试 bypass 使用。
             feed_ethanol_wt: 进料乙醇质量分数。
             feed_temperature_c: 进料温度 (℃)。
             ambient_temperature_c: 环境温度 (℃)。
@@ -2234,6 +2239,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             cooling_valve_pct: 冷却水阀命令开度 (%)。
             cooling_water_temperature_c: 冷却水供入温度 (℃)。
             steam_supply_pressure_kpa: 蒸汽供入压力 (kPa(a))。
+            steam_flow_kg_h: 直接实际公用工程蒸汽流量 (kg/h)，仅直接流量模式有效。
+                与阀位模式共享 Q_R → V_boil 真实机理，不得与 vapor_boilup_kgmol_per_s 同时使用。
+            cooling_flow_kg_h: 直接实际公用工程冷却水流量 (kg/h)，仅直接流量模式有效。
         """
         # 处理环境/进料参数
         if feed_ethanol_wt is not None:
@@ -2340,7 +2348,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             # 保留 _last_vapor_boilup 字段用于守恒诊断（积分后由 _V_boil_internal 更新）
             # 阀位模式下 direct_vapor_bypass 保持 None
         else:
-            # ===== 直接流量模式（向后兼容阶段 B/C） =====
+            # ===== 直接实际流量模式（修复指令 §6） =====
+            # 与阀位模式共享 Q_R → V_boil / Q_C → V_condense 真实机理
+            # 仅是"实际流量如何得到"不同：直接由调用方提供 vs 阀门特性反算
             if feed_flow_kgmol_per_s is not None:
                 self._last_feed_flow = max(0.0, float(feed_flow_kgmol_per_s))
             if reflux_flow_kgmol_per_s is not None:
@@ -2349,20 +2359,40 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 self._last_distillate_flow = max(0.0, float(distillate_flow_kgmol_per_s))
             if bottoms_flow_kgmol_per_s is not None:
                 self._last_bottoms_flow = max(0.0, float(bottoms_flow_kgmol_per_s))
+
+            # 直接实际公用工程流量输入（修复指令 §6.3）
+            # 不在模型内部截断为阀门额定流量；非法输入应明确失败
+            if steam_flow_kg_h is not None:
+                value = float(steam_flow_kg_h)
+                if not math.isfinite(value) or value < 0.0:
+                    raise ValueError(
+                        f"steam_flow_kg_h 必须为非负有限数值，实际值={steam_flow_kg_h!r}"
+                    )
+                self._last_steam_flow_kg_per_h = value
+            if cooling_flow_kg_h is not None:
+                value = float(cooling_flow_kg_h)
+                if not math.isfinite(value) or value < 0.0:
+                    raise ValueError(
+                        f"cooling_flow_kg_h 必须为非负有限数值，实际值={cooling_flow_kg_h!r}"
+                    )
+                self._last_cooling_flow_kg_per_h = value
+
             if vapor_boilup_kgmol_per_s is not None:
+                # 遗留测试 bypass（todo/5.md §5.2 + 修复指令 §6.4）：
+                # 仅供阶段 B/C 单元测试复用；不得用于参考稳态生成、正式 DSL 或模式等价性验证
+                if steam_flow_kg_h is not None:
+                    raise ValueError(
+                        "vapor_boilup_kgmol_per_s（测试 bypass）不得与 steam_flow_kg_h 同时使用："
+                        "前者跳过 Q_R → V_boil 机理，后者走真实机理，二者语义冲突"
+                    )
                 self._last_vapor_boilup = max(0.0, float(vapor_boilup_kgmol_per_s))
-                # 阶段 2 兼容路径（todo/5.md §5.2 bypass）：
-                # 直接流量模式下显式传入 vapor_boilup 时，作为 direct_vapor_bypass 传给积分器
-                # 积分器内 V_boil = direct_vapor_bypass，Q_R 由反推保持能量守恒
                 direct_vapor_bypass = self._last_vapor_boilup
             else:
-                # 直接流量模式下未传 vapor_boilup：保持 None，由 Q_R → V_boil 真实机理计算
-                # 此情况下需要保证 _last_steam_flow_kg_per_h 有合理值（用上一周期值）
+                # 直接实际流量模式：保持 None，由 Q_R → V_boil 真实机理计算
                 direct_vapor_bypass = None
 
             # 阀门仍按一阶响应演化（保持动态连续性）
             # 但实际流量由直接输入决定，阀门只是"跟随显示"
-            # 在直接流量模式下，把阀门命令同步到对应流量
             if self._valve_mode_enabled:
                 # 从直接流量模式切回阀位模式前的过渡：阀门继续演化
                 for valve in self._valves.values():
@@ -2370,9 +2400,6 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             else:
                 # 纯直接流量模式：阀门不演化，保持初始开度
                 pass
-
-            # 阶段 2：直接流量模式下，steam_flow_kg_h / cooling_flow_kg_h 保持上一周期值
-            # 用于 _integrate_substeps 中的 Q_R → V_boil 计算
 
         # 进料乙醇摩尔分数和温度（K）
         feed_xE = ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)

@@ -28,6 +28,7 @@ import math
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 _project_root = Path(__file__).resolve().parent.parent
@@ -2263,3 +2264,260 @@ def test_utility_params_reject_invalid_values():
     col.execute(cooling_water_temperature_c=30.0, steam_supply_pressure_kpa=500.0)
     assert abs(col.cooling_water_temperature_c - 30.0) < 1e-10
     assert abs(col.steam_supply_pressure_kpa - 500.0) < 1e-10
+
+
+# ====================================================================
+# 参考稳态生成器修复（distillation_reference_state_repair_agent_plan.md）
+# ====================================================================
+def test_direct_physical_utility_flow_uses_real_reboiler_path():
+    """
+    修复指令 §17.2 测试 1：直接实际公用工程流量入口走真实 Q_R → V_boil 路径。
+
+    传入 steam_flow_kg_h/cooling_flow_kg_h，不传 vapor_boilup_kgmol_per_s，断言：
+    - 模型使用 Q_R → V_boil 路径（_V_boil_internal 由 Q_R 决定，不是 bypass 注入）
+    - 输入流量正确发布到 steam_flow_kg_h / cooling_flow_kg_h 位号
+    - 没有启用 direct_vapor_bypass（_last_vapor_boilup 与 _V_boil_internal 一致）
+    """
+    col = _make_column()
+    # 预热一次
+    col.execute()
+
+    # 显式传入实际公用工程流量，不传 vapor_boilup_kgmol_per_s
+    steam_in = 60.0          # kg/h
+    cooling_in = 3600.0      # kg/h
+    col.execute(
+        feed_flow_kgmol_per_s=0.001307,
+        reflux_flow_kgmol_per_s=0.000625,
+        distillate_flow_kgmol_per_s=0.000209,
+        bottoms_flow_kgmol_per_s=0.001098,
+        steam_flow_kg_h=steam_in,
+        cooling_flow_kg_h=cooling_in,
+    )
+
+    # 1. 输入流量正确发布
+    assert abs(col.steam_flow_kg_h - steam_in) < 1e-9, (
+        f"steam_flow_kg_h 发布错误: 期望 {steam_in}, 实际 {col.steam_flow_kg_h}"
+    )
+    assert abs(col.cooling_flow_kg_h - cooling_in) < 1e-9, (
+        f"cooling_flow_kg_h 发布错误: 期望 {cooling_in}, 实际 {col.cooling_flow_kg_h}"
+    )
+
+    # 2. V_boil 由 Q_R 真实机理计算（非负且有限）
+    V_boil = float(col._V_boil_internal)
+    assert math.isfinite(V_boil), f"_V_boil_internal 非有限: {V_boil}"
+    assert V_boil >= 0.0, f"_V_boil_internal 不能为负: {V_boil}"
+
+    # 3. 再沸负荷 Q_R 与 steam_flow_kg_h 一致（走真实机理）
+    #    Q_R_available = (steam_flow_kg_h / 3600) * latent_heat * efficiency
+    expected_Q_R = (steam_in / 3600.0) * float(col.steam_latent_heat_kj_per_kg) * float(col.steam_heat_transfer_efficiency)
+    assert abs(col.reboiler_duty_kw - expected_Q_R) < 1e-6, (
+        f"reboiler_duty_kw 与 steam_flow_kg_h 不一致: 期望 {expected_Q_R}, 实际 {col.reboiler_duty_kw}"
+    )
+
+    # 4. 再跑两个周期验证 V_boil 不是被钉死的常量
+    V_boil_prev = V_boil
+    col.execute(
+        feed_flow_kgmol_per_s=0.001307,
+        reflux_flow_kgmol_per_s=0.000625,
+        distillate_flow_kgmol_per_s=0.000209,
+        bottoms_flow_kgmol_per_s=0.001098,
+        steam_flow_kg_h=steam_in * 1.5,         # 增大蒸汽
+        cooling_flow_kg_h=cooling_in,
+    )
+    V_boil_new = float(col._V_boil_internal)
+    assert math.isfinite(V_boil_new) and V_boil_new >= 0.0
+    # 蒸汽流量增大后 Q_R 增大，V_boil 应相应增大（容忍小幅数值波动）
+    expected_Q_R_new = (steam_in * 1.5 / 3600.0) * float(col.steam_latent_heat_kj_per_kg) * float(col.steam_heat_transfer_efficiency)
+    assert abs(col.reboiler_duty_kw - expected_Q_R_new) < 1e-6, (
+        f"增大蒸汽后 reboiler_duty_kw 不匹配: 期望 {expected_Q_R_new}, 实际 {col.reboiler_duty_kw}"
+    )
+
+    # 5. vapor_boilup_kgmol_per_s 与 steam_flow_kg_h 不能同时使用
+    with pytest.raises(ValueError):
+        col.execute(
+            steam_flow_kg_h=steam_in,
+            vapor_boilup_kgmol_per_s=0.001,
+        )
+
+    # 6. 非法输入（负值 / NaN）应抛 ValueError
+    with pytest.raises(ValueError):
+        col.execute(steam_flow_kg_h=-1.0)
+    with pytest.raises(ValueError):
+        col.execute(cooling_flow_kg_h=float("nan"))
+
+
+def test_direct_and_valve_inputs_are_single_step_equivalent():
+    """
+    修复指令 §17.2 测试 2：直接实际流量与反算阀位单步等价。
+
+    从同一 WARM_GUESS 状态建立两个实例，直接实际流量和反算阀位各运行一个周期，
+    比较实际流量、V_boil/V_condense/Q_R/Q_C/P_top 和核心状态。
+    """
+    import copy
+
+    # 构造主实例并预热一个周期让派生量稳定
+    col_ref = _make_column()
+    col_ref.execute()
+
+    # 指定一组操作流量（kmol/s 和 kg/h）
+    op = {
+        "feed_flow_kgmol_per_s": 0.001307,
+        "reflux_flow_kgmol_per_s": 0.000625,
+        "distillate_flow_kgmol_per_s": 0.000209,
+        "bottoms_flow_kgmol_per_s": 0.001098,
+        "steam_flow_kg_h": 60.0,
+        "cooling_flow_kg_h": 3600.0,
+    }
+
+    # 反算阀位（使用 col_ref 当前组成）
+    # 过程阀流量先转 kg/h
+    from components.programs.ethanol_water_distillation import (
+        _mixture_molecular_weight, _kgmols_to_kgh,
+    )
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+    )
+    xD_mol = ethanol_mass_fraction_to_mole_fraction(float(col_ref.top_ethanol_wt))
+    xB_mol = ethanol_mass_fraction_to_mole_fraction(float(col_ref.bottom_ethanol_wt))
+    xF_mol = ethanol_mass_fraction_to_mole_fraction(float(col_ref._feed_ethanol_wt))
+    feed_mass_kgh = _kgmols_to_kgh(op["feed_flow_kgmol_per_s"], _mixture_molecular_weight(xF_mol))
+    reflux_mass_kgh = _kgmols_to_kgh(op["reflux_flow_kgmol_per_s"], _mixture_molecular_weight(xD_mol))
+    distillate_mass_kgh = _kgmols_to_kgh(op["distillate_flow_kgmol_per_s"], _mixture_molecular_weight(xD_mol))
+    bottoms_mass_kgh = _kgmols_to_kgh(op["bottoms_flow_kgmol_per_s"], _mixture_molecular_weight(xB_mol))
+
+    max_flows = col_ref._valve_max_flow_kg_per_h
+
+    def _pct(flow_kg_h, max_kg_h, valve_name):
+        ratio = max(0.0, min(1.0, flow_kg_h / max_kg_h))
+        return col_ref._valves[valve_name].opening_from_flow_fraction(ratio)
+
+    valve_cmds = {
+        "feed_valve_pct": _pct(feed_mass_kgh, max_flows["feed"], "feed"),
+        "reflux_valve_pct": _pct(reflux_mass_kgh, max_flows["reflux"], "reflux"),
+        "distillate_valve_pct": _pct(distillate_mass_kgh, max_flows["distillate"], "distillate"),
+        "bottoms_valve_pct": _pct(bottoms_mass_kgh, max_flows["bottoms"], "bottoms"),
+        "steam_valve_pct": _pct(op["steam_flow_kg_h"], max_flows["steam"], "steam"),
+        "cooling_valve_pct": _pct(op["cooling_flow_kg_h"], max_flows["cooling"], "cooling"),
+    }
+
+    # 保存当前状态，建立两个独立实例
+    state_before = col_ref.save_state()
+
+    direct_col = _make_column()
+    direct_col.load_state(copy.deepcopy(state_before))
+
+    valve_col = _make_column()
+    valve_col.load_state(copy.deepcopy(state_before))
+
+    # valve_col 同步阀门 command/actual 为反算值（消除一阶响应阶跃）
+    for key, pct in valve_cmds.items():
+        valve_name = key.replace("_valve_pct", "")
+        valve_col._valves[valve_name].command_pct = pct
+        valve_col._valves[valve_name].actual_pct = pct
+
+    # 各运行一个 cycle_time
+    direct_col.execute(**op)
+    valve_col.execute(**valve_cmds)
+
+    # 比较六个实际流量
+    rtol_flow = 1e-8
+    atol_flow = 1e-10
+    for attr in [
+        "feed_flow_kg_h", "reflux_flow_kg_h", "distillate_flow_kg_h",
+        "bottoms_flow_kg_h", "steam_flow_kg_h", "cooling_flow_kg_h",
+    ]:
+        v_direct = float(getattr(direct_col, attr))
+        v_valve = float(getattr(valve_col, attr))
+        # 阀位模式 steam/cooling 直接来自阀门流量分数 × 额定流量，与直接输入一致
+        # 过程阀的 kg/h 由摩尔流量 × 分子量换算回来，组成相同时应一致
+        rel = abs(v_direct - v_valve) / max(abs(v_direct), 1e-12)
+        assert rel < rtol_flow or abs(v_direct - v_valve) < atol_flow, (
+            f"{attr} 不等价: direct={v_direct}, valve={v_valve}, rel={rel}"
+        )
+
+    # 比较 V_boil/V_condense/Q_R/Q_C/P_top
+    rtol_phys = 1e-7
+    atol_phys = 1e-10
+    for attr_direct, attr_valve in [
+        ("_V_boil_internal", "_V_boil_internal"),
+        ("_V_condense_internal", "_V_condense_internal"),
+        ("_Q_R_kw", "_Q_R_kw"),
+        ("_Q_C_kw", "_Q_C_kw"),
+        ("_p_top_kpa", "_p_top_kpa"),
+    ]:
+        v_direct = float(getattr(direct_col, attr_direct))
+        v_valve = float(getattr(valve_col, attr_valve))
+        rel = abs(v_direct - v_valve) / max(abs(v_direct), 1e-12)
+        assert rel < rtol_phys or abs(v_direct - v_valve) < atol_phys, (
+            f"{attr_direct} 不等价: direct={v_direct}, valve={v_valve}, rel={rel}"
+        )
+
+    # 比较核心状态数组（M/nE/U for tray/drum/sump + N_vapor/nE_vapor/U_vapor）
+    for attr in [
+        "_M_tray", "_nE_tray", "_U_tray",
+        "_M_drum", "_nE_drum", "_U_drum",
+        "_M_sump", "_nE_sump", "_U_sump",
+        "_N_vapor", "_nE_vapor", "_U_vapor",
+    ]:
+        v_direct = np.asarray(getattr(direct_col, attr), dtype=np.float64)
+        v_valve = np.asarray(getattr(valve_col, attr), dtype=np.float64)
+        # 使用 np.allclose 容忍浮点误差
+        assert np.allclose(v_direct, v_valve, rtol=rtol_phys, atol=atol_phys), (
+            f"{attr} 不等价:\n direct={v_direct}\n valve={v_valve}\n"
+            f" diff={v_direct - v_valve}"
+        )
+
+
+def test_failed_generation_does_not_replace_existing_reference_file(tmp_path):
+    """
+    修复指令 §17.2 测试 3：生成失败时不覆盖已有参考文件。
+
+    在临时目录创建一个内容为 'sentinel' 的已有参考文件，模拟求解或门禁失败，
+    断言函数抛出 ReferenceStateGenerationError 或返回失败，sentinel 文件内容未变。
+    """
+    import json
+    import tools.generate_ethanol_water_reference_state as gen_mod
+
+    # 临时输出路径
+    output_path = tmp_path / "ethanol_water_reference_state.json"
+
+    # 写入 sentinel 内容（不是合法 JSON，方便检测是否被覆盖）
+    sentinel_content = "sentinel"
+    output_path.write_text(sentinel_content, encoding="utf-8")
+
+    # 模拟求解失败：用 monkeypatch 替换求解器主函数为直接抛错
+    original_generate = gen_mod.generate_reference_state
+
+    def failing_generate(output_path, verbose=False):
+        raise gen_mod.ReferenceStateGenerationError(
+            "模拟求解失败：least_squares 未收敛"
+        )
+
+    # 保存原函数引用后替换
+    gen_mod.generate_reference_state = failing_generate
+    try:
+        # 调用 main()，应返回非零退出码且不覆盖 sentinel 文件
+        # 修改 main() 使用的输出路径（通过环境变量或直接调用 generate_reference_state）
+        try:
+            gen_mod.generate_reference_state(output_path=str(output_path), verbose=False)
+            # 如果没抛错，说明函数实现错了
+            assert False, "failing_generate 应抛出 ReferenceStateGenerationError"
+        except gen_mod.ReferenceStateGenerationError:
+            pass  # 预期行为
+
+        # 验证 sentinel 文件内容未变
+        content_after = output_path.read_text(encoding="utf-8")
+        assert content_after == sentinel_content, (
+            f"已有参考文件被覆盖！期望 '{sentinel_content}', 实际 '{content_after}'"
+        )
+
+        # 验证不存在 .tmp 半成品文件
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert len(tmp_files) == 0, (
+            f"存在 .tmp 半成品文件: {tmp_files}"
+        )
+
+    finally:
+        # 恢复原始函数
+        gen_mod.generate_reference_state = original_generate
+

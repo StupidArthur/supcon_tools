@@ -10,6 +10,9 @@ python-dateutil>=2.8.0
 # Numerical computing (required by random module)
 numpy>=1.20.0
 
+# Scientific computing (required by reference state generator least_squares solver)
+scipy>=1.10
+
 # FastAPI debug interface (used by --api mode for Wails GUI tooling)
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
