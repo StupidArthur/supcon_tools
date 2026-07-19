@@ -1948,3 +1948,265 @@ def test_steam_and_cooling_flows_are_utility_mass_flows():
     col.execute(cooling_water_temperature_c=30.0, steam_supply_pressure_kpa=400.0)
     assert abs(col.cooling_water_temperature_c - 30.0) < 1e-10
     assert abs(col.steam_supply_pressure_kpa - 400.0) < 1e-10
+
+
+# ====================================================================
+# 24. 阶段 1.1 专项：初始阀位反算与新增参数校验
+# ====================================================================
+def test_default_initial_valve_openings_and_mass_flows():
+    """
+    阶段 1.1 验收 1：默认模型六个阀门的初始质量流量和反算开度。
+
+    阶段 1.1 修正要求（todo/5.md 阶段 1.1 修正要求 §1）：
+    - feed     ≈ 99.99 kg/h,  开度 ≈ 88.56%
+    - reflux   ≈ 84.03 kg/h,  开度 ≈ 83.72%
+    - distillate ≈ 28.10 kg/h, 开度 ≈ 56.20%
+    - bottoms  ≈ 71.87 kg/h,  开度 ≈ 59.89%
+    - cooling  = 3500 kg/h,   开度 ≈ 80.58%
+
+    注意：steam 使用 vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)
+    （todo/5.md 阶段 1.1 修正要求 §1 明确指定），sump MW ≈ 18.19，
+    得到 steam ≈ 54.59 kg/h, 开度 ≈ 83.03%。
+    规格文档表格中的 63.82 kg/h 是用 feed_mw 计算的旧值，与 §1 显式公式不一致，
+    本测试以 §1 显式公式（vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)）
+    为准。
+    """
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+        MW_WATER_KG_PER_KMOL,
+        MW_ETHANOL_KG_PER_KMOL,
+    )
+
+    col = _make_column()
+
+    # 预期初始质量流量（由构造时按内部状态反算）
+    # feed: 0.001307 kmol/s × MW(0.25 wt) × 3600
+    feed_xE = ethanol_mass_fraction_to_mole_fraction(0.25)
+    feed_mw = feed_xE * MW_ETHANOL_KG_PER_KMOL + (1.0 - feed_xE) * MW_WATER_KG_PER_KMOL
+    expected_feed = 0.001307 * feed_mw * 3600.0
+    # reflux / distillate：使用回流罐初始摩尔分数
+    x_drum_init = col._nE_drum / col._M_drum
+    drum_mw = x_drum_init * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_drum_init) * MW_WATER_KG_PER_KMOL
+    expected_reflux = 0.000625 * drum_mw * 3600.0
+    expected_distillate = 0.000209 * drum_mw * 3600.0
+    # bottoms：使用塔釜初始摩尔分数
+    x_sump_init = col._nE_sump / col._M_sump
+    sump_mw = x_sump_init * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_sump_init) * MW_WATER_KG_PER_KMOL
+    expected_bottoms = 0.001098 * sump_mw * 3600.0
+    # steam（阶段 1 兼容值）：vapor_boilup × sump_mw × 3600
+    # 按 §1 显式公式：vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)
+    expected_steam = 0.000834 * sump_mw * 3600.0
+    # cooling：50% 额定流量
+    expected_cooling = 7000.0 * 0.5
+
+    # 反算阀门初始开度（实际 = 命令初值，对应构造时的稳态流量）
+    R = 30.0
+    expected_openings = {
+        "feed":       _expected_eqp_pct(expected_feed, 150.0, R),
+        "reflux":     _expected_eqp_pct(expected_reflux, 150.0, R),
+        "distillate": _expected_lin_pct(expected_distillate, 50.0),
+        "bottoms":    _expected_lin_pct(expected_bottoms, 120.0),
+        "steam":      _expected_eqp_pct(expected_steam, 100.0, R),
+        "cooling":    _expected_eqp_pct(expected_cooling, 7000.0, R),
+    }
+
+    # 验证阀门初始开度
+    for key, expected_pct in expected_openings.items():
+        actual_cmd = getattr(col, f"{key}_valve_command_pct")
+        actual_act = getattr(col, f"{key}_valve_actual_pct")
+        # 命令 = 实际（构造时未运行）
+        assert abs(actual_cmd - actual_act) < 1e-12, (
+            f"{key} 阀门构造时 command 应等于 actual: cmd={actual_cmd}, act={actual_act}"
+        )
+        assert abs(actual_cmd - expected_pct) < 0.5, (
+            f"{key} 阀门初始开度错误: actual={actual_cmd}, expected={expected_pct}"
+        )
+
+    # 关键质量流量数值（容忍约 1 kg/h 浮点误差）
+    assert abs(expected_feed - 99.99) < 1.5, f"feed 初始质量流量异常: {expected_feed}"
+    assert abs(expected_reflux - 84.03) < 1.5, f"reflux 初始质量流量异常: {expected_reflux}"
+    assert abs(expected_distillate - 28.10) < 1.0, f"distillate 初始质量流量异常: {expected_distillate}"
+    assert abs(expected_bottoms - 71.87) < 1.5, f"bottoms 初始质量流量异常: {expected_bottoms}"
+    # steam 按 §1 显式公式：vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)
+    # x_sump_init ≈ 0.006（对应 bottom target wt=0.015），sump_mw ≈ 18.19
+    # steam = 0.000834 × 18.19 × 3600 ≈ 54.59 kg/h
+    assert abs(expected_steam - 54.59) < 1.5, f"steam 初始质量流量异常: {expected_steam}"
+    assert abs(expected_cooling - 3500.0) < 1e-6, f"cooling 初始质量流量异常: {expected_cooling}"
+
+
+def _expected_eqp_pct(flow: float, max_flow: float, R: float) -> float:
+    """归一化等百分比阀反算开度 (%)。"""
+    if max_flow <= 0.0 or flow <= 0.0:
+        return 0.0
+    ratio = max(0.0, min(1.0, flow / max_flow))
+    x = math.log(ratio * (R - 1.0) + 1.0) / math.log(R)
+    return x * 100.0
+
+
+def _expected_lin_pct(flow: float, max_flow: float) -> float:
+    """线性阀反算开度 (%)。"""
+    if max_flow <= 0.0 or flow <= 0.0:
+        return 0.0
+    ratio = max(0.0, min(1.0, flow / max_flow))
+    return ratio * 100.0
+
+
+def test_reflux_and_distillate_use_top_composition_mw():
+    """
+    阶段 1.1 验收 2：回流和塔顶采出使用塔顶（回流罐）组成分子量。
+
+    构造时不能用尚未发布的 top_ethanol_wt，应使用 _nE_drum/_M_drum。
+    """
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+        ethanol_mole_fraction_to_mass_fraction,
+        MW_WATER_KG_PER_KMOL,
+        MW_ETHANOL_KG_PER_KMOL,
+    )
+
+    col = _make_column()
+
+    # 塔顶回流罐的初始摩尔分数
+    x_drum = col._nE_drum / col._M_drum
+    drum_mw = x_drum * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_drum) * MW_WATER_KG_PER_KMOL
+
+    # 塔顶乙醇质量分数目标 0.85，对应摩尔分数
+    x_top_target = ethanol_mass_fraction_to_mole_fraction(0.85)
+    expected_mw = x_top_target * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_top_target) * MW_WATER_KG_PER_KMOL
+
+    # drum_mw 应该等于 expected_mw（初始 x_e_drum = x_top_target）
+    assert abs(drum_mw - expected_mw) < 1e-9, (
+        f"回流罐分子量 {drum_mw} 应等于塔顶组成分子量 {expected_mw}"
+    )
+
+    # 验证：reflux 和 distillate 反算开度应使用此分子量
+    # 即 reflux_mass_kg_h = 0.000625 × drum_mw × 3600
+    # distillate_mass_kg_h = 0.000209 × drum_mw × 3600
+    expected_reflux_kg_h = 0.000625 * drum_mw * 3600.0
+    expected_distillate_kg_h = 0.000209 * drum_mw * 3600.0
+
+    # 用错误分子量（feed_mw）计算的预期值会与正确值不同
+    feed_xE = ethanol_mass_fraction_to_mole_fraction(0.25)
+    feed_mw = feed_xE * MW_ETHANOL_KG_PER_KMOL + (1.0 - feed_xE) * MW_WATER_KG_PER_KMOL
+    wrong_reflux_kg_h = 0.000625 * feed_mw * 3600.0
+
+    # drum_mw 与 feed_mw 明显不同（乙醇质量分数 0.85 vs 0.25）
+    assert abs(drum_mw - feed_mw) > 1.0, (
+        f"塔顶与进料分子量应有明显差异: drum={drum_mw}, feed={feed_mw}"
+    )
+    # 错误的 reflux 流量值与正确值明显不同
+    assert abs(expected_reflux_kg_h - wrong_reflux_kg_h) > 1.0, (
+        f"使用不同分子量得到的 reflux 流量应有明显差异"
+    )
+
+    # 关键：默认参数下 reflux ≈ 84.03 kg/h（todo/5.md 阶段 1.1 修正要求 §1）
+    assert abs(expected_reflux_kg_h - 84.03) < 1.5, (
+        f"reflux 初始质量流量异常: {expected_reflux_kg_h}, 应约 84.03"
+    )
+    assert abs(expected_distillate_kg_h - 28.10) < 1.0, (
+        f"distillate 初始质量流量异常: {expected_distillate_kg_h}, 应约 28.10"
+    )
+
+
+def test_bottoms_and_steam_use_sump_composition_mw():
+    """
+    阶段 1.1 验收 3：塔底采出和阶段 1 蒸汽兼容计算使用塔釜组成分子量。
+
+    构造时不能用 bottom_ethanol_wt/bottom_ethanol_x，应使用 _nE_sump/_M_sump。
+    同时 vapor_boilup_mw 不应经过 mass_fraction 转换。
+    """
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+        MW_WATER_KG_PER_KMOL,
+        MW_ETHANOL_KG_PER_KMOL,
+    )
+
+    col = _make_column()
+
+    # 塔釜初始摩尔分数
+    x_sump = col._nE_sump / col._M_sump
+    sump_mw = x_sump * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_sump) * MW_WATER_KG_PER_KMOL
+
+    # 塔底乙醇质量分数目标 0.015，对应摩尔分数
+    x_bot_target = ethanol_mass_fraction_to_mole_fraction(0.015)
+    expected_mw = x_bot_target * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_bot_target) * MW_WATER_KG_PER_KMOL
+
+    # sump_mw 应该等于 expected_mw
+    assert abs(sump_mw - expected_mw) < 1e-9, (
+        f"塔釜分子量 {sump_mw} 应等于塔底组成分子量 {expected_mw}"
+    )
+
+    # bottoms 流量 ≈ 71.87 kg/h（todo/5.md 阶段 1.1 修正要求 §1）
+    expected_bottoms_kg_h = 0.001098 * sump_mw * 3600.0
+    assert abs(expected_bottoms_kg_h - 71.87) < 1.5, (
+        f"bottoms 初始质量流量异常: {expected_bottoms_kg_h}, 应约 71.87"
+    )
+
+    # 蒸汽阶段 1 兼容值 ≈ 54.59 kg/h（vapor_boilup × sump_mw × 3600）
+    # 按 §1 显式公式：vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)
+    # x_sump_init ≈ 0.006（对应 bottom target wt=0.015），sump_mw ≈ 18.19
+    # 规格文档表格中的 63.82 kg/h 是用 feed_mw 计算的旧值，与 §1 显式公式不一致，
+    # 本测试以 §1 显式公式为准。
+    expected_steam_kg_h = 0.000834 * sump_mw * 3600.0
+    assert abs(expected_steam_kg_h - 54.59) < 1.5, (
+        f"steam 初始质量流量异常: {expected_steam_kg_h}, 应约 54.59"
+    )
+
+
+def test_valve_max_flow_rejects_invalid_values():
+    """
+    阶段 1.1 验收 4：六个额定流量拒绝 NaN、无穷值、零和负数。
+    """
+    invalid_values = [float("nan"), float("inf"), float("-inf"), 0.0, -1.0, -100.0]
+    valve_params = [
+        "feed_valve_max_flow_kg_per_h",
+        "reflux_valve_max_flow_kg_per_h",
+        "distillate_valve_max_flow_kg_per_h",
+        "bottoms_valve_max_flow_kg_per_h",
+        "steam_valve_max_flow_kg_per_h",
+        "cooling_valve_max_flow_kg_per_h",
+    ]
+    for param in valve_params:
+        for bad_value in invalid_values:
+            with pytest.raises(ValueError):
+                _make_column(**{param: bad_value})
+
+
+def test_utility_params_reject_invalid_values():
+    """
+    阶段 1.1 验收 5：构造器及 execute() 拒绝非法公用工程参数。
+    """
+    # 构造器拒绝 NaN / 非数 / 越界值
+    with pytest.raises(ValueError):
+        _make_column(cooling_water_temperature_c=float("nan"))
+    with pytest.raises(ValueError):
+        _make_column(cooling_water_temperature_c=float("inf"))
+    with pytest.raises(ValueError):
+        _make_column(cooling_water_temperature_c=-300.0)  # 低于绝对零度
+    with pytest.raises(ValueError):
+        _make_column(steam_supply_pressure_kpa=float("nan"))
+    with pytest.raises(ValueError):
+        _make_column(steam_supply_pressure_kpa=float("inf"))
+    with pytest.raises(ValueError):
+        _make_column(steam_supply_pressure_kpa=0.0)  # 绝压必须严格大于 0
+    with pytest.raises(ValueError):
+        _make_column(steam_supply_pressure_kpa=-5.0)
+
+    # execute() 拒绝 NaN / 非数 / 越界值
+    col = _make_column()
+    col.execute()  # 预热一次确保状态正常
+    with pytest.raises(ValueError):
+        col.execute(cooling_water_temperature_c=float("nan"))
+    with pytest.raises(ValueError):
+        col.execute(cooling_water_temperature_c=-300.0)
+    with pytest.raises(ValueError):
+        col.execute(steam_supply_pressure_kpa=float("nan"))
+    with pytest.raises(ValueError):
+        col.execute(steam_supply_pressure_kpa=0.0)
+    with pytest.raises(ValueError):
+        col.execute(steam_supply_pressure_kpa=-5.0)
+
+    # 合法值不应抛错
+    col.execute(cooling_water_temperature_c=30.0, steam_supply_pressure_kpa=500.0)
+    assert abs(col.cooling_water_temperature_c - 30.0) < 1e-10
+    assert abs(col.steam_supply_pressure_kpa - 500.0) < 1e-10

@@ -530,33 +530,32 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "cooling":    float(self.cooling_valve_max_flow_kg_per_h),
         }
 
-        # 阶段 1 修正：稳态初始质量流量（kg/h），用于反算阀门初始开度
+        # 阶段 1.1 修正：稳态初始质量流量（kg/h），用于反算阀门初始开度
         # 过程阀：kmol/s × 流股平均分子量 × 3600 = kg/h
         # steam/cooling：阶段 1 仅有位号，初始质量流量按参考工况设定
+        # 关键：不能依赖尚未发布的 top_ethanol_wt/bottom_ethanol_wt/bottom_ethanol_x
+        #       应直接从已创建的内部状态求初始摩尔分数
         feed_mw_init = _mixture_molecular_weight(
             ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
         )
-        reflux_mw_init = _mixture_molecular_weight(
-            ethanol_mass_fraction_to_mole_fraction(float(self.top_ethanol_wt))
-        ) if hasattr(self, "top_ethanol_wt") else feed_mw_init
+        # 阶段 1.1 修正：回流/塔顶采出使用回流罐组成（塔顶组成）
+        x_drum_init = self._nE_drum / self._M_drum
+        reflux_mw_init = _mixture_molecular_weight(x_drum_init)
         distillate_mw_init = reflux_mw_init  # 塔顶采出与回流同组成
-        bottoms_mw_init = _mixture_molecular_weight(
-            ethanol_mass_fraction_to_mole_fraction(float(self.bottom_ethanol_wt))
-        ) if hasattr(self, "bottom_ethanol_wt") else feed_mw_init
+        # 阶段 1.1 修正：塔底采出使用塔釜组成
+        x_sump_init = self._nE_sump / self._M_sump
+        bottoms_mw_init = _mixture_molecular_weight(x_sump_init)
         # 阶段 1 兼容路径：蒸汽流量初值按旧 vapor_boilup 反算（todo/5.md §4.4）
         # 注意：阶段 2 将删除此兼容路径，改为 Q_R → V_boil 真实机理
-        vapor_boilup_mw = _mixture_molecular_weight(
-            ethanol_mole_fraction_to_mass_fraction(
-                float(self.bottom_ethanol_x) if hasattr(self, "bottom_ethanol_x") else 0.05
-            )
-        ) if hasattr(self, "bottom_ethanol_x") else feed_mw_init
+        # 阶段 1.1 修正：vapor_boilup_mw 直接用塔釜摩尔分数，不再经过 mass_fraction 转换
+        vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)
         steady_mass_flow_kg_per_h: Dict[str, float] = {
             "feed":       _kgmols_to_kgh(self._feed_flow_kgmol_per_s, feed_mw_init),
             "reflux":     _kgmols_to_kgh(self._reflux_flow_kgmol_per_s, reflux_mw_init),
             "distillate": _kgmols_to_kgh(self._distillate_flow_kgmol_per_s, distillate_mw_init),
             "bottoms":    _kgmols_to_kgh(self._bottoms_flow_kgmol_per_s, bottoms_mw_init),
-            # 阶段 1 兼容：蒸汽质量流量 = 过程蒸气量 × 蒸汽冷凝潜热对应的质量
-            # 简化为按过程蒸气质量流量初值（阶段 2 由 Q_R 反推）
+            # 阶段 1 兼容：蒸汽质量流量 = 过程蒸气量 × 塔釜组成分子量
+            # 阶段 2 将由 Q_R 反推真实蒸汽质量流量，删除此兼容路径
             "steam":      _kgmols_to_kgh(self._vapor_boilup_kgmol_per_s, vapor_boilup_mw),
             # 冷却水：参考工况下约 3500 kg/h（与冷凝负荷匹配），初始按 50% 开度对应值
             "cooling":    self._valve_max_flow_kg_per_h["cooling"] * 0.5,
@@ -711,6 +710,40 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         if float(self.max_internal_step) <= 0.0 or float(self.max_internal_step) > self.cycle_time:
             raise ValueError(
                 f"max_internal_step 必须位于 (0, cycle_time]，实际值={self.max_internal_step!r}"
+            )
+
+        # ===== 阶段 1.1 新增：六个阀门额定质量流量校验（todo/5.md §4.2） =====
+        # 必须是有限数，并且严格大于零
+        for name in (
+            "feed_valve_max_flow_kg_per_h",
+            "reflux_valve_max_flow_kg_per_h",
+            "distillate_valve_max_flow_kg_per_h",
+            "bottoms_valve_max_flow_kg_per_h",
+            "steam_valve_max_flow_kg_per_h",
+            "cooling_valve_max_flow_kg_per_h",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise ValueError(f"参数无效: {name} 必须为有限数值，实际值={value!r}")
+            if float(value) <= 0.0:
+                raise ValueError(f"{name} 必须严格大于0，实际值={value!r}")
+
+        # ===== 阶段 1.1 新增：公用工程参数校验（todo/5.md §3.2） =====
+        # cooling_water_temperature_c：有限数且高于绝对零度（-273.15 ℃）
+        cwt = self.cooling_water_temperature_c
+        if not isinstance(cwt, (int, float)) or not math.isfinite(float(cwt)):
+            raise ValueError(f"参数无效: cooling_water_temperature_c 必须为有限数值，实际值={cwt!r}")
+        if float(cwt) <= -273.15:
+            raise ValueError(
+                f"cooling_water_temperature_c 必须高于绝对零度 (-273.15 ℃)，实际值={cwt!r}"
+            )
+        # steam_supply_pressure_kpa：有限数且作为绝压严格大于零
+        ssp = self.steam_supply_pressure_kpa
+        if not isinstance(ssp, (int, float)) or not math.isfinite(float(ssp)):
+            raise ValueError(f"参数无效: steam_supply_pressure_kpa 必须为有限数值，实际值={ssp!r}")
+        if float(ssp) <= 0.0:
+            raise ValueError(
+                f"steam_supply_pressure_kpa 作为绝压必须严格大于0，实际值={ssp!r}"
             )
 
         mode = str(self.initialization_mode).upper()
@@ -1560,10 +1593,29 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         if ambient_temperature_c is not None:
             self._ambient_temperature_k = float(ambient_temperature_c) + 273.15
         # 阶段 1 新增：公用工程输入（仅持有状态，不影响再沸/冷凝）
+        # 阶段 1.1 新增：执行与构造期相同的有限值/物理范围校验
         if cooling_water_temperature_c is not None:
-            self._cooling_water_temperature_c = float(cooling_water_temperature_c)
+            cwt = float(cooling_water_temperature_c)
+            if not math.isfinite(cwt):
+                raise ValueError(
+                    f"cooling_water_temperature_c 必须为有限数值，实际值={cooling_water_temperature_c!r}"
+                )
+            if cwt <= -273.15:
+                raise ValueError(
+                    f"cooling_water_temperature_c 必须高于绝对零度 (-273.15 ℃)，实际值={cwt!r}"
+                )
+            self._cooling_water_temperature_c = cwt
         if steam_supply_pressure_kpa is not None:
-            self._steam_supply_pressure_kpa = float(steam_supply_pressure_kpa)
+            ssp = float(steam_supply_pressure_kpa)
+            if not math.isfinite(ssp):
+                raise ValueError(
+                    f"steam_supply_pressure_kpa 必须为有限数值，实际值={steam_supply_pressure_kpa!r}"
+                )
+            if ssp <= 0.0:
+                raise ValueError(
+                    f"steam_supply_pressure_kpa 作为绝压必须严格大于0，实际值={ssp!r}"
+                )
+            self._steam_supply_pressure_kpa = ssp
 
         # 检查是否启用了阀位模式
         any_valve_input = any(
