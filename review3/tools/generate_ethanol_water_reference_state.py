@@ -673,46 +673,128 @@ def compute_convergence_metrics(
 
 
 def check_convergence(metrics: Dict[str, float]) -> bool:
-    """严格落实 todo/5.md §9.4 全部门槛（修复指令 §10.3）。"""
+    """严格落实 todo/5.md §9.4 全部门槛（修复指令 §10.3）。
+
+    修复指令 §6：在任何阈值比较前先检查字段存在性和有限性。
+    NaN > threshold 结果为 False，会错误地绕过门禁，因此必须显式拒绝。
+    """
+    required_metrics = [
+        "max_abs_dM_tray_dt",
+        "max_abs_dnE_tray_dt",
+        "abs_dM_drum_dt",
+        "abs_dM_sump_dt",
+        "abs_dN_vapor_dt",
+        "abs_dP_top_dt",
+        "max_abs_dT_dt",
+        "drum_level_pct",
+        "sump_level_pct",
+        "top_pressure_kpa",
+        "top_ethanol_wt",
+        "bottom_ethanol_wt",
+        "ethanol_recovery_pct",
+        "mass_residual_rel",
+        "ethanol_residual_rel",
+        "energy_residual_rel",
+    ]
+
+    # §6.1：字段存在 + 可转 float + 有限性
+    values: Dict[str, float] = {}
+    for key in required_metrics:
+        if key not in metrics:
+            return False
+        try:
+            value = float(metrics[key])
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(value):
+            return False
+        values[key] = value
+
     # 状态导数门槛
-    if metrics.get("max_abs_dM_tray_dt", float("inf")) > 1e-8:
+    if values["max_abs_dM_tray_dt"] > 1e-8:
         return False
-    if metrics.get("max_abs_dnE_tray_dt", float("inf")) > 1e-9:
+    if values["max_abs_dnE_tray_dt"] > 1e-9:
         return False
-    if metrics.get("abs_dM_drum_dt", float("inf")) > 1e-8:
+    if values["abs_dM_drum_dt"] > 1e-8:
         return False
-    if metrics.get("abs_dM_sump_dt", float("inf")) > 1e-8:
+    if values["abs_dM_sump_dt"] > 1e-8:
         return False
-    if metrics.get("abs_dN_vapor_dt", float("inf")) > 1e-9:
+    if values["abs_dN_vapor_dt"] > 1e-9:
         return False
-    if metrics.get("abs_dP_top_dt", float("inf")) > 1e-4:
+    if values["abs_dP_top_dt"] > 1e-4:
         return False
-    if metrics.get("max_abs_dT_dt", float("inf")) > 1e-4:
+    if values["max_abs_dT_dt"] > 1e-4:
         return False
     # 液位范围
-    if not (47.0 <= metrics["drum_level_pct"] <= 53.0):
+    if not (47.0 <= values["drum_level_pct"] <= 53.0):
         return False
-    if not (47.0 <= metrics["sump_level_pct"] <= 53.0):
+    if not (47.0 <= values["sump_level_pct"] <= 53.0):
         return False
     # 压力
-    if abs(metrics["top_pressure_kpa"] - 101.325) > 0.10:
+    if abs(values["top_pressure_kpa"] - 101.325) > 0.10:
         return False
     # 组成
-    if not (0.82 <= metrics["top_ethanol_wt"] <= 0.88):
+    if not (0.82 <= values["top_ethanol_wt"] <= 0.88):
         return False
-    if not (0.010 <= metrics["bottom_ethanol_wt"] <= 0.020):
+    if not (0.010 <= values["bottom_ethanol_wt"] <= 0.020):
         return False
     # 回收率
-    if metrics["ethanol_recovery_pct"] < 95.0:
+    if values["ethanol_recovery_pct"] < 95.0:
         return False
     # 闭合残差
-    if metrics["mass_residual_rel"] > 0.001:
+    if values["mass_residual_rel"] > 0.001:
         return False
-    if metrics["ethanol_residual_rel"] > 0.002:
+    if values["ethanol_residual_rel"] > 0.002:
         return False
-    if metrics["energy_residual_rel"] > 0.01:
+    if values["energy_residual_rel"] > 0.01:
         return False
     return True
+
+
+# ====================================================================
+# 求解器结果门禁（修复指令 §5）
+# ====================================================================
+def validate_solver_result(result: Any) -> None:
+    """加强 least_squares 求解结果门禁。
+
+    正状态只表示求解器满足某个停止条件，不代表残差一定合格。
+    必须独立检查：
+        1. status > 0
+        2. 解向量 x 全部有限
+        3. 残差向量 fun 全部有限
+        4. 最大缩放残差 <= 1.0
+    """
+    residuals = np.asarray(result.fun, dtype=np.float64)
+    x = np.asarray(result.x, dtype=np.float64)
+
+    if result.status <= 0:
+        raise ReferenceStateGenerationError(
+            f"least_squares 求解失败（status={result.status}）: {result.message}\n"
+            f"  nfev={result.nfev}, cost={result.cost}, optimality={result.optimality}\n"
+            f"  max residual={float(np.max(np.abs(residuals))) if residuals.size > 0 else 'NaN'}"
+        )
+
+    if x.size == 0 or not np.all(np.isfinite(x)):
+        raise ReferenceStateGenerationError(
+            f"least_squares 解向量包含 NaN/Inf\n"
+            f"  status={result.status}, message={result.message}\n"
+            f"  nfev={result.nfev}, cost={result.cost}, optimality={result.optimality}"
+        )
+
+    if residuals.size == 0 or not np.all(np.isfinite(residuals)):
+        raise ReferenceStateGenerationError(
+            f"least_squares 残差包含 NaN/Inf\n"
+            f"  status={result.status}, message={result.message}\n"
+            f"  nfev={result.nfev}, cost={result.cost}, optimality={result.optimality}"
+        )
+
+    max_scaled_residual = float(np.max(np.abs(residuals)))
+    if max_scaled_residual > 1.0:
+        raise ReferenceStateGenerationError(
+            f"least_squares 最大缩放残差超限: {max_scaled_residual} > 1.0\n"
+            f"  status={result.status}, message={result.message}\n"
+            f"  nfev={result.nfev}, cost={result.cost}, optimality={result.optimality}"
+        )
 
 
 # ====================================================================
@@ -953,12 +1035,7 @@ def generate_reference_state(
         print()
 
     # 检查求解是否成功
-    if result.status <= 0:
-        raise ReferenceStateGenerationError(
-            f"least_squares 求解失败（status={result.status}）: {result.message}\n"
-            f"  nfev={result.nfev}, cost={result.cost}, optimality={result.optimality}\n"
-            f"  max residual={np.max(np.abs(result.fun))}"
-        )
+    validate_solver_result(result)
 
     # ===== 阶段 3：安装求解结果 =====
     if verbose:
@@ -1037,15 +1114,16 @@ def generate_reference_state(
         raise ReferenceStateGenerationError(f"模式等价性门禁失败: {eq_msg}")
 
     # ===== 阶段 6：连续稳态窗口（1800 s = 3600 cycles）=====
+    # 修复指令 §4.1：skip_long_validation 不再"假装通过"
     convergence_window_required = 3600  # 1800 s @ 0.5 s
     convergence_window_count = 0
     final_metrics: Dict[str, float] = {}
 
     if skip_long_validation:
         if verbose:
-            print("阶段 6：跳过连续稳态窗口（Agent 模式）")
+            print("阶段 6：跳过连续稳态窗口（快速诊断模式，不计入通过）")
             print()
-        convergence_window_count = convergence_window_required  # 假装通过
+        convergence_window_count = 0
     else:
         if verbose:
             print(f"阶段 6：连续稳态窗口 {convergence_window_required} 周期（1800 s）")
@@ -1092,12 +1170,13 @@ def generate_reference_state(
             )
 
     # ===== 阶段 7：阀位模式漂移验证（3600 s = 7200 cycles）=====
-    drift_pass = True
+    # 修复指令 §4.1：skip_long_validation 不再"假装通过"
+    drift_pass = False
     drift: Dict[str, float] = {}
 
     if skip_long_validation:
         if verbose:
-            print("阶段 7：跳过阀位漂移验证（Agent 模式）")
+            print("阶段 7：跳过阀位漂移验证（快速诊断模式，drift_pass=False）")
             print()
     else:
         if verbose:
@@ -1177,6 +1256,29 @@ def generate_reference_state(
                 f"阀位模式漂移门禁失败: {drift}"
             )
 
+    # 修复指令 §4.2：快速模式不得写参考状态文件
+    if skip_long_validation:
+        if verbose:
+            print("阶段 8：跳过原子写盘（快速诊断模式，passed=False）")
+            print()
+        return {
+            "passed": False,
+            "validation_skipped": True,
+            "solver_passed": True,
+            "mode_equivalence_passed": bool(eq_pass),
+            "convergence_window_cycles": int(convergence_window_count),
+            "drift_passed": bool(drift_pass),
+            "final_F_kgmol_per_s": float(op.feed_flow_kgmol_per_s),
+            "final_D_kgmol_per_s": float(op.distillate_flow_kgmol_per_s),
+            "final_B_kgmol_per_s": float(op.bottoms_flow_kgmol_per_s),
+            "final_R_kgmol_per_s": float(op.reflux_flow_kgmol_per_s),
+            "final_steam_kg_h": float(op.steam_flow_kg_h),
+            "final_cooling_kg_h": float(op.cooling_flow_kg_h),
+            "final_reflux_ratio": float(
+                op.reflux_flow_kgmol_per_s / max(op.distillate_flow_kgmol_per_s, 1e-15)
+            ),
+        }
+
     # ===== 阶段 8：原子写入正式 JSON =====
     if verbose:
         print("阶段 8：原子写入正式 JSON")
@@ -1232,7 +1334,7 @@ def generate_reference_state(
         "bottom_ethanol_wt": float(final_metrics.get("bottom_ethanol_wt", col.bottom_ethanol_wt)) if final_metrics else float(col.bottom_ethanol_wt),
         "ethanol_recovery_pct": float(final_metrics.get("ethanol_recovery_pct", 0.0)) if final_metrics else 0.0,
         "drift": drift,
-        "drift_passed": bool(drift_pass) if drift else bool(skip_long_validation),
+        "drift_passed": bool(drift_pass),
         "mode_equivalence_passed": bool(eq_pass),
         "convergence_window_cycles": int(convergence_window_count),
         "generation_time_s": float(time.time() - t_start),

@@ -2521,3 +2521,471 @@ def test_failed_generation_does_not_replace_existing_reference_file(tmp_path):
         # 恢复原始函数
         gen_mod.generate_reference_state = original_generate
 
+
+# ====================================================================
+# todo/6.md §9.1 — check_convergence 拒绝 NaN/Inf
+# ====================================================================
+def test_check_convergence_rejects_nan_and_inf():
+    """
+    构造一份其余指标全部合格的字典，依次把每个必需字段设置为
+    NaN / +Inf / -Inf，断言 check_convergence(metrics) is False。
+    """
+    import math as _math
+    import tools.generate_ethanol_water_reference_state as gen_mod
+
+    # 一份合格基线
+    base_metrics = {
+        "max_abs_dM_tray_dt": 1e-9,
+        "max_abs_dnE_tray_dt": 1e-10,
+        "abs_dM_drum_dt": 1e-9,
+        "abs_dM_sump_dt": 1e-9,
+        "abs_dN_vapor_dt": 1e-10,
+        "abs_dP_top_dt": 1e-5,
+        "max_abs_dT_dt": 1e-5,
+        "drum_level_pct": 50.0,
+        "sump_level_pct": 50.0,
+        "top_pressure_kpa": 101.325,
+        "top_ethanol_wt": 0.85,
+        "bottom_ethanol_wt": 0.015,
+        "ethanol_recovery_pct": 95.69,
+        "mass_residual_rel": 1e-5,
+        "ethanol_residual_rel": 1e-5,
+        "energy_residual_rel": 1e-5,
+    }
+
+    # 先确认基线通过
+    assert gen_mod.check_convergence(base_metrics) is True, "基线 metrics 必须通过"
+
+    bad_values = [
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+    ]
+
+    # 覆盖所有 16 个必需字段（含状态导数、压力、组成、回收率、三项守恒残差）
+    for key in list(base_metrics.keys()):
+        for bad in bad_values:
+            m = dict(base_metrics)
+            m[key] = bad
+            assert gen_mod.check_convergence(m) is False, (
+                f"check_convergence 应拒绝 {key}={bad}（NaN/Inf 必须被门禁捕获）"
+            )
+
+    # 字段缺失也必须拒绝
+    for key in list(base_metrics.keys()):
+        m = dict(base_metrics)
+        del m[key]
+        assert gen_mod.check_convergence(m) is False, (
+            f"check_convergence 应拒绝缺失字段 {key}"
+        )
+
+    # 非数值类型（字符串）必须拒绝，不能依赖 float() 抛错绕过
+    for key in list(base_metrics.keys()):
+        m = dict(base_metrics)
+        m[key] = "not_a_number"
+        assert gen_mod.check_convergence(m) is False, (
+            f"check_convergence 应拒绝非数值字段 {key}='not_a_number'"
+        )
+
+
+# ====================================================================
+# todo/6.md §9.2 — 快速模式不得通过或写盘
+# ====================================================================
+def test_skip_long_validation_never_passes_or_writes_reference(tmp_path):
+    """
+    skip_long_validation=True 时：
+        - 返回 passed=False
+        - validation_skipped=True
+        - convergence_window_cycles=0
+        - drift_passed=False
+        - 输出文件不存在
+        - 如已有 sentinel 文件，内容保持不变
+    """
+    import tools.generate_ethanol_water_reference_state as gen_mod
+
+    # 临时输出路径
+    output_path = tmp_path / "ethanol_water_reference_state.json"
+
+    # 先放一个 sentinel 文件，确保不被覆盖
+    sentinel_content = "pre_existing_sentinel"
+    output_path.write_text(sentinel_content, encoding="utf-8")
+
+    # 调用快速模式
+    result = gen_mod.generate_reference_state(
+        output_path=str(output_path),
+        verbose=False,
+        skip_long_validation=True,
+    )
+
+    # 断言返回结构
+    assert isinstance(result, dict), f"返回值应为 dict，实际 {type(result).__name__}"
+    assert result.get("passed") is False, (
+        f"快速模式 passed 必须为 False，实际 {result.get('passed')!r}"
+    )
+    assert result.get("validation_skipped") is True, (
+        f"快速模式 validation_skipped 必须为 True，实际 {result.get('validation_skipped')!r}"
+    )
+    assert result.get("convergence_window_cycles") == 0, (
+        f"快速模式 convergence_window_cycles 必须为 0，实际 {result.get('convergence_window_cycles')!r}"
+    )
+    assert result.get("drift_passed") is False, (
+        f"快速模式 drift_passed 必须为 False，实际 {result.get('drift_passed')!r}"
+    )
+
+    # sentinel 文件内容必须未变
+    content_after = output_path.read_text(encoding="utf-8")
+    assert content_after == sentinel_content, (
+        f"快速模式覆盖了已有文件！期望 '{sentinel_content}', 实际 '{content_after}'"
+    )
+
+    # 不应有 .tmp 半成品文件
+    tmp_files = list(tmp_path.glob("*.tmp"))
+    assert len(tmp_files) == 0, f"快速模式不应生成 .tmp 半成品文件: {tmp_files}"
+
+
+# ====================================================================
+# todo/6.md §9.3 — 求解器正状态但残差超限仍应失败
+# ====================================================================
+def test_solver_positive_status_with_bad_residual_is_rejected():
+    """
+    构造假的 result 对象：
+        - status=1（正状态）
+        - x 全部有限
+        - fun 中存在 1.01（超过 1.0 阈值）
+    断言抛出 ReferenceStateGenerationError。
+
+    再分别测试 x 中 NaN、fun 中 NaN、fun 中 Inf。
+    """
+    from dataclasses import dataclass
+    import numpy as np
+    import tools.generate_ethanol_water_reference_state as gen_mod
+
+    @dataclass
+    class _FakeResult:
+        fun: np.ndarray
+        x: np.ndarray
+        status: int = 1
+        message: str = "fake"
+        nfev: int = 10
+        cost: float = 1.0
+        optimality: float = 1.0
+
+    # Case 1: max residual > 1.0
+    result_bad_residual = _FakeResult(
+        fun=np.array([0.5, 0.3, 1.01, 0.2, 0.1] * 10 + [0.4], dtype=np.float64),
+        x=np.linspace(0, 1, 51),
+    )
+    with pytest.raises(gen_mod.ReferenceStateGenerationError, match="最大缩放残差超限"):
+        gen_mod.validate_solver_result(result_bad_residual)
+
+    # Case 2: x 中存在 NaN
+    x_nan = np.linspace(0, 1, 51)
+    x_nan[3] = float("nan")
+    result_x_nan = _FakeResult(
+        fun=np.zeros(51, dtype=np.float64),
+        x=x_nan,
+    )
+    with pytest.raises(gen_mod.ReferenceStateGenerationError, match="解向量包含 NaN/Inf"):
+        gen_mod.validate_solver_result(result_x_nan)
+
+    # Case 3: fun 中存在 NaN
+    fun_nan = np.zeros(51, dtype=np.float64)
+    fun_nan[7] = float("nan")
+    result_fun_nan = _FakeResult(
+        fun=fun_nan,
+        x=np.linspace(0, 1, 51),
+    )
+    with pytest.raises(gen_mod.ReferenceStateGenerationError, match="残差包含 NaN/Inf"):
+        gen_mod.validate_solver_result(result_fun_nan)
+
+    # Case 4: fun 中存在 Inf
+    fun_inf = np.zeros(51, dtype=np.float64)
+    fun_inf[11] = float("inf")
+    result_fun_inf = _FakeResult(
+        fun=fun_inf,
+        x=np.linspace(0, 1, 51),
+    )
+    with pytest.raises(gen_mod.ReferenceStateGenerationError, match="残差包含 NaN/Inf"):
+        gen_mod.validate_solver_result(result_fun_inf)
+
+    # Case 5: status <= 0
+    result_status_zero = _FakeResult(
+        fun=np.zeros(51, dtype=np.float64),
+        x=np.linspace(0, 1, 51),
+        status=0,
+    )
+    with pytest.raises(gen_mod.ReferenceStateGenerationError, match="求解失败"):
+        gen_mod.validate_solver_result(result_status_zero)
+
+    # 合法 result 必须通过
+    result_ok = _FakeResult(
+        fun=np.full(51, 0.5, dtype=np.float64),
+        x=np.linspace(0, 1, 51),
+    )
+    gen_mod.validate_solver_result(result_ok)  # 不抛异常即通过
+
+
+# ====================================================================
+# todo/6.md §9.4 — 严格加载器拒绝未完整验收文件
+# ====================================================================
+def _build_minimal_valid_reference_state(col) -> dict:
+    """构造一份结构完整的合格参考状态，用于 §9.4 / §9.5 测试基线。"""
+    import copy
+    state = col.save_state()
+    # save_state 返回的可能不包含 metadata/convergence，这里补齐最小完整结构
+    state.setdefault("metadata", {})
+    state["metadata"].update({
+        "model_name": "ETHANOL_WATER_DISTILLATION",
+        "used_direct_vapor_bypass": False,
+        "skip_long_validation": False,
+        "solver_status": 3,
+        "solver_cost": 1.0e-6,
+        "solver_optimality": 1.0e-8,
+        "solver_max_residual": 0.1,
+    })
+    state.setdefault("convergence", {})
+    state["convergence"].update({
+        "passed": True,
+        "mode_equivalence_passed": True,
+        "drift_passed": True,
+        "convergence_window_cycles": 3600,
+        "max_abs_dM_tray_dt": 1e-9,
+        "max_abs_dnE_tray_dt": 1e-10,
+        "abs_dM_drum_dt": 1e-9,
+        "abs_dM_sump_dt": 1e-9,
+        "abs_dN_vapor_dt": 1e-10,
+        "abs_dP_top_dt": 1e-5,
+        "max_abs_dT_dt": 1e-5,
+        "mass_residual_rel": 1e-5,
+        "ethanol_residual_rel": 1e-5,
+        "energy_residual_rel": 1e-5,
+        "drum_level_pct": 50.0,
+        "sump_level_pct": 50.0,
+        "top_pressure_kpa": 101.325,
+        "top_ethanol_wt": 0.85,
+        "bottom_ethanol_wt": 0.015,
+        "ethanol_recovery_pct": 95.69,
+        "drift": {
+            "pressure_drift_kpa": 0.01,
+            "drum_level_drift_pct": 0.1,
+            "sump_level_drift_pct": 0.1,
+            "top_temp_drift_c": 0.02,
+            "bottom_temp_drift_c": 0.02,
+            "top_x_drift": 0.0001,
+            "bottom_x_drift": 0.00005,
+        },
+    })
+    return state
+
+
+def test_strict_steady_loader_rejects_unvalidated_reference(tmp_path):
+    """
+    基于一份结构完整的合格参考状态，分别破坏各项门禁，断言 STEADY 模式构造时抛出 ValueError。
+    覆盖 todo/6.md §9.4 全部场景。
+    """
+    import copy
+    import json
+
+    # 用 WARM_GUESS 构造一个实例作为状态基线
+    col_baseline = _make_column()
+    base_state = _build_minimal_valid_reference_state(col_baseline)
+
+    # 写到临时文件，测试时通过 reference_state_file 参数指向它
+    ref_file = tmp_path / "ref.json"
+
+    def _write_and_load(state_mutated: dict, expect_error: bool = True):
+        """写入文件并尝试用 STEADY 模式加载。"""
+        ref_file.write_text(json.dumps(state_mutated), encoding="utf-8")
+        # 通过 reference_state_file 参数指向临时文件
+        params = dict(
+            cycle_time=0.5,
+            top_pressure_kpa=101.325,
+            pressure_drop_per_stage_kpa=0.3,
+            m_tray_nom_kmol=0.15,
+            m_drum_nom_kmol=0.5,
+            m_sump_nom_kmol=1.5,
+            m_drum_max_kmol=1.0,
+            m_sump_max_kmol=3.0,
+            feed_flow_kgmol_per_s=0.001307,
+            distillate_flow_kgmol_per_s=0.000209,
+            bottoms_flow_kgmol_per_s=0.001098,
+            reflux_flow_kgmol_per_s=0.000625,
+            vapor_boilup_kgmol_per_s=0.000834,
+            feed_ethanol_wt=0.25,
+            feed_temperature_c=60.0,
+            max_internal_step=0.05,
+            initialization_mode="STEADY",
+            reference_state_file=str(ref_file),
+            random_seed=20260719,
+        )
+        if expect_error:
+            with pytest.raises(ValueError):
+                ETHANOL_WATER_DISTILLATION(**params)
+        else:
+            # 不期望错误：构造应成功
+            return ETHANOL_WATER_DISTILLATION(**params)
+
+    # 基线应能成功加载（不抛错）
+    _write_and_load(copy.deepcopy(base_state), expect_error=False)
+
+    # Case 1: metadata.used_direct_vapor_bypass = True
+    s = copy.deepcopy(base_state)
+    s["metadata"]["used_direct_vapor_bypass"] = True
+    _write_and_load(s)
+
+    # Case 2: metadata.skip_long_validation = True
+    s = copy.deepcopy(base_state)
+    s["metadata"]["skip_long_validation"] = True
+    _write_and_load(s)
+
+    # Case 3: 删除 metadata.skip_long_validation
+    s = copy.deepcopy(base_state)
+    del s["metadata"]["skip_long_validation"]
+    _write_and_load(s)
+
+    # Case 4: metadata.solver_status = 0
+    s = copy.deepcopy(base_state)
+    s["metadata"]["solver_status"] = 0
+    _write_and_load(s)
+
+    # Case 5: metadata.solver_max_residual = 1.01
+    s = copy.deepcopy(base_state)
+    s["metadata"]["solver_max_residual"] = 1.01
+    _write_and_load(s)
+
+    # Case 6: convergence.mode_equivalence_passed = False
+    s = copy.deepcopy(base_state)
+    s["convergence"]["mode_equivalence_passed"] = False
+    _write_and_load(s)
+
+    # Case 7: convergence.drift_passed = False
+    s = copy.deepcopy(base_state)
+    s["convergence"]["drift_passed"] = False
+    _write_and_load(s)
+
+    # Case 8: convergence.convergence_window_cycles = 3599
+    s = copy.deepcopy(base_state)
+    s["convergence"]["convergence_window_cycles"] = 3599
+    _write_and_load(s)
+
+    # Case 9: convergence.ethanol_residual_rel = 0.00201（超阈值）
+    s = copy.deepcopy(base_state)
+    s["convergence"]["ethanol_residual_rel"] = 0.00201
+    _write_and_load(s)
+
+    # Case 10: 任一必需指标 = NaN
+    s = copy.deepcopy(base_state)
+    s["convergence"]["max_abs_dM_tray_dt"] = float("nan")
+    _write_and_load(s)
+
+    # Case 11: 任一漂移指标超限
+    s = copy.deepcopy(base_state)
+    s["convergence"]["drift"]["pressure_drift_kpa"] = 0.11  # 超 0.10
+    _write_and_load(s)
+
+    # Case 12: passed = False（字符串 "true" 不应被接受）
+    s = copy.deepcopy(base_state)
+    s["convergence"]["passed"] = "true"  # 字符串，不是 bool
+    _write_and_load(s)
+
+
+# ====================================================================
+# todo/6.md §9.5 — 严格加载器拒绝坏状态
+# ====================================================================
+def test_strict_steady_loader_rejects_invalid_state_shape_or_value(tmp_path):
+    """
+    覆盖状态数组长度异常、NaN、基本物理关系违反等场景。
+    """
+    import copy
+    import json
+
+    col_baseline = _make_column()
+    base_state = _build_minimal_valid_reference_state(col_baseline)
+
+    ref_file = tmp_path / "ref_bad_state.json"
+
+    def _write_and_load(state_mutated: dict):
+        ref_file.write_text(json.dumps(state_mutated), encoding="utf-8")
+        params = dict(
+            cycle_time=0.5,
+            top_pressure_kpa=101.325,
+            pressure_drop_per_stage_kpa=0.3,
+            m_tray_nom_kmol=0.15,
+            m_drum_nom_kmol=0.5,
+            m_sump_nom_kmol=1.5,
+            m_drum_max_kmol=1.0,
+            m_sump_max_kmol=3.0,
+            feed_flow_kgmol_per_s=0.001307,
+            distillate_flow_kgmol_per_s=0.000209,
+            bottoms_flow_kgmol_per_s=0.001098,
+            reflux_flow_kgmol_per_s=0.000625,
+            vapor_boilup_kgmol_per_s=0.000834,
+            feed_ethanol_wt=0.25,
+            feed_temperature_c=60.0,
+            max_internal_step=0.05,
+            initialization_mode="STEADY",
+            reference_state_file=str(ref_file),
+            random_seed=20260719,
+        )
+        with pytest.raises(ValueError):
+            ETHANOL_WATER_DISTILLATION(**params)
+
+    # Case 1: M_tray 长度为 11
+    s = copy.deepcopy(base_state)
+    s["M_tray"] = list(s["M_tray"])[:11]
+    _write_and_load(s)
+
+    # Case 2: M_tray 包含 NaN
+    s = copy.deepcopy(base_state)
+    m_list = list(s["M_tray"])
+    m_list[3] = float("nan")
+    s["M_tray"] = m_list
+    _write_and_load(s)
+
+    # Case 3: nE_tray > M_tray（违反 0 <= nE <= M）
+    s = copy.deepcopy(base_state)
+    m_list = list(s["M_tray"])
+    ne_list = list(s["nE_tray"])
+    ne_list[5] = float(m_list[5]) * 1.5  # nE > M
+    s["nE_tray"] = ne_list
+    _write_and_load(s)
+
+    # Case 4: N_vapor <= 0
+    s = copy.deepcopy(base_state)
+    s["N_vapor"] = 0.0
+    _write_and_load(s)
+
+    # Case 5: p_top_kpa < 70
+    s = copy.deepcopy(base_state)
+    s["p_top_kpa"] = 60.0
+    _write_and_load(s)
+
+    # Case 6: M_drum <= 0
+    s = copy.deepcopy(base_state)
+    s["M_drum"] = -0.1
+    _write_and_load(s)
+
+    # Case 7: yE_tray 中存在 > 1
+    s = copy.deepcopy(base_state)
+    ye_list = list(s["yE_tray"])
+    ye_list[2] = 1.5
+    s["yE_tray"] = ye_list
+    _write_and_load(s)
+
+    # Case 8: pressure_kpa 含负数
+    s = copy.deepcopy(base_state)
+    p_list = list(s["pressure_kpa"])
+    p_list[7] = -1.0
+    s["pressure_kpa"] = p_list
+    _write_and_load(s)
+
+    # Case 9: 缺少 state.M_sump
+    s = copy.deepcopy(base_state)
+    del s["M_sump"]
+    _write_and_load(s)
+
+    # Case 10: 缺少 state.M_tray
+    s = copy.deepcopy(base_state)
+    del s["M_tray"]
+    _write_and_load(s)
+

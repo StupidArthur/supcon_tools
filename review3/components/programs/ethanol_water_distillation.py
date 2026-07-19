@@ -1084,19 +1084,38 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
     # ------------------------------------------------------------------
     def _load_steady_reference_state_strict(self) -> None:
         """
-        STEADY 模式：严格加载合格参考状态（todo/5.md §10.2 + 阶段 4.1）。
+        STEADY 模式：严格加载合格参考状态（todo/5.md §10.2 + 阶段 4.1 + todo/6.md §7）。
 
         严格语义：
         - 参考文件必须存在；
         - 参数哈希必须匹配；
-        - 文件必须包含 passed=True 标志；
-        - 收敛指标必须满足阈值。
+        - 版本必须匹配；
+        - 元数据门禁（todo/6.md §7.1）：
+            model_name == "ETHANOL_WATER_DISTILLATION"
+            used_direct_vapor_bypass is False（必须显式存在）
+            skip_long_validation is False（必须显式存在）
+            solver_status > 0
+            solver_max_residual <= 1.0
+            solver_cost / solver_optimality / solver_max_residual 必须为有限数
+        - 验收状态门禁（todo/6.md §7.2）：
+            convergence.passed is True
+            convergence.mode_equivalence_passed is True
+            convergence.drift_passed is True
+            convergence.convergence_window_cycles >= 3600
+        - 收敛指标门禁（todo/6.md §7.3）：全部 16 项
+        - 漂移指标门禁（todo/6.md §7.4）：全部 7 项
+        - 状态数组门禁（todo/6.md §7.5）：
+            M_tray / nE_tray / U_tray / T_tray / yE_tray / pressure_kpa
+            必须存在、一维、长度 12、全部有限、满足基本物理关系
+            13 个标量必须存在、有限、满足基本物理关系
 
         任何一项不满足都抛出 ValueError，不得静默回退到 warm_guess。
 
+        通用 load_state() 是运行时快照恢复接口，可保持宽松；正式 STEADY 必须走严格检查。
+
         Raises:
             FileNotFoundError: 参考稳态文件不存在。
-            ValueError: 哈希不匹配 / 版本不匹配 / 验收未通过 / 收敛指标超阈值。
+            ValueError: 任何门禁失败。
         """
         import json
         import os
@@ -1120,15 +1139,111 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 f"参考稳态文件读取失败: {e}"
             ) from e
 
-        # 校验文件元数据
+        # ----------------------------------------------------------------
+        # 局部辅助函数（todo/6.md §7.5）
+        # ----------------------------------------------------------------
+        def _require_finite_number(mapping, key, section):
+            if key not in mapping:
+                raise ValueError(
+                    f"参考稳态 {section} 缺少必需字段: {key}"
+                )
+            try:
+                value = float(mapping[key])
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"参考稳态 {section}.{key} 无法转换为数值: {mapping[key]!r}"
+                ) from e
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"参考稳态 {section}.{key} 非有限数: {value}"
+                )
+            return value
+
+        def _require_bool(mapping, key, expected, section):
+            if key not in mapping:
+                raise ValueError(
+                    f"参考稳态 {section} 缺少必需布尔字段: {key}"
+                )
+            value = mapping[key]
+            # 严格 isinstance(bool) 检查，拒绝字符串 "true" 等宽松真值
+            if not isinstance(value, bool):
+                raise ValueError(
+                    f"参考稳态 {section}.{key} 必须为 bool 类型，实际 {type(value).__name__}: {value!r}"
+                )
+            if value is not expected:
+                raise ValueError(
+                    f"参考稳态 {section}.{key} 必须为 {expected}，实际 {value}"
+                )
+            return value
+
+        def _require_finite_array(mapping, key, expected_len):
+            if key not in mapping:
+                raise ValueError(
+                    f"参考稳态状态缺少必需数组: {key}"
+                )
+            arr = mapping[key]
+            try:
+                arr_np = np.asarray(arr, dtype=np.float64)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"参考稳态状态数组 {key} 无法转换为 float64: {e}"
+                ) from e
+            if arr_np.ndim != 1:
+                raise ValueError(
+                    f"参考稳态状态数组 {key} 必须为一维，实际 ndim={arr_np.ndim}"
+                )
+            if arr_np.shape[0] != expected_len:
+                raise ValueError(
+                    f"参考稳态状态数组 {key} 长度必须为 {expected_len}，实际 {arr_np.shape[0]}"
+                )
+            if not np.all(np.isfinite(arr_np)):
+                bad_idx = np.where(~np.isfinite(arr_np))[0]
+                raise ValueError(
+                    f"参考稳态状态数组 {key} 包含 NaN/Inf，位置: {bad_idx.tolist()}"
+                )
+            return arr_np
+
+        # ----------------------------------------------------------------
+        # §7.1 元数据门禁
+        # ----------------------------------------------------------------
         metadata = state.get("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ValueError(
+                f"参考稳态 metadata 必须为字典，实际 {type(metadata).__name__}"
+            )
+
         expected_model = metadata.get("model_name", "")
         if expected_model != "ETHANOL_WATER_DISTILLATION":
             raise ValueError(
-                f"参考稳态文件 model_name 不匹配: 期望 ETHANOL_WATER_DISTILLATION，实际 {expected_model}"
+                f"参考稳态文件 model_name 不匹配: 期望 ETHANOL_WATER_DISTILLATION，实际 {expected_model!r}"
             )
 
-        # 校验参数哈希
+        # used_direct_vapor_bypass / skip_long_validation 必须显式存在且为 False
+        _require_bool(metadata, "used_direct_vapor_bypass", False, "metadata")
+        _require_bool(metadata, "skip_long_validation", False, "metadata")
+
+        # solver_status 必须为正
+        solver_status_raw = metadata.get("solver_status")
+        if not isinstance(solver_status_raw, (int, np.integer)):
+            raise ValueError(
+                f"参考稳态 metadata.solver_status 必须为整数，实际 {type(solver_status_raw).__name__}: {solver_status_raw!r}"
+            )
+        solver_status = int(solver_status_raw)
+        if solver_status <= 0:
+            raise ValueError(
+                f"参考稳态 metadata.solver_status 必须 > 0，实际 {solver_status}"
+            )
+
+        # solver_cost / solver_optimality / solver_max_residual 必须有限
+        solver_cost = _require_finite_number(metadata, "solver_cost", "metadata")
+        solver_optimality = _require_finite_number(metadata, "solver_optimality", "metadata")
+        solver_max_residual = _require_finite_number(metadata, "solver_max_residual", "metadata")
+        if solver_max_residual > 1.0:
+            raise ValueError(
+                f"参考稳态 metadata.solver_max_residual 必须 <= 1.0，实际 {solver_max_residual}"
+            )
+
+        # 参数哈希和版本（保留现有检查）
         file_hash = state.get("params_hash", "")
         current_hash = self._compute_params_hash()
         if file_hash != current_hash:
@@ -1137,7 +1252,6 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 f"请重新生成参考状态（运行 tools/generate_ethanol_water_reference_state.py）"
             )
 
-        # 校验版本
         file_version = state.get("version", "")
         if file_version != self.REFERENCE_STATE_VERSION:
             raise ValueError(
@@ -1145,34 +1259,182 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 f"请重新生成参考状态"
             )
 
-        # 校验 passed 标志（todo/5.md §10.2 + 阶段 4.1）
+        # ----------------------------------------------------------------
+        # §7.2 验收状态门禁
+        # ----------------------------------------------------------------
         convergence = state.get("convergence", {})
-        passed = convergence.get("passed", False)
-        if not passed:
+        if not isinstance(convergence, dict):
             raise ValueError(
-                f"参考稳态验收未通过（passed=False）\n"
-                f"收敛指标: {convergence}\n"
-                f"请重新生成参考状态"
+                f"参考稳态 convergence 必须为字典，实际 {type(convergence).__name__}"
             )
 
-        # 校验收敛指标阈值（todo/5.md §9.4）
-        mass_residual_rel = float(convergence.get("mass_residual_rel", 1.0))
-        ethanol_residual_rel = float(convergence.get("ethanol_residual_rel", 1.0))
-        energy_residual_rel = float(convergence.get("energy_residual_rel", 1.0))
-        if mass_residual_rel > 0.001:
+        _require_bool(convergence, "passed", True, "convergence")
+        _require_bool(convergence, "mode_equivalence_passed", True, "convergence")
+        _require_bool(convergence, "drift_passed", True, "convergence")
+
+        convergence_window_cycles_raw = convergence.get("convergence_window_cycles")
+        if not isinstance(convergence_window_cycles_raw, (int, np.integer)):
             raise ValueError(
-                f"参考稳态质量残差超阈值: {mass_residual_rel} > 0.001"
+                f"参考稳态 convergence.convergence_window_cycles 必须为整数，"
+                f"实际 {type(convergence_window_cycles_raw).__name__}: {convergence_window_cycles_raw!r}"
             )
-        if ethanol_residual_rel > 0.01:
+        convergence_window_cycles = int(convergence_window_cycles_raw)
+        if convergence_window_cycles < 3600:
             raise ValueError(
-                f"参考稳态乙醇残差超阈值: {ethanol_residual_rel} > 0.01"
-            )
-        if energy_residual_rel > 0.01:
-            raise ValueError(
-                f"参考稳态能量残差超阈值: {energy_residual_rel} > 0.01"
+                f"参考稳态 convergence.convergence_window_cycles 必须 >= 3600，实际 {convergence_window_cycles}"
             )
 
-        # 所有校验通过，加载状态
+        # ----------------------------------------------------------------
+        # §7.3 收敛指标门禁（16 项）
+        # ----------------------------------------------------------------
+        convergence_thresholds = [
+            ("max_abs_dM_tray_dt", 1e-8, "le"),
+            ("max_abs_dnE_tray_dt", 1e-9, "le"),
+            ("abs_dM_drum_dt", 1e-8, "le"),
+            ("abs_dM_sump_dt", 1e-8, "le"),
+            ("abs_dN_vapor_dt", 1e-9, "le"),
+            ("abs_dP_top_dt", 1e-4, "le"),
+            ("max_abs_dT_dt", 1e-4, "le"),
+            ("mass_residual_rel", 0.001, "le"),
+            ("ethanol_residual_rel", 0.002, "le"),
+            ("energy_residual_rel", 0.01, "le"),
+            ("ethanol_recovery_pct", 95.0, "ge"),
+        ]
+        for key, threshold, op in convergence_thresholds:
+            value = _require_finite_number(convergence, key, "convergence")
+            if op == "le" and value > threshold:
+                raise ValueError(
+                    f"参考稳态 convergence.{key} 超阈值: {value} > {threshold}"
+                )
+            if op == "ge" and value < threshold:
+                raise ValueError(
+                    f"参考稳态 convergence.{key} 低于阈值: {value} < {threshold}"
+                )
+
+        # 范围类指标
+        drum_level_pct = _require_finite_number(convergence, "drum_level_pct", "convergence")
+        sump_level_pct = _require_finite_number(convergence, "sump_level_pct", "convergence")
+        top_pressure_kpa = _require_finite_number(convergence, "top_pressure_kpa", "convergence")
+        top_ethanol_wt = _require_finite_number(convergence, "top_ethanol_wt", "convergence")
+        bottom_ethanol_wt = _require_finite_number(convergence, "bottom_ethanol_wt", "convergence")
+
+        if not (47.0 <= drum_level_pct <= 53.0):
+            raise ValueError(
+                f"参考稳态 convergence.drum_level_pct 超范围 [47, 53]: {drum_level_pct}"
+            )
+        if not (47.0 <= sump_level_pct <= 53.0):
+            raise ValueError(
+                f"参考稳态 convergence.sump_level_pct 超范围 [47, 53]: {sump_level_pct}"
+            )
+        if abs(top_pressure_kpa - 101.325) > 0.10:
+            raise ValueError(
+                f"参考稳态 convergence.top_pressure_kpa 偏离 101.325 超过 0.10 kPa: {top_pressure_kpa}"
+            )
+        if not (0.82 <= top_ethanol_wt <= 0.88):
+            raise ValueError(
+                f"参考稳态 convergence.top_ethanol_wt 超范围 [0.82, 0.88]: {top_ethanol_wt}"
+            )
+        if not (0.010 <= bottom_ethanol_wt <= 0.020):
+            raise ValueError(
+                f"参考稳态 convergence.bottom_ethanol_wt 超范围 [0.010, 0.020]: {bottom_ethanol_wt}"
+            )
+
+        # ----------------------------------------------------------------
+        # §7.4 漂移指标门禁（7 项）
+        # ----------------------------------------------------------------
+        drift = convergence.get("drift", {})
+        if not isinstance(drift, dict):
+            raise ValueError(
+                f"参考稳态 convergence.drift 必须为字典，实际 {type(drift).__name__}"
+            )
+
+        drift_thresholds = [
+            ("pressure_drift_kpa", 0.10),
+            ("drum_level_drift_pct", 1.0),
+            ("sump_level_drift_pct", 1.0),
+            ("top_temp_drift_c", 0.20),
+            ("bottom_temp_drift_c", 0.20),
+            ("top_x_drift", 0.003),
+            ("bottom_x_drift", 0.001),
+        ]
+        for key, threshold in drift_thresholds:
+            value = _require_finite_number(drift, key, "convergence.drift")
+            if value > threshold:
+                raise ValueError(
+                    f"参考稳态 convergence.drift.{key} 超阈值: {value} > {threshold}"
+                )
+
+        # ----------------------------------------------------------------
+        # §7.5 状态数组门禁
+        # ----------------------------------------------------------------
+        M_tray_arr = _require_finite_array(state, "M_tray", 12)
+        nE_tray_arr = _require_finite_array(state, "nE_tray", 12)
+        U_tray_arr = _require_finite_array(state, "U_tray", 12)
+        T_tray_arr = _require_finite_array(state, "T_tray", 12)
+        yE_tray_arr = _require_finite_array(state, "yE_tray", 12)
+        pressure_kpa_arr = _require_finite_array(state, "pressure_kpa", 12)
+
+        # 基本物理关系
+        if not np.all(M_tray_arr > 0):
+            bad_idx = np.where(M_tray_arr <= 0)[0]
+            raise ValueError(
+                f"参考稳态 M_tray 必须全部为正，违规位置: {bad_idx.tolist()}, 值: {M_tray_arr[bad_idx].tolist()}"
+            )
+        if not np.all((nE_tray_arr >= 0) & (nE_tray_arr <= M_tray_arr)):
+            bad_idx = np.where(~((nE_tray_arr >= 0) & (nE_tray_arr <= M_tray_arr)))[0]
+            raise ValueError(
+                f"参考稳态 nE_tray 必须 0 <= nE <= M，违规位置: {bad_idx.tolist()}"
+            )
+        if not np.all((yE_tray_arr >= 0) & (yE_tray_arr <= 1)):
+            bad_idx = np.where(~((yE_tray_arr >= 0) & (yE_tray_arr <= 1)))[0]
+            raise ValueError(
+                f"参考稳态 yE_tray 必须 0 <= yE <= 1，违规位置: {bad_idx.tolist()}"
+            )
+        if not np.all(pressure_kpa_arr > 0):
+            bad_idx = np.where(pressure_kpa_arr <= 0)[0]
+            raise ValueError(
+                f"参考稳态 pressure_kpa 必须全部为正，违规位置: {bad_idx.tolist()}"
+            )
+
+        # 13 个标量
+        M_drum = _require_finite_number(state, "M_drum", "state")
+        nE_drum = _require_finite_number(state, "nE_drum", "state")
+        U_drum = _require_finite_number(state, "U_drum", "state")
+        M_sump = _require_finite_number(state, "M_sump", "state")
+        nE_sump = _require_finite_number(state, "nE_sump", "state")
+        U_sump = _require_finite_number(state, "U_sump", "state")
+        N_vapor = _require_finite_number(state, "N_vapor", "state")
+        nE_vapor = _require_finite_number(state, "nE_vapor", "state")
+        U_vapor = _require_finite_number(state, "U_vapor", "state")
+        T_drum = _require_finite_number(state, "T_drum", "state")
+        T_sump = _require_finite_number(state, "T_sump", "state")
+        T_vapor = _require_finite_number(state, "T_vapor", "state")
+        p_top_kpa = _require_finite_number(state, "p_top_kpa", "state")
+        p_sump_kpa = _require_finite_number(state, "p_sump_kpa", "state")
+
+        # 基本物理关系
+        if M_drum <= 0:
+            raise ValueError(f"参考稳态 M_drum 必须为正，实际 {M_drum}")
+        if not (0 <= nE_drum <= M_drum):
+            raise ValueError(f"参考稳态 nE_drum 必须 0 <= nE <= M_drum，实际 nE={nE_drum}, M={M_drum}")
+        if M_sump <= 0:
+            raise ValueError(f"参考稳态 M_sump 必须为正，实际 {M_sump}")
+        if not (0 <= nE_sump <= M_sump):
+            raise ValueError(f"参考稳态 nE_sump 必须 0 <= nE <= M_sump，实际 nE={nE_sump}, M={M_sump}")
+        if N_vapor <= 0:
+            raise ValueError(f"参考稳态 N_vapor 必须为正，实际 {N_vapor}")
+        if not (0 <= nE_vapor <= N_vapor):
+            raise ValueError(f"参考稳态 nE_vapor 必须 0 <= nE <= N_vapor，实际 nE={nE_vapor}, N={N_vapor}")
+        if not (70 <= p_top_kpa <= 160):
+            raise ValueError(f"参考稳态 p_top_kpa 超范围 [70, 160]: {p_top_kpa}")
+        if p_sump_kpa < p_top_kpa:
+            raise ValueError(
+                f"参考稳态 p_sump_kpa 必须 >= p_top_kpa，实际 p_sump={p_sump_kpa}, p_top={p_top_kpa}"
+            )
+
+        # ----------------------------------------------------------------
+        # 所有关卡通过，加载状态
+        # ----------------------------------------------------------------
         try:
             self._set_full_state_dict(state)
         except ValueError as e:
@@ -1184,8 +1446,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._reference_state_loaded = True
         logger.info(
             f"参考稳态已加载（STEADY 严格模式）: {file_path}\n"
-            f"收敛指标: mass={mass_residual_rel:.2e}, ethanol={ethanol_residual_rel:.2e}, "
-            f"energy={energy_residual_rel:.2e}"
+            f"  solver: status={solver_status}, cost={solver_cost:.4e}, "
+            f"optimality={solver_optimality:.4e}, max_residual={solver_max_residual:.4e}\n"
+            f"  收敛: mass={convergence['mass_residual_rel']:.2e}, "
+            f"ethanol={convergence['ethanol_residual_rel']:.2e}, "
+            f"energy={convergence['energy_residual_rel']:.2e}\n"
+            f"  漂移: P={drift['pressure_drift_kpa']:.4f} kPa, "
+            f"drum={drift['drum_level_drift_pct']:.4f}%, sump={drift['sump_level_drift_pct']:.4f}%"
         )
 
     # ------------------------------------------------------------------
@@ -2782,7 +3049,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._initial_total_energy = float(state.get("initial_total_energy", 0.0))
 
         # 恢复 V_kgmol_per_s 和阀位模式标志（向后兼容）
-        self._V_kgmol_per_s = float(state.get("V_kgmol_per_s", self._last_vapor_boilup))
+        # 注意：不能用 self._last_vapor_boilup 作为默认值，因为 STEADY 模式 __init__
+        # 调用 _set_full_state_dict 时该属性尚未初始化（它在后面才从 state["last_vapor_boilup"]
+        # 恢复）。改用 state["last_vapor_boilup"] 作为回退，避免 AttributeError。
+        self._V_kgmol_per_s = float(state.get("V_kgmol_per_s", state.get("last_vapor_boilup", 0.0)))
         self._valve_mode_enabled = bool(state.get("valve_mode_enabled", False))
 
         # 恢复对外诊断残差（_publish_scalar_attributes 不重新计算这些）
@@ -2799,12 +3069,20 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self.energy_accumulation_kw = float(state.get("energy_accumulation_kw", 0.0))
 
         # 恢复阀门
-        for k, v_state in state["valves"].items():
-            self._valves[k].load_state_dict(v_state)
+        # 注意：STEADY 模式 __init__ 调用 _set_full_state_dict 时 _valves 尚未创建
+        # （它在 __init__ 后段才创建）。此时跳过阀门状态恢复，阀门将在 __init__ 后段
+        # 用基于已加载状态计算的初始开度创建。运行时 load_state() 路径下 _valves 已存在，
+        # 正常恢复。
+        if hasattr(self, "_valves") and "valves" in state:
+            for k, v_state in state["valves"].items():
+                if k in self._valves:
+                    self._valves[k].load_state_dict(v_state)
 
-        # 恢复分析仪
-        for k, a_state in state["analyzers"].items():
-            self._analyzers[k].load_state_dict(a_state)
+        # 恢复分析仪（同上：STEADY __init__ 路径下 _analyzers 尚未创建时跳过）
+        if hasattr(self, "_analyzers") and "analyzers" in state:
+            for k, a_state in state["analyzers"].items():
+                if k in self._analyzers:
+                    self._analyzers[k].load_state_dict(a_state)
 
         # 恢复工况参数
         self._feed_ethanol_wt = float(state["feed_ethanol_wt"])
@@ -2817,17 +3095,21 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._last_vapor_boilup = float(state["last_vapor_boilup"])
 
         # 阶段 1：恢复公用工程状态（向后兼容：旧版无此键时使用 __init__ 值）
+        # 注意：用 getattr(self, "_xxx", default) 而非 self._xxx 作为 .get() 默认值，
+        # 因为 STEADY 模式 __init__ 调用 _set_full_state_dict 时这些属性尚未初始化
+        # （Python 会先求值 .get() 的默认参数，导致 AttributeError）。
+        # STEADY 路径下这些值会在 __init__ 后段被覆盖，这里仅运行时 load_state() 路径需要回退。
         self._cooling_water_temperature_c = float(
-            state.get("cooling_water_temperature_c", self._cooling_water_temperature_c)
+            state.get("cooling_water_temperature_c", getattr(self, "_cooling_water_temperature_c", 25.0))
         )
         self._steam_supply_pressure_kpa = float(
-            state.get("steam_supply_pressure_kpa", self._steam_supply_pressure_kpa)
+            state.get("steam_supply_pressure_kpa", getattr(self, "_steam_supply_pressure_kpa", 300.0))
         )
         self._last_steam_flow_kg_per_h = float(
-            state.get("last_steam_flow_kg_per_h", self._last_steam_flow_kg_per_h)
+            state.get("last_steam_flow_kg_per_h", getattr(self, "_last_steam_flow_kg_per_h", 0.0))
         )
         self._last_cooling_flow_kg_per_h = float(
-            state.get("last_cooling_flow_kg_per_h", self._last_cooling_flow_kg_per_h)
+            state.get("last_cooling_flow_kg_per_h", getattr(self, "_last_cooling_flow_kg_per_h", 0.0))
         )
 
         # 恢复守恒诊断累计
