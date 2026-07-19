@@ -553,7 +553,14 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._ambient_temperature_k = float(self.ambient_temperature_c) + 273.15
 
         # 初始化状态
-        self._load_or_build_initial_state()
+        # 注意：STEADY 模式此时只走 WARM_GUESS 完成对象构造，正式参考状态加载
+        # 在 __init__ 末尾（阀门/分析仪/参考状态标志全部创建后）执行，避免被覆盖。
+        # 参见 todo/6.md §1-§2（STEADY 初始化顺序修复）。
+        _init_mode = str(self.initialization_mode).upper()
+        if _init_mode == "STEADY":
+            self._build_warm_guess_initial_state()
+        else:
+            self._load_or_build_initial_state()
 
         # 数值积分参数
         self._max_internal_step = float(self.max_internal_step)
@@ -706,6 +713,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._params_hash_snapshot: Dict[str, Any] = {
             key: getattr(self, key) for key in self._PARAMS_HASH_KEYS
         }
+
+        # STEADY 模式：所有运行时对象（阀门/分析仪/参考状态标志/参数哈希快照）创建完毕后，
+        # 加载正式参考状态。此时 _set_full_state_dict 能正常恢复阀门和分析仪状态，
+        # _reference_state_path/_loaded 也不会被后续 __init__ 操作覆盖。
+        # 参见 todo/6.md §2（STEADY 初始化顺序修复）。
+        if _init_mode == "STEADY":
+            self._load_steady_reference_state_strict()
 
         # 对外位号初值
         self._publish_scalar_attributes()

@@ -1289,9 +1289,9 @@ def generate_reference_state(
     state = col._get_full_state_dict()
 
     convergence_pass = bool(
-        (skip_long_validation or convergence_window_count >= convergence_window_required)
+        convergence_window_count >= convergence_window_required
         and eq_pass
-        and (skip_long_validation or drift_pass)
+        and drift_pass
     )
 
     state["metadata"] = {

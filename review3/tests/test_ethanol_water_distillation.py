@@ -2989,3 +2989,193 @@ def test_strict_steady_loader_rejects_invalid_state_shape_or_value(tmp_path):
     del s["M_tray"]
     _write_and_load(s)
 
+
+# ====================================================================
+# todo/6.md §3 — STEADY 初始化顺序修复回归测试
+# ====================================================================
+def test_steady_initialization_restores_complete_reference_state(tmp_path):
+    """
+    断言 STEADY 模式构造后：
+    - _reference_state_loaded is True
+    - _reference_state_path == 实际绝对路径
+    - 六个阀门的 command_pct / actual_pct 与参考文件一致
+    - 两个分析仪状态与参考文件一致
+    - M_tray / nE_tray / U_tray 与参考文件一致
+    - last_F/R/D/B 与参考文件一致
+    - last_steam_flow_kg_per_h / last_cooling_flow_kg_per_h 与参考文件一致
+
+    本测试专门捕获"核心状态加载了，但阀门/分析仪/加载标志被后续 __init__
+    操作覆盖"的回归（todo/6.md §1-§2）。
+    """
+    import copy
+    import json
+
+    # 1. 构造合法基线参考状态
+    col_baseline = _make_column()
+    base_state = _build_minimal_valid_reference_state(col_baseline)
+
+    # 2. 把阀门状态改成明显不同于构造参数初猜的值
+    #    构造参数初猜（_compute_initial_valve_pct）约为：
+    #    feed ~88%, reflux ~84%, distillate ~56%, bottoms ~60%, steam ~86%, cooling ~50%
+    #    这里改成明显不同的值，确保测试能捕获"阀门被重置回初猜"的回归。
+    sentinel_valve_values = {
+        "feed":       (43.23, 43.23),
+        "reflux":     (43.23, 43.23),
+        "distillate": (37.50, 37.50),
+        "bottoms":    (45.67, 45.67),
+        "steam":      (70.59, 70.59),
+        "cooling":    (56.02, 56.02),
+    }
+    s = copy.deepcopy(base_state)
+    s.setdefault("valves", {})
+    for name, (cmd, act) in sentinel_valve_values.items():
+        s["valves"][name] = {
+            "command_pct": float(cmd),
+            "actual_pct": float(act),
+        }
+
+    # 3. 修改分析仪状态为明显不同于初猜的值
+    sentinel_analyzer_top = {
+        "lagged_value": 0.777,
+        "output": 0.777,
+        "time_since_last_sample": 0.123,
+        "total_time": 4.567,
+        "delay_buffer": [[0.1, 0.777], [0.2, 0.777]],
+        "rng_state": s["analyzers"]["top"]["rng_state"],  # 保持原 RNG 状态
+    }
+    sentinel_analyzer_bottom = {
+        "lagged_value": 0.033,
+        "output": 0.033,
+        "time_since_last_sample": 0.234,
+        "total_time": 5.678,
+        "delay_buffer": [[0.3, 0.033], [0.4, 0.033]],
+        "rng_state": s["analyzers"]["bottom"]["rng_state"],
+    }
+    s["analyzers"]["top"] = sentinel_analyzer_top
+    s["analyzers"]["bottom"] = sentinel_analyzer_bottom
+
+    # 4. 修改核心塔状态为明显不同于 WARM_GUESS 初猜的值
+    #    M_tray 标称 0.15 kmol，改为 0.123 kmol
+    s["M_tray"] = [0.123] * 12
+    #    nE_tray 保持物理合理（< M_tray）
+    s["nE_tray"] = [0.05] * 12
+    #    U_tray 改为非零值
+    s["U_tray"] = [1000.0] * 12
+
+    # 5. 修改 last flow 为明显不同于构造参数的值
+    s["last_feed_flow"] = 0.000999
+    s["last_reflux_flow"] = 0.000555
+    s["last_distillate_flow"] = 0.000111
+    s["last_bottoms_flow"] = 0.000888
+    s["last_vapor_boilup"] = 0.000777
+
+    # 6. 修改公用工程流量为明显不同于初猜的值
+    #    构造参数初猜：steam ~60.47 kg/h, cooling ~3500 kg/h
+    s["last_steam_flow_kg_per_h"] = 99.99
+    s["last_cooling_flow_kg_per_h"] = 8888.88
+
+    # 7. 写入文件并用 STEADY 模式构造
+    ref_file = tmp_path / "ref_steady_order.json"
+    ref_file.write_text(json.dumps(s), encoding="utf-8")
+
+    params = dict(
+        cycle_time=0.5,
+        top_pressure_kpa=101.325,
+        pressure_drop_per_stage_kpa=0.3,
+        m_tray_nom_kmol=0.15,
+        m_drum_nom_kmol=0.5,
+        m_sump_nom_kmol=1.5,
+        m_drum_max_kmol=1.0,
+        m_sump_max_kmol=3.0,
+        feed_flow_kgmol_per_s=0.001307,
+        distillate_flow_kgmol_per_s=0.000209,
+        bottoms_flow_kgmol_per_s=0.001098,
+        reflux_flow_kgmol_per_s=0.000625,
+        vapor_boilup_kgmol_per_s=0.000834,
+        feed_ethanol_wt=0.25,
+        feed_temperature_c=60.0,
+        max_internal_step=0.05,
+        initialization_mode="STEADY",
+        reference_state_file=str(ref_file),
+        random_seed=20260719,
+    )
+    col = ETHANOL_WATER_DISTILLATION(**params)
+
+    # 8. 断言加载标志
+    assert col._reference_state_loaded is True, (
+        "STEADY 加载后 _reference_state_loaded 必须为 True，"
+        "说明 __init__ 后段重置了加载标志（todo/6.md §1 根因）"
+    )
+    assert col._reference_state_path == str(ref_file), (
+        f"STEADY 加载后 _reference_state_path 必须为实际路径，"
+        f"实际 {col._reference_state_path!r}"
+    )
+
+    # 9. 断言阀门状态完整恢复
+    for name, (cmd_expected, act_expected) in sentinel_valve_values.items():
+        v = col._valves[name]
+        assert v.command_pct == cmd_expected, (
+            f"阀门 {name} command_pct 未恢复: 期望 {cmd_expected}, "
+            f"实际 {v.command_pct}（todo/6.md §1 阀门被 __init__ 重建覆盖）"
+        )
+        assert v.actual_pct == act_expected, (
+            f"阀门 {name} actual_pct 未恢复: 期望 {act_expected}, "
+            f"实际 {v.actual_pct}"
+        )
+
+    # 10. 断言分析仪状态完整恢复
+    for name, expected in [("top", sentinel_analyzer_top), ("bottom", sentinel_analyzer_bottom)]:
+        a = col._analyzers[name]
+        assert a._lagged_value == expected["lagged_value"], (
+            f"分析仪 {name} lagged_value 未恢复: 期望 {expected['lagged_value']}, "
+            f"实际 {a._lagged_value}"
+        )
+        assert a.output == expected["output"], (
+            f"分析仪 {name} output 未恢复: 期望 {expected['output']}, 实际 {a.output}"
+        )
+        assert a._time_since_last_sample == expected["time_since_last_sample"], (
+            f"分析仪 {name} time_since_last_sample 未恢复"
+        )
+        assert a._total_time == expected["total_time"], (
+            f"分析仪 {name} total_time 未恢复"
+        )
+
+    # 11. 断言核心塔状态完整恢复
+    for i in range(12):
+        assert col._M_tray[i] == 0.123, (
+            f"塔板 {i+1} M_tray 未恢复: 期望 0.123, 实际 {col._M_tray[i]}"
+        )
+        assert col._nE_tray[i] == 0.05, (
+            f"塔板 {i+1} nE_tray 未恢复: 期望 0.05, 实际 {col._nE_tray[i]}"
+        )
+        assert col._U_tray[i] == 1000.0, (
+            f"塔板 {i+1} U_tray 未恢复: 期望 1000.0, 实际 {col._U_tray[i]}"
+        )
+
+    # 12. 断言 last flow 完整恢复
+    assert col._last_feed_flow == 0.000999, (
+        f"last_feed_flow 未恢复: 期望 0.000999, 实际 {col._last_feed_flow}"
+    )
+    assert col._last_reflux_flow == 0.000555, (
+        f"last_reflux_flow 未恢复: 期望 0.000555, 实际 {col._last_reflux_flow}"
+    )
+    assert col._last_distillate_flow == 0.000111, (
+        f"last_distillate_flow 未恢复: 期望 0.000111, 实际 {col._last_distillate_flow}"
+    )
+    assert col._last_bottoms_flow == 0.000888, (
+        f"last_bottoms_flow 未恢复: 期望 0.000888, 实际 {col._last_bottoms_flow}"
+    )
+    assert col._last_vapor_boilup == 0.000777, (
+        f"last_vapor_boilup 未恢复: 期望 0.000777, 实际 {col._last_vapor_boilup}"
+    )
+
+    # 13. 断言公用工程流量完整恢复
+    assert col._last_steam_flow_kg_per_h == 99.99, (
+        f"last_steam_flow_kg_per_h 未恢复: 期望 99.99, "
+        f"实际 {col._last_steam_flow_kg_per_h}"
+    )
+    assert col._last_cooling_flow_kg_per_h == 8888.88, (
+        f"last_cooling_flow_kg_per_h 未恢复: 期望 8888.88, "
+        f"实际 {col._last_cooling_flow_kg_per_h}"
+    )
+
