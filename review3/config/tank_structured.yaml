@@ -1,3 +1,6 @@
+# 单水箱 PID 液位控制（结构化 DSL 语法）
+# 拓扑：水源 → 调节阀 → 单水箱 → 排水；PID 控制 tank_1.level → SV=0.8m
+# 物理参数：水箱容量约 151L，出水口等效直径约 11.3mm，稳态阀门开度约 39.6%
 clock:
   mode: REALTIME
   cycle_time: 0.5
@@ -5,45 +8,62 @@ clock:
 program:
   - name: source_flow
     type: Variable
-    value: 0.18
+    value: 0.001
     display_args: []
 
   - name: valve_1
     type: VALVE
     params:
-      full_travel_time: 10
+      full_travel_time: 12.0
+      initial_opening: 0.0
     display_args: []
     inputs:
-      target_opening: v_name.MV
+      target_opening: pid1.MV
       inlet_flow: source_flow
 
   - name: tank_1
     type: CYLINDRICAL_TANK
-    params: {}
-    display_args: []
+    params:
+      height: 1.2
+      radius: 0.2
+      outlet_area: 0.0001
+      initial_level: 0.15
+    display_args:
+      - "level[1.2]"
     inputs:
       inlet_flow: valve_1.outlet_flow
 
-  - name: v_name
+  - name: pid1
     type: PID
     execute_first: true
     params:
-      # 按 spec 18.1：2m 水箱 + 0~100% 阀位，PB_new = 100*100/(12*2) ≈ 416.67
-      PB: 416.67
-      TI: 30.0
-      TD: 0.15
+      PB: 50.0
+      TI: 90.0
+      TD: 0.0
       KD: 10.0
+
       MODE: 5
       SWPN: 1
+
       SVSCL: 0.0
-      SVSCH: 2.0
+      SVSCH: 1.2
       SVL: 0.0
-      SVH: 2.0
+      SVH: 1.2
+
       MVSCL: 0.0
       MVSCH: 100.0
       MVL: 0.0
       MVH: 100.0
-      SV: 1.0
-    display_args: ["MV[100]", "PV[2]", "SV[2]", "MODE"]
+
+      PV: 0.15
+      SV: 0.8
+      MV: 0.0
+
+    display_args:
+      - "MV[100]"
+      - "PV[1.2]"
+      - "SV[1.2]"
+      - "MODE"
+
     inputs:
       PV: tank_1.level

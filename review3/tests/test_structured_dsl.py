@@ -29,15 +29,15 @@ def test_structured_syntax_parses():
     # 4 个 program 项
     assert len(config.program) == 4
 
-    # 拓扑排序后顺序应为：source_flow -> v_name(execute_first) -> valve_1 -> tank_1
-    # 因为 v_name 标记了 execute_first，环在 v_name 处断开
+    # 拓扑排序后顺序应为：source_flow -> pid1(execute_first) -> valve_1 -> tank_1
+    # 因为 pid1 标记了 execute_first，环在 pid1 处断开
     # source_flow 无依赖排第一
-    # v_name 的 execute_first 使其排第二（即使它依赖 tank_1）
-    # valve_1 依赖 source_flow 和 v_name -> 排第三
+    # pid1 的 execute_first 使其排第二（即使它依赖 tank_1）
+    # valve_1 依赖 source_flow 和 pid1 -> 排第三
     # tank_1 依赖 valve_1 -> 排第四
     names = [item.name for item in config.program]
     assert names[0] == "source_flow", f"第一个应为 source_flow, 实际: {names}"
-    assert names[1] == "v_name", f"第二个应为 v_name(execute_first), 实际: {names}"
+    assert names[1] == "pid1", f"第二个应为 pid1(execute_first), 实际: {names}"
     assert "valve_1" in names[2:3], f"valve_1 应在第三位, 实际: {names}"
     assert "tank_1" in names[3:4], f"tank_1 应在第四位, 实际: {names}"
 
@@ -49,7 +49,7 @@ def test_variable_type_mapped():
 
     source_flow = next(item for item in config.program if item.name == "source_flow")
     assert source_flow.type == "VARIABLE"
-    assert "0.18" in source_flow.expression
+    assert "0.001" in source_flow.expression
 
 
 def test_inputs_generate_expression():
@@ -59,7 +59,7 @@ def test_inputs_generate_expression():
 
     valve = next(item for item in config.program if item.name == "valve_1")
     assert "valve_1.execute(" in valve.expression
-    assert "target_opening=v_name.MV" in valve.expression
+    assert "target_opening=pid1.MV" in valve.expression
     assert "inlet_flow=source_flow" in valve.expression
 
 
@@ -68,22 +68,21 @@ def test_params_accepted():
     parser = DSLParser()
     config = parser.parse_file("config/tank_structured.yaml")
 
-    pid = next(item for item in config.program if item.name == "v_name")
-    # PB 已迁移到 ECS-700 比例度语义（spec 18.1）
-    assert pid.init_args.get("PB") == 416.67
-    assert pid.init_args.get("SV") == 1.0
-    # 新增的工程量程参数
-    assert pid.init_args.get("SVSCH") == 2.0
+    pid = next(item for item in config.program if item.name == "pid1")
+    # 单水箱 PID 整定参数
+    assert pid.init_args.get("PB") == 50.0
+    assert pid.init_args.get("SV") == 0.8
+    # 工程量程参数
+    assert pid.init_args.get("SVSCH") == 1.2
     assert pid.init_args.get("MVSCH") == 100.0
     assert pid.init_args.get("MODE") == 5
-
 
 def test_execute_first_flag():
     """execute_first 标记被正确解析。"""
     parser = DSLParser()
     config = parser.parse_file("config/tank_structured.yaml")
 
-    pid = next(item for item in config.program if item.name == "v_name")
+    pid = next(item for item in config.program if item.name == "pid1")
     assert pid.execute_first is True
 
     valve = next(item for item in config.program if item.name == "valve_1")
@@ -194,10 +193,10 @@ def test_batch_end_to_end():
 
     assert len(snapshots) == 50
 
-    # 水位应该从 0 开始上升（PID 控制器试图将 level 控制到 SV=1.0）
+    # 水位应该从 0.15 开始上升（PID 控制器试图将 level 控制到 SV=0.8）
     first_level = snapshots[0].get("tank_1.level", 0)
     last_level = snapshots[-1].get("tank_1.level", 0)
     assert first_level < last_level, f"水位应上升: {first_level} -> {last_level}"
 
-    # SV 应为 1.0
-    assert abs(snapshots[-1].get("v_name.SV", 0) - 1.0) < 0.01
+    # SV 应为 0.8
+    assert abs(snapshots[-1].get("pid1.SV", 0) - 0.8) < 0.01

@@ -1,0 +1,308 @@
+# 乙醇水连续精馏塔 质量控制 DSL（spec §8.3）
+#
+# 与基础控制 DSL 的差异：
+#   - 基础流量、压力、液位回路保持不变
+#   - 塔顶浓度主 PID（top_quality_pid）替代上部温度主 PID
+#   - 塔底浓度主 PID（bottom_quality_pid）替代下部温度主 PID
+#   - 浓度主 PID 的 MV 分别作为回流流量、蒸汽流量副回路的 CSV
+#   - AI 可写入塔顶浓度、塔底浓度和进料流量回路的 SV
+#
+# 不能与温度主控同时 AUTO，采用独立 DSL 避免控制权冲突。
+#
+# 控制结构（6 个回路 = 4 单回路 + 2 串级）：
+#   1. 进料流量 PID（MODE=5, SWPN=1）→ feed_valve_pct
+#   2. 塔顶压力 PID（MODE=5, SWPN=0）→ cooling_valve_pct
+#   3. 回流罐液位 PID（MODE=5, SWPN=0）→ distillate_valve_pct
+#   4. 塔釜液位 PID（MODE=5, SWPN=0）→ bottoms_valve_pct
+#   5. 塔顶浓度主 PID（MODE=5, SWPN=1）+ 回流流量副 PID（MODE=6, SWPN=1）
+#   6. 塔底浓度主 PID（MODE=5, SWPN=0）+ 蒸汽流量副 PID（MODE=6, SWPN=1）
+#
+# 正反作用（spec §8.4）：
+#   - 塔顶乙醇浓度：浓度低时增加回流 → SWPN=1（error=SV-PV，PV 低 → MV 增加）
+#   - 塔底乙醇浓度：浓度高时增加蒸汽 → SWPN=0（error=PV-SV，PV 高 → MV 增加）
+#
+# 模型实际暴露位号（与 spec §8.6 骨架的差异）：
+#   - 模型使用 vapor_boilup_kg_h，spec 骨架中的 steam_flow_kg_h 不存在
+#   - 模型参数名为 top_pressure_kpa，spec 骨架中的 top_pressure_initial_kpa 不存在
+
+clock:
+  mode: REALTIME
+  cycle_time: 0.5
+  sample_interval: 5.0
+
+program:
+  # ====== 进料设定值（外部可写）======
+  - name: feed_ethanol_wt
+    type: Variable
+    value: 0.25
+    display_args: []
+
+  - name: feed_temperature_c
+    type: Variable
+    value: 60.0
+    display_args: []
+
+  # ====== 工艺模型（execute_first 断环）======
+  - name: column_1
+    type: ETHANOL_WATER_DISTILLATION
+    execute_first: true
+    params:
+      tray_count: 12
+      feed_stage: 7
+      top_pressure_kpa: 101.325
+      initialization_mode: STEADY
+      max_internal_step: 0.05
+      random_seed: 20260719
+    inputs:
+      feed_valve_pct: feed_flow_pid.MV
+      reflux_valve_pct: reflux_flow_pid.MV
+      distillate_valve_pct: reflux_drum_level_pid.MV
+      bottoms_valve_pct: reboiler_level_pid.MV
+      steam_valve_pct: steam_flow_pid.MV
+      cooling_valve_pct: pressure_pid.MV
+      feed_ethanol_wt: feed_ethanol_wt
+      feed_temperature_c: feed_temperature_c
+
+  # ====== 1. 进料流量回路（MODE=5 AUTO, SWPN=1）======
+  - name: feed_flow_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 10.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 1
+      SVSCL: 0.0
+      SVSCH: 150.0
+      SVL: 0.0
+      SVH: 150.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.0
+      SV: 100.0
+      MV: 0.0
+    display_args:
+      - PV[150]
+      - SV[150]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.feed_flow_kg_h
+
+  # ====== 2. 塔顶压力回路（MODE=5 AUTO, SWPN=0）======
+  - name: pressure_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 30.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      SVSCL: 80.0
+      SVSCH: 120.0
+      SVL: 90.0
+      SVH: 115.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 101.325
+      SV: 101.325
+      MV: 0.0
+    display_args:
+      - PV[120]
+      - SV[120]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.top_pressure_kpa
+
+  # ====== 3. 回流罐液位回路（MODE=5 AUTO, SWPN=0）======
+  - name: reflux_drum_level_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 300.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      SVSCL: 0.0
+      SVSCH: 100.0
+      SVL: 10.0
+      SVH: 90.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 50.0
+      SV: 50.0
+      MV: 0.0
+    display_args:
+      - PV[100]
+      - SV[100]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.reflux_drum_level_pct
+
+  # ====== 4. 塔釜液位回路（MODE=5 AUTO, SWPN=0）======
+  - name: reboiler_level_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 300.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      SVSCL: 0.0
+      SVSCH: 100.0
+      SVL: 10.0
+      SVH: 90.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 50.0
+      SV: 50.0
+      MV: 0.0
+    display_args:
+      - PV[100]
+      - SV[100]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.reboiler_level_pct
+
+  # ====== 5. 塔顶浓度主回路（MODE=5 AUTO, SWPN=1）======
+  # 浓度低时增加回流：SWPN=1，error = SV - PV，PV 低 → MV 增加
+  - name: top_quality_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 900.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 1
+      # PV/SV 为塔顶乙醇质量分数（分析仪读数），量程 0~0.95
+      SVSCL: 0.0
+      SVSCH: 0.95
+      SVL: 0.0
+      SVH: 0.90
+      # MV 为副回路 CSV（回流量设定），量程与 reflux_flow_pid.SVSCH 一致
+      MVSCL: 0.0
+      MVSCH: 150.0
+      MVL: 0.0
+      MVH: 150.0
+      PV: 0.85
+      SV: 0.85
+      MV: 0.0
+    display_args:
+      - PV[0.95]
+      - SV[0.95]
+      - MV[150]
+      - MODE
+    inputs:
+      PV: column_1.top_ethanol_analyzer
+
+  # ====== 5.1 回流流量副回路（MODE=6 CAS, SWPN=1）======
+  - name: reflux_flow_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 10.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 6
+      SWPN: 1
+      SVSCL: 0.0
+      SVSCH: 150.0
+      SVL: 0.0
+      SVH: 150.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.0
+      CSV: 0.0
+      MV: 0.0
+    display_args:
+      - PV[150]
+      - SV[150]
+      - CSV[150]
+      - MV[100]
+      - MODE
+      - CAS
+    inputs:
+      PV: column_1.reflux_flow_kg_h
+      CSV: top_quality_pid.MV
+
+  # ====== 6. 塔底浓度主回路（MODE=5 AUTO, SWPN=0）======
+  # 浓度高时增加蒸汽：SWPN=0，error = PV - SV，PV 高 → MV 增加
+  - name: bottom_quality_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 900.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      # PV/SV 为塔底乙醇质量分数（分析仪读数），量程 0~0.10
+      SVSCL: 0.0
+      SVSCH: 0.10
+      SVL: 0.0
+      SVH: 0.05
+      # MV 为副回路 CSV（蒸汽流量设定），量程与 steam_flow_pid.SVSCH 一致
+      MVSCL: 0.0
+      MVSCH: 120.0
+      MVL: 0.0
+      MVH: 120.0
+      PV: 0.015
+      SV: 0.015
+      MV: 0.0
+    display_args:
+      - PV[0.10]
+      - SV[0.10]
+      - MV[120]
+      - MODE
+    inputs:
+      PV: column_1.bottom_ethanol_analyzer
+
+  # ====== 6.1 蒸汽流量副回路（MODE=6 CAS, SWPN=1）======
+  - name: steam_flow_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 15.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 6
+      SWPN: 1
+      SVSCL: 0.0
+      SVSCH: 120.0
+      SVL: 0.0
+      SVH: 120.0
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.0
+      CSV: 0.0
+      MV: 0.0
+    display_args:
+      - PV[120]
+      - SV[120]
+      - CSV[120]
+      - MV[100]
+      - MODE
+      - CAS
+    inputs:
+      PV: column_1.vapor_boilup_kg_h
+      CSV: bottom_quality_pid.MV

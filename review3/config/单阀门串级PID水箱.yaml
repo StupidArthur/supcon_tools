@@ -1,0 +1,148 @@
+# 单阀门串级 PID 水箱液位控制
+# 主回路：液位 PID (level_master, MODE=5) 控制水箱液位到 SV=0.8m，输出目标流量
+# 副回路：流量 PID (flow_slave, MODE=6) 控制阀后流量，输出阀门开度
+# 拓扑环：flow_slave -> valve_1 -> tank_1 -> level_master -> flow_slave
+#         在 flow_slave 上配置 execute_first 切断该环
+clock:
+  mode: REALTIME
+  cycle_time: 0.5
+
+program:
+  # 上游恒定供水能力：0.001 m³/s，即 1 L/s
+  - name: source_flow
+    type: Variable
+    value: 0.001
+    display_args: []
+
+  # 流量副回路。
+  #
+  # MODE=6 表示 CAS 模式：
+  # - PV 来自阀后实际流量
+  # - CSV 来自液位主回路的 MV
+  # - MV 输出为阀门目标开度
+  #
+  # execute_first 只允许配置在副回路上，用于切断：
+  # flow_slave -> valve_1 -> tank_1 -> level_master -> flow_slave
+  # 形成的拓扑依赖环。
+  - name: flow_slave
+    type: PID
+    execute_first: true
+    params:
+      PB: 150.0
+      TI: 10.0
+      TD: 0.0
+      KD: 10.0
+
+      MODE: 6
+      SWPN: 1
+
+      # 副回路的 PV、SV、CSV 均为体积流量，单位 m³/s
+      SVSCL: 0.0
+      SVSCH: 0.001
+      SVL: 0.0
+      SVH: 0.001
+
+      # 副回路 MV 为阀门开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+
+      PV: 0.0
+      CSV: 0.0
+      MV: 0.0
+
+    display_args:
+      - PV[0.001]
+      - SV[0.001]
+      - CSV[0.001]
+      - MV[100]
+      - MODE
+      - CAS
+
+    inputs:
+      PV: valve_1.outlet_flow
+      CSV: level_master.MV
+
+  # 被副回路控制的调节阀。
+  #
+  # 满行程时间为 12 秒，用于体现阀门执行机构的动态过程。
+  - name: valve_1
+    type: VALVE
+    params:
+      min_opening: 0.0
+      max_opening: 100.0
+      full_travel_time: 12.0
+      initial_opening: 0.0
+      flow_coefficient: 1.0
+
+    display_args:
+      - outlet_flow[0.001]
+      - current_opening[100]
+      - target_opening[100]
+
+    inputs:
+      target_opening: flow_slave.MV
+      inlet_flow: source_flow
+
+  # 被控水箱。
+  #
+  # 水箱高度：1.2 m
+  # 水箱直径：0.4 m
+  # 初始液位：0.15 m
+  # 出水口面积：0.0001 m²
+  - name: tank_1
+    type: CYLINDRICAL_TANK
+    params:
+      height: 1.2
+      radius: 0.2
+      outlet_area: 0.0001
+      initial_level: 0.15
+
+    display_args:
+      - level[1.2]
+      - inlet_flow[0.001]
+      - outlet_flow[0.001]
+
+    inputs:
+      inlet_flow: valve_1.outlet_flow
+
+  # 液位主回路。
+  #
+  # 主回路使用 AUTO 模式控制水箱液位。
+  # 主回路 MV 不是阀门开度，而是副流量回路的目标流量。
+  - name: level_master
+    type: PID
+    params:
+      PB: 50.0
+      TI: 140.0
+      TD: 0.0
+      KD: 10.0
+
+      MODE: 5
+      SWPN: 1
+
+      # 主回路 PV、SV 为液位，单位 m
+      SVSCL: 0.0
+      SVSCH: 1.2
+      SVL: 0.0
+      SVH: 1.2
+
+      # 主回路 MV 为目标入口流量，单位 m³/s
+      MVSCL: 0.0
+      MVSCH: 0.001
+      MVL: 0.0
+      MVH: 0.001
+
+      PV: 0.15
+      SV: 0.8
+      MV: 0.0
+
+    display_args:
+      - PV[1.2]
+      - SV[1.2]
+      - MV[0.001]
+      - MODE
+
+    inputs:
+      PV: tank_1.level

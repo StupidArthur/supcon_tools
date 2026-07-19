@@ -1,0 +1,324 @@
+# 乙醇水连续精馏塔 基础控制 DSL（spec §8.2）
+#
+# 控制结构（6 个回路 = 4 单回路 + 2 串级）：
+#   1. 进料流量 PID（MODE=5, SWPN=1）→ feed_valve_pct
+#   2. 塔顶压力 PID（MODE=5, SWPN=0）→ cooling_valve_pct
+#   3. 回流罐液位 PID（MODE=5, SWPN=0）→ distillate_valve_pct
+#   4. 塔釜液位 PID（MODE=5, SWPN=0）→ bottoms_valve_pct
+#   5. 上部灵敏板温度主 PID（MODE=5, SWPN=0）+ 回流流量副 PID（MODE=6, SWPN=1）
+#      串级：主回路 MV → 副回路 CSV；副回路 MV → reflux_valve_pct
+#   6. 下部灵敏板温度主 PID（MODE=5, SWPN=1）+ 蒸汽流量副 PID（MODE=6, SWPN=1）
+#      串级：主回路 MV → 副回路 CSV；副回路 MV → steam_valve_pct
+#
+# 拓扑约束（spec §9）：
+#   只在 column_1 上设置 execute_first: true
+#   形成依赖环：PID → column_1 → PID，由 column_1 先执行断环
+#
+# 灵敏板选择：
+#   上部灵敏板 = 第 3 板（精馏段，对塔顶组成敏感）
+#   下部灵敏板 = 第 10 板（提馏段，对塔底组成敏感）
+#
+# 模型实际暴露的位号（与 spec §8.6 骨架的差异）：
+#   - 模型使用 vapor_boilup_kg_h，spec 骨架中的 steam_flow_kg_h 不存在
+#   - 模型参数名为 top_pressure_kpa，spec 骨架中的 top_pressure_initial_kpa 不存在
+#
+# 正反作用推导（spec §8.4）：
+#   温度主回路 SWPN 与对应浓度主回路相反，因为温度与乙醇浓度反相关：
+#   - 上部灵敏板温度高 → 塔顶乙醇浓度低 → 应增加回流 → 高 PV 期望高 MV → SWPN=0
+#   - 下部灵敏板温度低 → 塔底乙醇浓度高 → 应增加蒸汽 → 低 PV 期望高 MV → SWPN=1
+
+clock:
+  mode: REALTIME
+  cycle_time: 0.5
+  sample_interval: 5.0
+
+program:
+  # ====== 进料设定值（外部可写）======
+  - name: feed_ethanol_wt
+    type: Variable
+    value: 0.25
+    display_args: []
+
+  - name: feed_temperature_c
+    type: Variable
+    value: 60.0
+    display_args: []
+
+  # ====== 工艺模型（execute_first 断环）======
+  - name: column_1
+    type: ETHANOL_WATER_DISTILLATION
+    execute_first: true
+    params:
+      tray_count: 12
+      feed_stage: 7
+      top_pressure_kpa: 101.325
+      initialization_mode: STEADY
+      max_internal_step: 0.05
+      random_seed: 20260719
+    inputs:
+      feed_valve_pct: feed_flow_pid.MV
+      reflux_valve_pct: reflux_flow_pid.MV
+      distillate_valve_pct: reflux_drum_level_pid.MV
+      bottoms_valve_pct: reboiler_level_pid.MV
+      steam_valve_pct: steam_flow_pid.MV
+      cooling_valve_pct: pressure_pid.MV
+      feed_ethanol_wt: feed_ethanol_wt
+      feed_temperature_c: feed_temperature_c
+
+  # ====== 1. 进料流量回路（MODE=5 AUTO, SWPN=1）======
+  - name: feed_flow_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 10.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 1
+      # PV/SV 为进料流量，单位 kg/h，量程 0~150
+      SVSCL: 0.0
+      SVSCH: 150.0
+      SVL: 0.0
+      SVH: 150.0
+      # MV 为阀门开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.0
+      SV: 100.0
+      MV: 0.0
+    display_args:
+      - PV[150]
+      - SV[150]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.feed_flow_kg_h
+
+  # ====== 2. 塔顶压力回路（MODE=5 AUTO, SWPN=0）======
+  - name: pressure_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 30.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      # PV/SV 为塔顶压力，单位 kPa(a)，量程 80~120
+      SVSCL: 80.0
+      SVSCH: 120.0
+      SVL: 90.0
+      SVH: 115.0
+      # MV 为冷却水阀开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 101.325
+      SV: 101.325
+      MV: 0.0
+    display_args:
+      - PV[120]
+      - SV[120]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.top_pressure_kpa
+
+  # ====== 3. 回流罐液位回路（MODE=5 AUTO, SWPN=0）======
+  - name: reflux_drum_level_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 300.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      # PV/SV 为回流罐液位，单位 %
+      SVSCL: 0.0
+      SVSCH: 100.0
+      SVL: 10.0
+      SVH: 90.0
+      # MV 为塔顶采出阀开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 50.0
+      SV: 50.0
+      MV: 0.0
+    display_args:
+      - PV[100]
+      - SV[100]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.reflux_drum_level_pct
+
+  # ====== 4. 塔釜液位回路（MODE=5 AUTO, SWPN=0）======
+  - name: reboiler_level_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 300.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      # PV/SV 为塔釜液位，单位 %
+      SVSCL: 0.0
+      SVSCH: 100.0
+      SVL: 10.0
+      SVH: 90.0
+      # MV 为塔底采出阀开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 50.0
+      SV: 50.0
+      MV: 0.0
+    display_args:
+      - PV[100]
+      - SV[100]
+      - MV[100]
+      - MODE
+    inputs:
+      PV: column_1.reboiler_level_pct
+
+  # ====== 5. 上部灵敏板温度主回路（MODE=5 AUTO, SWPN=0）======
+  # 温度高 → 塔顶乙醇浓度低 → 应增加回流
+  # SWPN=0：error = PV - SV，PV 高时 MV 增加（标准 PID 正向）
+  - name: top_temp_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 300.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 0
+      # PV/SV 为第 3 板温度，单位 ℃，量程 50~100
+      SVSCL: 50.0
+      SVSCH: 100.0
+      SVL: 60.0
+      SVH: 95.0
+      # MV 为副回路 CSV（回流量设定），量程与 reflux_flow_pid.SVSCH 一致
+      MVSCL: 0.0
+      MVSCH: 150.0
+      MVL: 0.0
+      MVH: 150.0
+      PV: 78.0
+      SV: 78.0
+      MV: 0.0
+    display_args:
+      - PV[100]
+      - SV[100]
+      - MV[150]
+      - MODE
+    inputs:
+      PV: column_1.stage_03_temperature_c
+
+  # ====== 5.1 回流流量副回路（MODE=6 CAS, SWPN=1）======
+  - name: reflux_flow_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 10.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 6
+      SWPN: 1
+      # PV/CSV 为回流量，单位 kg/h，量程 0~150
+      SVSCL: 0.0
+      SVSCH: 150.0
+      SVL: 0.0
+      SVH: 150.0
+      # MV 为回流阀开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.0
+      CSV: 0.0
+      MV: 0.0
+    display_args:
+      - PV[150]
+      - SV[150]
+      - CSV[150]
+      - MV[100]
+      - MODE
+      - CAS
+    inputs:
+      PV: column_1.reflux_flow_kg_h
+      CSV: top_temp_pid.MV
+
+  # ====== 6. 下部灵敏板温度主回路（MODE=5 AUTO, SWPN=1）======
+  # 温度低 → 塔底乙醇浓度高 → 应增加蒸汽
+  # SWPN=1：error = SV - PV，PV 低时 MV 增加
+  - name: bottom_temp_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 300.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 1
+      # PV/SV 为第 10 板温度，单位 ℃，量程 50~110
+      SVSCL: 50.0
+      SVSCH: 110.0
+      SVL: 60.0
+      SVH: 105.0
+      # MV 为副回路 CSV（蒸汽流量设定），量程与 steam_flow_pid.SVSCH 一致
+      MVSCL: 0.0
+      MVSCH: 120.0
+      MVL: 0.0
+      MVH: 120.0
+      PV: 95.0
+      SV: 95.0
+      MV: 0.0
+    display_args:
+      - PV[110]
+      - SV[110]
+      - MV[120]
+      - MODE
+    inputs:
+      PV: column_1.stage_10_temperature_c
+
+  # ====== 6.1 蒸汽流量副回路（MODE=6 CAS, SWPN=1）======
+  - name: steam_flow_pid
+    type: PID
+    params:
+      PB: 100.0
+      TI: 15.0
+      TD: 0.0
+      KD: 10.0
+      MODE: 6
+      SWPN: 1
+      # PV/CSV 为再沸蒸气量，单位 kg/h，量程 0~120
+      SVSCL: 0.0
+      SVSCH: 120.0
+      SVL: 0.0
+      SVH: 120.0
+      # MV 为蒸汽阀开度，单位 %
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.0
+      CSV: 0.0
+      MV: 0.0
+    display_args:
+      - PV[120]
+      - SV[120]
+      - CSV[120]
+      - MV[100]
+      - MODE
+      - CAS
+    inputs:
+      PV: column_1.vapor_boilup_kg_h
+      CSV: bottom_temp_pid.MV

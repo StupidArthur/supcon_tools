@@ -168,6 +168,9 @@ def discover_configs(config_dir: Path = Path("config")) -> Dict[str, Path]:
     使用 ``rglob`` 递归扫描，子目录里的 yaml 也会被发现（例如
     ``config/tank/foo.yaml`` 会被作为 ``tank/foo`` 注册）。
 
+    历史归档目录 ``old_version`` 会被显式跳过，避免旧语法文件覆盖正式配置。
+    如需读取旧语法样例，请由测试代码显式指定路径。
+
     Returns:
         {实例名: 配置文件路径} 字典。
         不同路径下同名 stem 的 yaml 会触发 warning 并后者覆盖前者（保持向后兼容）。
@@ -179,6 +182,9 @@ def discover_configs(config_dir: Path = Path("config")) -> Dict[str, Path]:
 
     for pattern in ("*.yaml", "*.yml"):
         for yaml_file in config_dir.rglob(pattern):
+            # 跳过历史归档目录（old_version），避免旧语法文件覆盖正式配置
+            if "old_version" in yaml_file.parts:
+                continue
             instance_name = yaml_file.stem
             if instance_name in configs:
                 print(

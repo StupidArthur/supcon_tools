@@ -1,0 +1,1985 @@
+"""
+常压乙醇—水连续精馏中试塔动态模型
+
+阶段 C 实现范围（最终动态模型核心）：
+- 12 块塔板 + 全凝器 + 回流罐 + 釜式再沸器
+- 逐板总物料衡算 + 乙醇组分衡算 + 能量衡算
+- 塔板温度由能量状态反算（不再用泡点代数）
+- 塔压动态（气相存量 + 理想气体状态方程）
+- 沿塔压降 ΔP_i = ΔP_dry + K_v · V_i²
+- 再沸/冷凝负荷
+- 显式 Heun/RK2 积分 + 子步
+- 质量/乙醇/能量守恒诊断
+
+阶段 C 暂不实现（后续阶段补）：
+- 阀门动态、测量滞后、浓度分析仪（阶段 D）
+- 稳态初始化文件持久化（阶段 D）
+- 控制 DSL（阶段 E）
+- 性能优化（阶段 G）
+
+====================================================================
+单位约定（与 spec §4.1 一致）
+====================================================================
+
+内部统一使用：
+    物质量      kmol
+    摩尔流量    kmol/s
+    温度        K
+    压力        kPa(a)
+    组成        摩尔分数 0~1
+    焓          kJ/kmol
+    内能 U      kJ
+    热负荷      kW（= kJ/s）
+    热容        kJ/(kmol·K)
+    体积        m³
+
+对外位号按 spec §7 转换：
+    流量        kg/h
+    温度        ℃
+    压力        kPa(a)
+    产品浓度    质量分数 0~1
+    塔板组成    摩尔分数 0~1
+    液位        %
+
+====================================================================
+塔板编号（spec §5.2）
+====================================================================
+
+    1 号板 = 塔顶
+    12 号板 = 塔底
+    feed_stage = 7
+
+数组索引 0..11 对应塔板 1..12（代码注释中会明确说明）。
+
+====================================================================
+阶段 C 关键模型关系
+====================================================================
+
+1. 能量衡算（spec §5.4）：
+       dU_i/dt = L_{i-1}·h^L_{i-1} + V_{i+1}·h^V_{i+1} + F_i·h_F
+                 - L_i·h^L_i - V_i·h^V_i - Q_{loss,i}
+
+   其中 Q_{loss,i} = UA_i · (T_i - T_ambient)。
+
+2. 塔板温度（spec §5.4，禁止仅用浓度查表）：
+       T_i = T_ref + U_i / (M_i · Cp_L_mix(x_i))
+
+   低压下液相内能 U ≈ 焓 H = M·h_L_mix。
+
+3. 气相组成（VLE，归一化以兼容非平衡态）：
+       y_raw_i = x_i · γ_i · P_i_sat(T_i) / P_i
+       y_i = y_raw_i / Σ y_raw_i
+
+4. 塔压动态（spec §5.6）：
+       dN_v/dt = V_boil - V_condense - V_vent
+       P_top = N_v · R · T_vapor_avg / V_gas
+
+5. 沿塔压降（spec §5.6）：
+       ΔP_i = ΔP_dry + K_v · V_i²
+       P_i = P_top + Σ_{j< i} ΔP_j
+
+6. 再沸器热负荷（spec §5.6，由 V_boil 反推）：
+       Q_R = V_boil · ΔH_vap_mix(x_sump) + Q_loss_sump
+
+7. 全凝器热负荷：
+       V_condense = V_top（全凝器，所有进入蒸气均冷凝）
+       Q_C = V_condense · ΔH_vap_mix(y_top)
+
+8. CMO（恒摩尔流）假设：
+   第一版采用 CMO 简化，V_i = V_boil 对所有塔板成立。CMO 在乙醇—水中
+   误差约 5%（ΔH_vap_water/ΔH_vap_ethanol ≈ 1.05），可用于动态趋势和
+   控制系统仿真。能量衡算仍逐板计算，用于报告能量守恒残差。
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Any, Dict, Optional, Tuple
+
+import numpy as np
+
+from components.thermo.ethanol_water import (
+    MW_WATER_KG_PER_KMOL,
+    MW_ETHANOL_KG_PER_KMOL,
+    T_REF_K,
+    CP_LIQUID_WATER_KJ_PER_KMOL_K,
+    CP_LIQUID_ETHANOL_KJ_PER_KMOL_K,
+    DH_VAP_WATER_KJ_PER_KMOL,
+    DH_VAP_ETHANOL_KJ_PER_KMOL,
+    bubble_point_temperature,
+    ethanol_mass_fraction_to_mole_fraction,
+    ethanol_mole_fraction_to_mass_fraction,
+    liquid_enthalpy_kj_per_kmol,
+    vapor_enthalpy_kj_per_kmol,
+    heat_of_vaporization_kj_per_kmol,
+    liquid_heat_capacity_kj_per_kmol_k,
+    temperature_from_internal_energy,
+    vapor_composition_at_state,
+)
+from components.utils.logger import get_logger
+from controller.instance import InstanceRegistry
+from .base import BaseProgram
+from .ethanol_water_actuators import ValveActuator, ConcentrationAnalyzer
+
+logger = get_logger(name="ethanol_water_distillation")
+
+
+# ====================================================================
+# 物理常数
+# ====================================================================
+
+#: 气体通用常数 (kPa·m³/(kmol·K))，用于理想气体状态方程 P = N·R·T/V
+R_UNIVERSAL_KPA_M3_PER_KMOL_K: float = 8.314462618
+
+
+# ====================================================================
+# 辅助函数
+# ====================================================================
+
+def _mixture_molecular_weight(x_ethanol_mol: float) -> float:
+    """
+    二元乙醇—水混合液相平均分子量 (kg/kmol)。
+
+    Args:
+        x_ethanol_mol: 液相乙醇摩尔分数。
+
+    Returns:
+        平均分子量。
+    """
+    return x_ethanol_mol * MW_ETHANOL_KG_PER_KMOL + (1.0 - x_ethanol_mol) * MW_WATER_KG_PER_KMOL
+
+
+def _kgmols_to_kgh(flow_kgmol_per_s: float, mw_kg_per_kmol: float) -> float:
+    """kmol/s → kg/h。"""
+    return flow_kgmol_per_s * mw_kg_per_kmol * 3600.0
+
+
+def _kgh_to_kgmols(flow_kg_per_h: float, mw_kg_per_kmol: float) -> float:
+    """kg/h → kmol/s。"""
+    if mw_kg_per_kmol <= 0.0:
+        return 0.0
+    return flow_kg_per_h / (mw_kg_per_kmol * 3600.0)
+
+
+def _compute_initial_valve_pct(
+    target_flow: float,
+    max_flow: float,
+    characteristic: str,
+    rangeability: float = 30.0,
+) -> float:
+    """
+    根据目标流量反算阀门初始开度 (%)。
+
+    linear: pct = (flow / max_flow) * 100
+    equal_percentage: pct = (log(flow/max_flow) / log(R) + 1) * 100
+
+    Args:
+        target_flow: 目标流量 (kmol/s)
+        max_flow: 100% 开度下的最大流量 (kmol/s)
+        characteristic: 'linear' 或 'equal_percentage'
+        rangeability: 等百分比阀可调比
+
+    Returns:
+        初始开度 (0~100%)
+    """
+    if max_flow <= 0.0:
+        return 0.0
+    ratio = max(1.0 / rangeability, min(1.0, target_flow / max_flow))
+    if characteristic == "linear":
+        return ratio * 100.0
+    # equal_percentage: f(x) = R^(x-1), x in [0,1]
+    # ratio = R^(x-1) → x = log(ratio)/log(R) + 1
+    x = math.log(ratio) / math.log(rangeability) + 1.0
+    x = max(0.0, min(1.0, x))
+    return x * 100.0
+
+
+# ====================================================================
+# 主模型类
+# ====================================================================
+
+class ETHANOL_WATER_DISTILLATION(BaseProgram):
+    """
+    常压乙醇—水连续精馏中试塔（阶段 C）。
+
+    阶段 C 实现：
+    - 12 块塔板逐板物料 + 乙醇组分 + 能量衡算
+    - 全凝器 + 回流罐 + 釜式再沸器（平衡级）
+    - 塔板温度由能量状态反算
+    - 塔压动态（气相存量 + 理想气体状态方程）
+    - 沿塔压降 ΔP = ΔP_dry + K_v·V²
+    - 再沸/冷凝负荷
+    - Heun/RK2 积分 + 子步
+    - 质量/乙醇/能量守恒诊断
+
+    不实现：
+    - 阀门动态、测量滞后（阶段 D）
+    - 控制 DSL（阶段 E）
+    """
+
+    # 文档属性
+    name = "ethanol_water_distillation"
+    chinese_name = "乙醇水连续精馏塔"
+    doc = """
+# 乙醇水连续精馏塔（阶段 C）
+
+常压乙醇—水连续溶剂回收中试塔动态模型。
+
+## 阶段 C 实现范围
+
+- 12 块塔板 + 全凝器 + 回流罐 + 釜式再沸器
+- 逐板总物料 + 乙醇组分 + 能量衡算
+- 塔板温度由能量状态反算（不再用泡点代数）
+- 塔压动态（气相存量 + 理想气体状态方程）
+- 沿塔压降 ΔP = ΔP_dry + K_v·V²
+- 再沸/冷凝负荷
+- 显式 Heun/RK2 积分 + 子步
+
+## 塔板编号
+
+1 号板 = 塔顶，12 号板 = 塔底，进料板 = 第 7 块。
+"""
+
+    # 固定结构参数
+    TRAY_COUNT: int = 12
+    FEED_STAGE: int = 7  # 1-indexed
+
+    default_params: Dict[str, Any] = {
+        # 塔结构
+        "tray_count": 12,
+        "feed_stage": 7,
+        # 压力（初始/设定，阶段 C 实现动态）
+        "top_pressure_kpa": 101.325,
+        "pressure_drop_per_stage_kpa": 0.3,    # ΔP_dry（CMO 下等于总 ΔP）
+        "pressure_drop_kv_kpa_s2_per_kgmol2": 0.0,  # ΔP 中 V² 项系数
+        # 标称持液量 (kmol)
+        "m_tray_nom_kmol": 0.15,
+        "m_drum_nom_kmol": 0.5,
+        "m_sump_nom_kmol": 1.5,
+        # 回流罐与塔釜最大容积 (kmol)
+        "m_drum_max_kmol": 1.0,
+        "m_sump_max_kmol": 3.0,
+        # 稳态流量初值 (kmol/s)，参考工况 100 kg/h 进料
+        "feed_flow_kgmol_per_s": 0.001307,    # 100 kg/h
+        "distillate_flow_kgmol_per_s": 0.000209,
+        "bottoms_flow_kgmol_per_s": 0.001098,
+        "reflux_flow_kgmol_per_s": 0.000625,
+        "vapor_boilup_kgmol_per_s": 0.000834,
+        # 进料
+        "feed_ethanol_wt": 0.25,
+        "feed_temperature_c": 60.0,
+        # 阶段 C 新增：气相与散热参数
+        "vapor_volume_m3": 0.35,                # 塔内气相总体积 (m³)
+        "tray_ua_kw_per_k": 0.005,              # 单板散热 UA (kW/K)
+        "drum_ua_kw_per_k": 0.01,               # 回流罐散热 UA (kW/K)
+        "sump_ua_kw_per_k": 0.02,               # 塔釜散热 UA (kW/K)
+        "ambient_temperature_c": 25.0,          # 环境温度 (℃)
+        # 数值积分
+        "max_internal_step": 0.05,
+        # 初始化
+        "initialization_mode": "STEADY",
+        "random_seed": 20260719,
+        # ===== 阶段 D 新增：阀门动态（spec §6.2） =====
+        # 每个阀门：(满行程时间 s, 特性, 最大流量 kmol/s)
+        # 最大流量按参考工况 ×1.5 设计余量
+        "feed_valve_full_travel_s": 10.0,
+        "feed_valve_characteristic": "equal_percentage",
+        "feed_valve_max_flow_kgmol_per_s": 0.001961,    # 0.001307 * 1.5
+        "reflux_valve_full_travel_s": 10.0,
+        "reflux_valve_characteristic": "equal_percentage",
+        "reflux_valve_max_flow_kgmol_per_s": 0.000938,  # 0.000625 * 1.5
+        "distillate_valve_full_travel_s": 12.0,
+        "distillate_valve_characteristic": "linear",
+        "distillate_valve_max_flow_kgmol_per_s": 0.000314,  # 0.000209 * 1.5
+        "bottoms_valve_full_travel_s": 12.0,
+        "bottoms_valve_characteristic": "linear",
+        "bottoms_valve_max_flow_kgmol_per_s": 0.001647,  # 0.001098 * 1.5
+        "steam_valve_full_travel_s": 15.0,
+        "steam_valve_characteristic": "equal_percentage",
+        "steam_valve_max_flow_kgmol_per_s": 0.001251,    # 0.000834 * 1.5（蒸气）
+        "cooling_valve_full_travel_s": 15.0,
+        "cooling_valve_characteristic": "equal_percentage",
+        "cooling_valve_max_flow_kgmol_per_s": 0.001251,  # 与蒸气对应
+        # 阀门可调比（等百分比阀参数）
+        "valve_rangeability": 30.0,
+        # ===== 阶段 D 新增：浓度分析仪（spec §6.3） =====
+        "analyzer_tau_lag_s": 30.0,         # 一阶滞后时间常数
+        "analyzer_sample_interval_s": 5.0,  # 采样间隔
+        "analyzer_transport_delay_s": 60.0, # 传输延迟
+        "analyzer_noise_std": 0.005,        # 高斯噪声标准差（质量分数）
+        "analyzer_drift_rate_per_s": 0.0,   # 零点漂移率（per second）
+        # 基础测量短滞后（spec §6.3：温度、压力、流量用短一阶滞后）
+        "basic_measurement_lag_s": 2.0,
+        # ===== 阶段 D 新增：参考稳态文件 =====
+        "reference_state_file": "components/programs/data/ethanol_water_reference_state.json",
+        "auto_save_reference_state": True,  # 首次稳态运行后自动保存
+    }
+
+    stored_attributes = [
+        # 塔顶塔底
+        "top_pressure_kpa",
+        "bottom_pressure_kpa",
+        "top_temperature_c",
+        "bottom_temperature_c",
+        # 流量
+        "feed_flow_kg_h",
+        "reflux_flow_kg_h",
+        "distillate_flow_kg_h",
+        "bottoms_flow_kg_h",
+        "vapor_boilup_kg_h",
+        # 液位
+        "reflux_drum_level_pct",
+        "reboiler_level_pct",
+        # 组成（真实值）
+        "top_ethanol_x",
+        "bottom_ethanol_x",
+        "top_ethanol_wt",
+        "bottom_ethanol_wt",
+        # 阶段 C 新增：能量与压力
+        "reboiler_duty_kw",
+        "condenser_duty_kw",
+        "energy_balance_residual_kw",
+        "vapor_holdup_kgmol",
+        "ambient_temperature_c",
+        # 守恒诊断
+        "mass_balance_residual_kg_h",
+        "ethanol_balance_residual_kg_h",
+        # 阶段 D 新增：六个阀门（spec §6.2 实际开度和流量必须对外暴露）
+        "feed_valve_command_pct", "feed_valve_actual_pct",
+        "reflux_valve_command_pct", "reflux_valve_actual_pct",
+        "distillate_valve_command_pct", "distillate_valve_actual_pct",
+        "bottoms_valve_command_pct", "bottoms_valve_actual_pct",
+        "steam_valve_command_pct", "steam_valve_actual_pct",
+        "cooling_valve_command_pct", "cooling_valve_actual_pct",
+        # 阶段 D 新增：分析仪（spec §6.3 真实值和仪表值分开）
+        "top_ethanol_wt_true", "top_ethanol_analyzer",
+        "bottom_ethanol_wt_true", "bottom_ethanol_analyzer",
+        # 12 块塔板固定展开
+        "stage_01_temperature_c", "stage_02_temperature_c", "stage_03_temperature_c",
+        "stage_04_temperature_c", "stage_05_temperature_c", "stage_06_temperature_c",
+        "stage_07_temperature_c", "stage_08_temperature_c", "stage_09_temperature_c",
+        "stage_10_temperature_c", "stage_11_temperature_c", "stage_12_temperature_c",
+        "stage_01_ethanol_x", "stage_02_ethanol_x", "stage_03_ethanol_x",
+        "stage_04_ethanol_x", "stage_05_ethanol_x", "stage_06_ethanol_x",
+        "stage_07_ethanol_x", "stage_08_ethanol_x", "stage_09_ethanol_x",
+        "stage_10_ethanol_x", "stage_11_ethanol_x", "stage_12_ethanol_x",
+        "stage_01_liquid_holdup_kg", "stage_02_liquid_holdup_kg", "stage_03_liquid_holdup_kg",
+        "stage_04_liquid_holdup_kg", "stage_05_liquid_holdup_kg", "stage_06_liquid_holdup_kg",
+        "stage_07_liquid_holdup_kg", "stage_08_liquid_holdup_kg", "stage_09_liquid_holdup_kg",
+        "stage_10_liquid_holdup_kg", "stage_11_liquid_holdup_kg", "stage_12_liquid_holdup_kg",
+    ]
+
+    input_schema = [
+        {"name": "feed_flow_kgmol_per_s", "type": "float", "connectable": True, "desc": "进料摩尔流量(kmol/s)（直接流量模式）"},
+        {"name": "reflux_flow_kgmol_per_s", "type": "float", "connectable": True, "desc": "回流量(kmol/s)（直接流量模式）"},
+        {"name": "distillate_flow_kgmol_per_s", "type": "float", "connectable": True, "desc": "塔顶采出(kmol/s)（直接流量模式）"},
+        {"name": "bottoms_flow_kgmol_per_s", "type": "float", "connectable": True, "desc": "塔底采出(kmol/s)（直接流量模式）"},
+        {"name": "vapor_boilup_kgmol_per_s", "type": "float", "connectable": True, "desc": "再沸蒸气量(kmol/s)（直接流量模式）"},
+        {"name": "feed_ethanol_wt", "type": "float", "connectable": True, "desc": "进料乙醇质量分数"},
+        {"name": "feed_temperature_c", "type": "float", "connectable": True, "desc": "进料温度(℃)"},
+        {"name": "ambient_temperature_c", "type": "float", "connectable": True, "desc": "环境温度(℃)"},
+        # 阶段 D 新增：阀位输入（spec §6.1，0~100%）
+        {"name": "feed_valve_pct", "type": "float", "connectable": True, "desc": "进料阀命令开度(%)"},
+        {"name": "reflux_valve_pct", "type": "float", "connectable": True, "desc": "回流阀命令开度(%)"},
+        {"name": "distillate_valve_pct", "type": "float", "connectable": True, "desc": "塔顶采出阀命令开度(%)"},
+        {"name": "bottoms_valve_pct", "type": "float", "connectable": True, "desc": "塔底采出阀命令开度(%)"},
+        {"name": "steam_valve_pct", "type": "float", "connectable": True, "desc": "蒸汽阀命令开度(%)"},
+        {"name": "cooling_valve_pct", "type": "float", "connectable": True, "desc": "冷却水阀命令开度(%)"},
+    ]
+
+    param_descriptions: Dict[str, str] = {
+        "top_pressure_kpa": "塔顶压力(kPa(a))",
+        "bottom_pressure_kpa": "塔底压力(kPa(a))",
+        "top_temperature_c": "塔顶温度(℃)",
+        "bottom_temperature_c": "塔底温度(℃)",
+        "feed_flow_kg_h": "进料流量(kg/h)",
+        "reflux_flow_kg_h": "回流量(kg/h)",
+        "distillate_flow_kg_h": "塔顶采出(kg/h)",
+        "bottoms_flow_kg_h": "塔底采出(kg/h)",
+        "vapor_boilup_kg_h": "再沸蒸气量(kg/h)",
+        "reflux_drum_level_pct": "回流罐液位(%)",
+        "reboiler_level_pct": "塔釜液位(%)",
+        "top_ethanol_x": "塔顶乙醇摩尔分数",
+        "bottom_ethanol_x": "塔底乙醇摩尔分数",
+        "top_ethanol_wt": "塔顶乙醇质量分数",
+        "bottom_ethanol_wt": "塔底乙醇质量分数",
+        "reboiler_duty_kw": "再沸器热负荷(kW)",
+        "condenser_duty_kw": "冷凝器热负荷(kW)",
+        "energy_balance_residual_kw": "能量守恒残差(kW)",
+        "vapor_holdup_kgmol": "塔内气相总存量(kmol)",
+        "ambient_temperature_c": "环境温度(℃)",
+        "mass_balance_residual_kg_h": "总质量守恒残差(kg/h)",
+        "ethanol_balance_residual_kg_h": "乙醇守恒残差(kg/h)",
+        # 阶段 D 新增位号
+        "feed_valve_command_pct": "进料阀命令开度(%)",
+        "feed_valve_actual_pct": "进料阀实际开度(%)",
+        "reflux_valve_command_pct": "回流阀命令开度(%)",
+        "reflux_valve_actual_pct": "回流阀实际开度(%)",
+        "distillate_valve_command_pct": "塔顶采出阀命令开度(%)",
+        "distillate_valve_actual_pct": "塔顶采出阀实际开度(%)",
+        "bottoms_valve_command_pct": "塔底采出阀命令开度(%)",
+        "bottoms_valve_actual_pct": "塔底采出阀实际开度(%)",
+        "steam_valve_command_pct": "蒸汽阀命令开度(%)",
+        "steam_valve_actual_pct": "蒸汽阀实际开度(%)",
+        "cooling_valve_command_pct": "冷却水阀命令开度(%)",
+        "cooling_valve_actual_pct": "冷却水阀实际开度(%)",
+        "top_ethanol_wt_true": "塔顶乙醇质量分数真实值",
+        "top_ethanol_analyzer": "塔顶乙醇分析仪读数",
+        "bottom_ethanol_wt_true": "塔底乙醇质量分数真实值",
+        "bottom_ethanol_analyzer": "塔底乙醇分析仪读数",
+    }
+
+    def __init__(self, cycle_time: float, **kwargs: Any) -> None:
+        """
+        初始化精馏塔模型。
+
+        Args:
+            cycle_time: 控制器周期（秒）。
+            **kwargs: 其他参数，覆盖 default_params。
+        """
+        super().__init__(cycle_time, **kwargs)
+
+        self._validate_configuration()
+
+        # 塔板数固定为 12（spec §2.2）
+        self._n_trays = int(self.TRAY_COUNT)
+        self._feed_stage_idx = int(self.FEED_STAGE) - 1  # 0-indexed
+
+        # 压力参数
+        self._p_top_setpoint_kpa = float(self.top_pressure_kpa)
+        self._pressure_drop_dry_kpa = float(self.pressure_drop_per_stage_kpa)
+        self._pressure_drop_kv = float(self.pressure_drop_kv_kpa_s2_per_kgmol2)
+
+        # 标称持液量
+        self._m_tray_nom = float(self.m_tray_nom_kmol)
+        self._m_drum_nom = float(self.m_drum_nom_kmol)
+        self._m_sump_nom = float(self.m_sump_nom_kmol)
+        self._m_drum_max = float(self.m_drum_max_kmol)
+        self._m_sump_max = float(self.m_sump_max_kmol)
+
+        # 阶段 C 散热与气相参数
+        self._vapor_volume_m3 = float(self.vapor_volume_m3)
+        self._tray_ua = float(self.tray_ua_kw_per_k)
+        self._drum_ua = float(self.drum_ua_kw_per_k)
+        self._sump_ua = float(self.sump_ua_kw_per_k)
+        self._ambient_temperature_k = float(self.ambient_temperature_c) + 273.15
+
+        # 初始化状态
+        self._load_or_build_initial_state()
+
+        # 数值积分参数
+        self._max_internal_step = float(self.max_internal_step)
+        self._substeps = max(1, int(math.ceil(self.cycle_time / self._max_internal_step)))
+        self._internal_dt = self.cycle_time / self._substeps
+
+        # 上一周期外部流量输入（用于守恒诊断和首次 execute 时的默认值）
+        self._feed_flow_kgmol_per_s = float(self.feed_flow_kgmol_per_s)
+        self._reflux_flow_kgmol_per_s = float(self.reflux_flow_kgmol_per_s)
+        self._distillate_flow_kgmol_per_s = float(self.distillate_flow_kgmol_per_s)
+        self._bottoms_flow_kgmol_per_s = float(self.bottoms_flow_kgmol_per_s)
+        self._vapor_boilup_kgmol_per_s = float(self.vapor_boilup_kgmol_per_s)
+        self._feed_ethanol_wt = float(self.feed_ethanol_wt)
+        self._feed_temperature_c = float(self.feed_temperature_c)
+
+        # 阶段 D：创建六个阀门（spec §6.2）
+        # 初始开度根据稳态流量反算
+        rangeability = float(self.valve_rangeability)
+        self._valves: Dict[str, ValveActuator] = {
+            "feed": ValveActuator(
+                name="feed_valve",
+                full_travel_time_s=float(self.feed_valve_full_travel_s),
+                characteristic=str(self.feed_valve_characteristic),  # type: ignore[arg-type]
+                max_flow_kgmol_per_s=float(self.feed_valve_max_flow_kgmol_per_s),
+                initial_command_pct=_compute_initial_valve_pct(
+                    self._feed_flow_kgmol_per_s,
+                    float(self.feed_valve_max_flow_kgmol_per_s),
+                    str(self.feed_valve_characteristic),
+                    rangeability,
+                ),
+                rangeability=rangeability,
+            ),
+            "reflux": ValveActuator(
+                name="reflux_valve",
+                full_travel_time_s=float(self.reflux_valve_full_travel_s),
+                characteristic=str(self.reflux_valve_characteristic),  # type: ignore[arg-type]
+                max_flow_kgmol_per_s=float(self.reflux_valve_max_flow_kgmol_per_s),
+                initial_command_pct=_compute_initial_valve_pct(
+                    self._reflux_flow_kgmol_per_s,
+                    float(self.reflux_valve_max_flow_kgmol_per_s),
+                    str(self.reflux_valve_characteristic),
+                    rangeability,
+                ),
+                rangeability=rangeability,
+            ),
+            "distillate": ValveActuator(
+                name="distillate_valve",
+                full_travel_time_s=float(self.distillate_valve_full_travel_s),
+                characteristic=str(self.distillate_valve_characteristic),  # type: ignore[arg-type]
+                max_flow_kgmol_per_s=float(self.distillate_valve_max_flow_kgmol_per_s),
+                initial_command_pct=_compute_initial_valve_pct(
+                    self._distillate_flow_kgmol_per_s,
+                    float(self.distillate_valve_max_flow_kgmol_per_s),
+                    str(self.distillate_valve_characteristic),
+                    rangeability,
+                ),
+                rangeability=rangeability,
+            ),
+            "bottoms": ValveActuator(
+                name="bottoms_valve",
+                full_travel_time_s=float(self.bottoms_valve_full_travel_s),
+                characteristic=str(self.bottoms_valve_characteristic),  # type: ignore[arg-type]
+                max_flow_kgmol_per_s=float(self.bottoms_valve_max_flow_kgmol_per_s),
+                initial_command_pct=_compute_initial_valve_pct(
+                    self._bottoms_flow_kgmol_per_s,
+                    float(self.bottoms_valve_max_flow_kgmol_per_s),
+                    str(self.bottoms_valve_characteristic),
+                    rangeability,
+                ),
+                rangeability=rangeability,
+            ),
+            "steam": ValveActuator(
+                name="steam_valve",
+                full_travel_time_s=float(self.steam_valve_full_travel_s),
+                characteristic=str(self.steam_valve_characteristic),  # type: ignore[arg-type]
+                max_flow_kgmol_per_s=float(self.steam_valve_max_flow_kgmol_per_s),
+                initial_command_pct=_compute_initial_valve_pct(
+                    self._vapor_boilup_kgmol_per_s,
+                    float(self.steam_valve_max_flow_kgmol_per_s),
+                    str(self.steam_valve_characteristic),
+                    rangeability,
+                ),
+                rangeability=rangeability,
+            ),
+            "cooling": ValveActuator(
+                name="cooling_valve",
+                full_travel_time_s=float(self.cooling_valve_full_travel_s),
+                characteristic=str(self.cooling_valve_characteristic),  # type: ignore[arg-type]
+                max_flow_kgmol_per_s=float(self.cooling_valve_max_flow_kgmol_per_s),
+                # 冷却水阀初始开度按蒸气量对应（全凝器冷凝能力与蒸气量匹配）
+                initial_command_pct=_compute_initial_valve_pct(
+                    self._vapor_boilup_kgmol_per_s,
+                    float(self.cooling_valve_max_flow_kgmol_per_s),
+                    str(self.cooling_valve_characteristic),
+                    rangeability,
+                ),
+                rangeability=rangeability,
+            ),
+        }
+
+        # 阶段 D：创建两个浓度分析仪（spec §6.3）
+        # 初始真实值用稳态浓度（init 已完成）
+        seed = int(self.random_seed)
+        top_wt_init = float(self.top_ethanol_wt) if hasattr(self, "top_ethanol_wt") else 0.85
+        bottom_wt_init = float(self.bottom_ethanol_wt) if hasattr(self, "bottom_ethanol_wt") else 0.015
+        self._analyzers: Dict[str, ConcentrationAnalyzer] = {
+            "top": ConcentrationAnalyzer(
+                name="top_analyzer",
+                tau_lag_s=float(self.analyzer_tau_lag_s),
+                sample_interval_s=float(self.analyzer_sample_interval_s),
+                transport_delay_s=float(self.analyzer_transport_delay_s),
+                noise_std=float(self.analyzer_noise_std),
+                drift_rate_per_s=float(self.analyzer_drift_rate_per_s),
+                random_seed=seed,
+                initial_true_value=top_wt_init,
+                initial_measured_value=top_wt_init,
+            ),
+            "bottom": ConcentrationAnalyzer(
+                name="bottom_analyzer",
+                tau_lag_s=float(self.analyzer_tau_lag_s),
+                sample_interval_s=float(self.analyzer_sample_interval_s),
+                transport_delay_s=float(self.analyzer_transport_delay_s),
+                noise_std=float(self.analyzer_noise_std),
+                drift_rate_per_s=float(self.analyzer_drift_rate_per_s),
+                random_seed=seed + 1,  # 不同种子避免噪声相关性
+                initial_true_value=bottom_wt_init,
+                initial_measured_value=bottom_wt_init,
+            ),
+        }
+
+        # 阶段 D：执行机构模式标志
+        # True = 阀位模式（阀位输入驱动流量），False = 直接流量模式（向后兼容阶段 B/C）
+        self._valve_mode_enabled = False
+
+        # 阶段 D：参考稳态文件路径和加载状态
+        self._reference_state_path: Optional[str] = None
+        self._reference_state_loaded = False
+        self._reference_state_saved = False
+
+        # 阶段 D：快照关键设备参数（用于参数哈希）
+        # spec §10.1: 用户修改关键设备参数后，旧稳态不得静默复用。
+        # 注意：top_pressure_kpa 等部分参数在运行时会被 _publish_scalar_attributes
+        # 覆盖为动态值，所以必须用 __init__ 时的快照来计算哈希。
+        self._params_hash_snapshot: Dict[str, Any] = {
+            key: getattr(self, key) for key in self._PARAMS_HASH_KEYS
+        }
+
+        # 对外位号初值
+        self._publish_scalar_attributes()
+
+    # ------------------------------------------------------------------
+    # 校验
+    # ------------------------------------------------------------------
+    def _validate_configuration(self) -> None:
+        """构造时参数校验，失败抛 ValueError。"""
+        if not math.isfinite(self.cycle_time) or self.cycle_time <= 0.0:
+            raise ValueError(f"cycle_time 必须大于0，实际值={self.cycle_time!r}")
+
+        if int(self.TRAY_COUNT) != 12:
+            raise ValueError(f"TRAY_COUNT 第一版固定为 12，实际值={self.TRAY_COUNT}")
+
+        if int(self.FEED_STAGE) < 1 or int(self.FEED_STAGE) > 12:
+            raise ValueError(f"FEED_STAGE 必须位于 [1, 12]，实际值={self.FEED_STAGE}")
+
+        for name in (
+            "top_pressure_kpa", "pressure_drop_per_stage_kpa",
+            "pressure_drop_kv_kpa_s2_per_kgmol2",
+            "m_tray_nom_kmol", "m_drum_nom_kmol", "m_sump_nom_kmol",
+            "m_drum_max_kmol", "m_sump_max_kmol",
+            "feed_flow_kgmol_per_s", "distillate_flow_kgmol_per_s",
+            "bottoms_flow_kgmol_per_s", "reflux_flow_kgmol_per_s",
+            "vapor_boilup_kgmol_per_s",
+            "feed_ethanol_wt", "feed_temperature_c",
+            "vapor_volume_m3", "tray_ua_kw_per_k", "drum_ua_kw_per_k",
+            "sump_ua_kw_per_k", "ambient_temperature_c",
+            "max_internal_step",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise ValueError(f"参数无效: {name} 必须为有限数值，实际值={value!r}")
+
+        if float(self.top_pressure_kpa) <= 0.0:
+            raise ValueError(f"top_pressure_kpa 必须大于0，实际值={self.top_pressure_kpa!r}")
+
+        if float(self.pressure_drop_per_stage_kpa) < 0.0:
+            raise ValueError(
+                f"pressure_drop_per_stage_kpa 不得为负，实际值={self.pressure_drop_per_stage_kpa!r}"
+            )
+
+        if float(self.pressure_drop_kv_kpa_s2_per_kgmol2) < 0.0:
+            raise ValueError(
+                f"pressure_drop_kv_kpa_s2_per_kgmol2 不得为负，实际值="
+                f"{self.pressure_drop_kv_kpa_s2_per_kgmol2!r}"
+            )
+
+        if float(self.m_tray_nom_kmol) <= 0.0:
+            raise ValueError(f"m_tray_nom_kmol 必须大于0，实际值={self.m_tray_nom_kmol!r}")
+        if float(self.m_drum_nom_kmol) <= 0.0:
+            raise ValueError(f"m_drum_nom_kmol 必须大于0，实际值={self.m_drum_nom_kmol!r}")
+        if float(self.m_sump_nom_kmol) <= 0.0:
+            raise ValueError(f"m_sump_nom_kmol 必须大于0，实际值={self.m_sump_nom_kmol!r}")
+        if float(self.m_drum_max_kmol) <= float(self.m_drum_nom_kmol):
+            raise ValueError("m_drum_max_kmol 必须大于 m_drum_nom_kmol")
+        if float(self.m_sump_max_kmol) <= float(self.m_sump_nom_kmol):
+            raise ValueError("m_sump_max_kmol 必须大于 m_sump_nom_kmol")
+
+        if not (0.0 <= float(self.feed_ethanol_wt) <= 1.0):
+            raise ValueError(
+                f"feed_ethanol_wt 必须位于 [0, 1]，实际值={self.feed_ethanol_wt!r}"
+            )
+
+        if float(self.vapor_volume_m3) <= 0.0:
+            raise ValueError(f"vapor_volume_m3 必须大于0，实际值={self.vapor_volume_m3!r}")
+
+        if float(self.tray_ua_kw_per_k) < 0.0 or float(self.drum_ua_kw_per_k) < 0.0 \
+                or float(self.sump_ua_kw_per_k) < 0.0:
+            raise ValueError("UA 参数不得为负")
+
+        if float(self.max_internal_step) <= 0.0 or float(self.max_internal_step) > self.cycle_time:
+            raise ValueError(
+                f"max_internal_step 必须位于 (0, cycle_time]，实际值={self.max_internal_step!r}"
+            )
+
+        mode = str(self.initialization_mode).upper()
+        if mode not in ("STEADY", "COLD"):
+            raise ValueError(
+                f"initialization_mode 必须为 'STEADY' 或 'COLD'，实际值={self.initialization_mode!r}"
+            )
+        if mode == "COLD":
+            raise NotImplementedError(
+                "initialization_mode=COLD 第一版未实现（spec §10.3），后续阶段单独设计"
+            )
+
+    # ------------------------------------------------------------------
+    # 初始化
+    # ------------------------------------------------------------------
+    def _load_or_build_initial_state(self) -> None:
+        """
+        阶段 C 稳态初始化。
+
+        用线性插值生成接近稳态的浓度剖面，然后用泡点计算初始温度，
+        最后由温度反算初始内能 U，保证 U 与 T 在初始时刻一致。
+
+        气相存量 N_vapor 由初始 P_top 和 V_gas 通过理想气体状态方程反算。
+        """
+        # 目标塔顶/塔底乙醇摩尔分数（来自 spec §2.3 参考工况）
+        x_top_target_mol = ethanol_mass_fraction_to_mole_fraction(0.85)
+        x_bottom_target_mol = ethanol_mass_fraction_to_mole_fraction(0.015)
+        x_feed_mol = ethanol_mass_fraction_to_mole_fraction(self.feed_ethanol_wt)
+
+        # 浓度剖面（线性插值）
+        x_e = np.zeros(self._n_trays, dtype=np.float64)
+        feed_idx = self._feed_stage_idx  # 0-indexed
+        for i in range(self._n_trays):
+            if i <= feed_idx:
+                if feed_idx > 0:
+                    t = i / feed_idx
+                    x_e[i] = x_top_target_mol * (1.0 - t) + x_feed_mol * t
+                else:
+                    x_e[i] = x_top_target_mol
+            else:
+                t = (i - feed_idx) / (self._n_trays - 1 - feed_idx)
+                x_e[i] = x_feed_mol * (1.0 - t) + x_bottom_target_mol * t
+
+        x_e = np.clip(x_e, 0.0, 1.0)
+
+        # 持液量（标称值）
+        m_tray = np.full(self._n_trays, self._m_tray_nom, dtype=np.float64)
+        m_drum = self._m_drum_nom
+        m_sump = self._m_sump_nom
+        x_e_drum = x_top_target_mol
+        x_e_sump = x_bottom_target_mol
+
+        # 用泡点计算初始温度（使系统初始处于 VLE 平衡）
+        # 用设定压力剖面初始化
+        v_init = float(self.vapor_boilup_kgmol_per_s)
+        p_top_init = self._p_top_setpoint_kpa
+        pressure_kpa_init = np.empty(self._n_trays, dtype=np.float64)
+        pressure_kpa_init[0] = p_top_init
+        for i in range(1, self._n_trays):
+            dp = self._pressure_drop_dry_kpa + self._pressure_drop_kv * v_init * v_init
+            pressure_kpa_init[i] = pressure_kpa_init[i - 1] + dp
+        p_sump_init = pressure_kpa_init[-1] + self._pressure_drop_dry_kpa + \
+            self._pressure_drop_kv * v_init * v_init
+
+        T_tray_init = np.zeros(self._n_trays, dtype=np.float64)
+        yE_tray_init = np.zeros(self._n_trays, dtype=np.float64)
+        for i in range(self._n_trays):
+            T_tray_init[i], yE_tray_init[i] = bubble_point_temperature(
+                float(x_e[i]), float(pressure_kpa_init[i])
+            )
+        T_sump_init, yE_sump_init = bubble_point_temperature(
+            float(x_e_sump), float(p_sump_init)
+        )
+        # 回流罐温度 = 塔顶板温度（全凝器饱和液体）
+        T_drum_init = float(T_tray_init[0])
+
+        # 由温度反算内能 U = M * h_L_mix(x, T)
+        U_tray_init = np.array(
+            [m_tray[i] * liquid_enthalpy_kj_per_kmol(float(x_e[i]), float(T_tray_init[i]))
+             for i in range(self._n_trays)],
+            dtype=np.float64,
+        )
+        U_drum_init = m_drum * liquid_enthalpy_kj_per_kmol(float(x_e_drum), float(T_drum_init))
+        U_sump_init = m_sump * liquid_enthalpy_kj_per_kmol(float(x_e_sump), float(T_sump_init))
+
+        # 气相存量 N_vapor（由 P_top 和 V_gas 反算）
+        T_vapor_avg_init = float(np.mean(T_tray_init))
+        N_vapor_init = (
+            p_top_init * self._vapor_volume_m3
+            / (R_UNIVERSAL_KPA_M3_PER_KMOL_K * T_vapor_avg_init)
+        )
+
+        # 状态数组
+        self._M_tray = m_tray.copy()                  # kmol
+        self._nE_tray = m_tray * x_e                  # kmol
+        self._U_tray = U_tray_init                    # kJ
+        self._M_drum = m_drum                          # kmol
+        self._nE_drum = m_drum * x_e_drum             # kmol
+        self._U_drum = U_drum_init                    # kJ
+        self._M_sump = m_sump                          # kmol
+        self._nE_sump = m_sump * x_e_sump             # kmol
+        self._U_sump = U_sump_init                    # kJ
+        self._N_vapor = N_vapor_init                  # kmol
+
+        # 气相流量（CMO 假设）
+        self._V_kgmol_per_s = v_init
+
+        # 派生量（由 _compute_algebraic 计算）
+        self._T_tray = T_tray_init.copy()
+        self._yE_tray = yE_tray_init.copy()
+        self._T_drum = T_drum_init
+        self._T_sump = T_sump_init
+        self._yE_sump = yE_sump_init
+        self._pressure_kpa = pressure_kpa_init.copy()
+        self._p_top_kpa = p_top_init
+        self._p_sump_kpa = p_sump_init
+        self._T_vapor_avg = T_vapor_avg_init
+
+        # 上次流量输入（用于残差诊断和首次 execute 默认值）
+        self._last_feed_flow = float(self.feed_flow_kgmol_per_s)
+        self._last_reflux_flow = float(self.reflux_flow_kgmol_per_s)
+        self._last_distillate_flow = float(self.distillate_flow_kgmol_per_s)
+        self._last_bottoms_flow = float(self.bottoms_flow_kgmol_per_s)
+        self._last_vapor_boilup = float(self.vapor_boilup_kgmol_per_s)
+
+        # 阶段 C 输出
+        self.reboiler_duty_kw = 0.0
+        self.condenser_duty_kw = 0.0
+        self.energy_balance_residual_kw = 0.0
+        # 内部用的再沸/冷凝负荷（首次 execute 前的默认值）
+        self._Q_R_kw = 0.0
+        self._Q_C_kw = 0.0
+
+        # 累计守恒诊断
+        self._cumulative_mass_in = 0.0     # kg
+        self._cumulative_mass_out = 0.0    # kg
+        self._cumulative_ethanol_in = 0.0  # kg
+        self._cumulative_ethanol_out = 0.0 # kg
+        self._cumulative_energy_in = 0.0   # kJ
+        self._cumulative_energy_out = 0.0  # kJ
+        self._initial_total_mass = 0.0     # kg
+        self._initial_total_ethanol = 0.0  # kg
+        self._initial_total_energy = 0.0   # kJ
+        self._first_execute = True
+
+    # ------------------------------------------------------------------
+    # 代数量计算（VLE、温度、压力、流量）
+    # ------------------------------------------------------------------
+    def _compute_algebraic(
+        self,
+        M_tray: np.ndarray,
+        nE_tray: np.ndarray,
+        U_tray: np.ndarray,
+        M_drum: float,
+        nE_drum: float,
+        U_drum: float,
+        M_sump: float,
+        nE_sump: float,
+        U_sump: float,
+        N_vapor: float,
+        V: float,
+    ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, np.ndarray, float, float]:
+        """
+        由状态计算代数量：温度、气相组成、压力剖面、平均气相温度。
+
+        Args:
+            M_tray, nE_tray, U_tray: 塔板液相物质量、乙醇物质量、内能 (12,)
+            M_drum, nE_drum, U_drum: 回流罐
+            M_sump, nE_sump, U_sump: 塔釜
+            N_vapor: 气相总存量 (kmol)
+            V: 气相流量 (kmol/s, CMO)
+
+        Returns:
+            (T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump, T_vapor_avg)
+        """
+        # 液相组成（截断到 [0,1]）
+        xE_tray = np.where(M_tray > 1e-15, nE_tray / M_tray, 0.0)
+        xE_tray = np.clip(xE_tray, 0.0, 1.0)
+        xE_drum = nE_drum / M_drum if M_drum > 1e-15 else 0.0
+        xE_drum = max(0.0, min(1.0, xE_drum))
+        xE_sump = nE_sump / M_sump if M_sump > 1e-15 else 0.0
+        xE_sump = max(0.0, min(1.0, xE_sump))
+
+        # 塔板温度：由内能反算 T = T_ref + U / (M * Cp_L_mix(x))
+        T_tray = np.empty(self._n_trays, dtype=np.float64)
+        for i in range(self._n_trays):
+            cp_mix = liquid_heat_capacity_kj_per_kmol_k(float(xE_tray[i]))
+            T_tray[i] = T_REF_K + U_tray[i] / (M_tray[i] * cp_mix)
+            # 物理范围限制（数值保护，避免极端情况）
+            if not math.isfinite(T_tray[i]):
+                T_tray[i] = T_REF_K + 50.0
+            T_tray[i] = max(250.0, min(500.0, T_tray[i]))
+
+        # 回流罐和塔釜温度
+        cp_drum = liquid_heat_capacity_kj_per_kmol_k(xE_drum)
+        T_drum = T_REF_K + U_drum / (M_drum * cp_drum)
+        if not math.isfinite(T_drum):
+            T_drum = T_REF_K + 50.0
+        T_drum = max(250.0, min(500.0, T_drum))
+
+        cp_sump = liquid_heat_capacity_kj_per_kmol_k(xE_sump)
+        T_sump = T_REF_K + U_sump / (M_sump * cp_sump)
+        if not math.isfinite(T_sump):
+            T_sump = T_REF_K + 50.0
+        T_sump = max(250.0, min(500.0, T_sump))
+
+        # 塔顶压力：理想气体状态方程 P = N·R·T / V
+        T_vapor_avg = float(np.mean(T_tray))
+        if T_vapor_avg <= 0.0 or not math.isfinite(T_vapor_avg):
+            T_vapor_avg = 350.0
+        p_top = N_vapor * R_UNIVERSAL_KPA_M3_PER_KMOL_K * T_vapor_avg / self._vapor_volume_m3
+        if not math.isfinite(p_top) or p_top <= 0.0:
+            p_top = self._p_top_setpoint_kpa  # 数值保护
+
+        # 沿塔压降 ΔP_i = ΔP_dry + K_v · V²
+        dp = self._pressure_drop_dry_kpa + self._pressure_drop_kv * V * V
+        pressure_kpa = np.empty(self._n_trays, dtype=np.float64)
+        pressure_kpa[0] = p_top
+        for i in range(1, self._n_trays):
+            pressure_kpa[i] = pressure_kpa[i - 1] + dp
+        p_sump = pressure_kpa[-1] + dp
+
+        # 气相组成：VLE at (T, x, P)，归一化以兼容非平衡态
+        yE_tray = np.empty(self._n_trays, dtype=np.float64)
+        for i in range(self._n_trays):
+            y_e, _, _ = vapor_composition_at_state(
+                float(xE_tray[i]), float(T_tray[i]), float(pressure_kpa[i])
+            )
+            yE_tray[i] = max(0.0, min(1.0, y_e))
+
+        # 塔釜气相组成
+        y_e_sump, _, _ = vapor_composition_at_state(xE_sump, T_sump, p_sump)
+        y_e_sump = max(0.0, min(1.0, y_e_sump))
+
+        return T_tray, yE_tray, T_drum, T_sump, y_e_sump, p_top, pressure_kpa, p_sump, T_vapor_avg
+
+    # ------------------------------------------------------------------
+    # 水力学
+    # ------------------------------------------------------------------
+    def _calculate_hydraulics(self, M_tray: np.ndarray) -> np.ndarray:
+        """
+        计算向下液相流量 L[i] (kmol/s)。
+
+        简化堰流公式（spec §5.5）：
+            L[i] = L_nom[i] * (M[i] / M_nom[i])^1.5
+        """
+        r_nom = float(self.reflux_flow_kgmol_per_s)
+        f_nom = float(self.feed_flow_kgmol_per_s)
+        l_nom = np.empty(self._n_trays, dtype=np.float64)
+        for i in range(self._n_trays):
+            if i < self._feed_stage_idx:
+                l_nom[i] = r_nom
+            else:
+                l_nom[i] = r_nom + f_nom
+
+        ratio = M_tray / self._m_tray_nom
+        ratio = np.clip(ratio, 0.0, None)
+        return l_nom * np.power(ratio, 1.5)
+
+    # ------------------------------------------------------------------
+    # RHS（状态导数）
+    # ------------------------------------------------------------------
+    def _calculate_rhs(
+        self,
+        M_tray: np.ndarray,
+        nE_tray: np.ndarray,
+        U_tray: np.ndarray,
+        M_drum: float,
+        nE_drum: float,
+        U_drum: float,
+        M_sump: float,
+        nE_sump: float,
+        U_sump: float,
+        N_vapor: float,
+        L: np.ndarray,
+        V: float,
+        T_tray: np.ndarray,
+        yE_tray: np.ndarray,
+        T_drum: float,
+        T_sump: float,
+        yE_sump: float,
+        feed_flow: float,
+        feed_xE: float,
+        feed_temperature_k: float,
+        reflux_flow: float,
+        distillate_flow: float,
+        bottoms_flow: float,
+        vapor_boilup: float,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float, float, float, float]:
+        """
+        计算状态导数：(dM, dnE, dU) for tray/drum/sump + dN_vapor。
+
+        返回顺序：
+            dM_tray, dnE_tray, dU_tray,
+            dM_drum, dnE_drum, dU_drum,
+            dM_sump, dnE_sump, dU_sump,
+            dN_vapor
+        """
+        n_trays = self._n_trays
+        feed_idx = self._feed_stage_idx
+        T_amb = self._ambient_temperature_k
+
+        # 液相组成
+        xE_tray = np.where(M_tray > 1e-15, nE_tray / M_tray, 0.0)
+        xE_tray = np.clip(xE_tray, 0.0, 1.0)
+        xE_drum = nE_drum / M_drum if M_drum > 1e-15 else 0.0
+        xE_drum = max(0.0, min(1.0, xE_drum))
+        xE_sump = nE_sump / M_sump if M_sump > 1e-15 else 0.0
+        xE_sump = max(0.0, min(1.0, xE_sump))
+
+        # 进料摩尔焓 (kJ/kmol)：进料为液相，按进料温度和组成计算
+        h_F = liquid_enthalpy_kj_per_kmol(feed_xE, feed_temperature_k)
+
+        # 塔板液相和气相摩尔焓 (kJ/kmol)
+        h_L_tray = np.array([
+            liquid_enthalpy_kj_per_kmol(float(xE_tray[i]), float(T_tray[i]))
+            for i in range(n_trays)
+        ], dtype=np.float64)
+        h_V_tray = np.array([
+            vapor_enthalpy_kj_per_kmol(float(yE_tray[i]), float(T_tray[i]))
+            for i in range(n_trays)
+        ], dtype=np.float64)
+
+        # 回流罐和塔釜液相焓
+        h_L_drum = liquid_enthalpy_kj_per_kmol(xE_drum, T_drum)
+        h_L_sump = liquid_enthalpy_kj_per_kmol(xE_sump, T_sump)
+
+        # 塔釜气相焓（蒸气离开塔釜进入塔底板）
+        h_V_sump = vapor_enthalpy_kj_per_kmol(yE_sump, T_sump)
+        # 塔顶板气相焓（蒸气进入冷凝器/回流罐）
+        h_V_top = h_V_tray[0]
+
+        # 塔板导数
+        dM = np.zeros(n_trays, dtype=np.float64)
+        dnE = np.zeros(n_trays, dtype=np.float64)
+        dU = np.zeros(n_trays, dtype=np.float64)
+
+        for i in range(n_trays):
+            # 上游液相
+            if i == 0:
+                L_in = reflux_flow
+                xE_L_in = xE_drum
+                h_L_in = h_L_drum
+            else:
+                L_in = L[i - 1]
+                xE_L_in = xE_tray[i - 1]
+                h_L_in = h_L_tray[i - 1]
+
+            # 下游气相
+            if i == n_trays - 1:
+                V_in = vapor_boilup
+                yE_V_in = yE_sump
+                h_V_in = h_V_sump
+            else:
+                V_in = V
+                yE_V_in = yE_tray[i + 1]
+                h_V_in = h_V_tray[i + 1]
+
+            # 进料（仅进料板）
+            F_i = feed_flow if i == feed_idx else 0.0
+
+            # 总物料衡算
+            dM[i] = L_in + V_in + F_i - L[i] - V
+
+            # 乙醇组分衡算
+            dnE[i] = (
+                L_in * xE_L_in
+                + V_in * yE_V_in
+                + F_i * feed_xE
+                - L[i] * xE_tray[i]
+                - V * yE_tray[i]
+            )
+
+            # 能量衡算 (kJ/s = kW)
+            Q_loss = self._tray_ua * (T_tray[i] - T_amb)  # kW
+            dU[i] = (
+                L_in * h_L_in
+                + V_in * h_V_in
+                + F_i * h_F
+                - L[i] * h_L_tray[i]
+                - V * h_V_tray[i]
+                - Q_loss
+            )  # kJ/s = kW
+
+        # 回流罐（全凝器）：塔顶蒸气 V 全部冷凝进入回流罐
+        # dM_drum/dt = V - R - D
+        # dnE_drum/dt = V*yE[0] - (R+D)*xE_drum
+        # dU_drum/dt = V*h_V_top - (R+D)*h_L_drum - Q_loss_drum
+        # 注意：全凝器中蒸气冷凝释放潜热，回流罐温度应等于塔顶板温度（饱和液体）
+        # 冷凝释放的潜热由冷却水带走（计入 Q_C），不进入回流罐内能
+        Q_loss_drum = self._drum_ua * (T_drum - T_amb)
+        dM_drum = V - reflux_flow - distillate_flow
+        dnE_drum = V * yE_tray[0] - (reflux_flow + distillate_flow) * xE_drum
+        # 回流罐内能变化：进入的是饱和液体焓（蒸气冷凝后），不是气相焓
+        # 简化：h_L_drum ≈ h_L_top（饱和液体），冷凝潜热由冷凝器带走
+        h_L_top = h_L_tray[0]  # 塔顶板液相焓 ≈ 回流罐液相焓
+        dU_drum = V * h_L_top - (reflux_flow + distillate_flow) * h_L_drum - Q_loss_drum
+
+        # 塔釜（再沸器）：塔底板下流液体 L[11] 进入，采出 B，蒸气 V_boilup 上升
+        # dM_sump/dt = L[11] - B - V_boilup
+        # dnE_sump/dt = L[11]*xE[11] - B*xE_sump - V_boilup*yE_sump
+        # dU_sump/dt = L[11]*h_L[11] - B*h_L_sump - V_boilup*h_V_sump - Q_loss_sump + Q_R
+        # 其中 Q_R 是再沸器加热负荷（由 V_boilup 反推）
+        Q_loss_sump = self._sump_ua * (T_sump - T_amb)
+        # 再沸器热负荷：Q_R = V_boilup * ΔH_vap_mix(x_sump) + Q_loss_sump
+        # 加热源把塔釜液体加热到沸点并汽化 V_boilup，潜热 = V_boilup * ΔH_vap_mix
+        # 显热（Q_sensible）≈ 0（塔釜液体本就在沸点附近）
+        dh_vap_sump = heat_of_vaporization_kj_per_kmol(xE_sump)
+        Q_R = vapor_boilup * dh_vap_sump + Q_loss_sump  # kW
+
+        dM_sump = L[n_trays - 1] - bottoms_flow - vapor_boilup
+        dnE_sump = (
+            L[n_trays - 1] * xE_tray[n_trays - 1]
+            - bottoms_flow * xE_sump
+            - vapor_boilup * yE_sump
+        )
+        dU_sump = (
+            L[n_trays - 1] * h_L_tray[n_trays - 1]
+            - bottoms_flow * h_L_sump
+            - vapor_boilup * h_V_sump
+            - Q_loss_sump
+            + Q_R
+        )
+
+        # 气相存量动态：dN_v/dt = V_boil - V_condense - V_vent
+        # 全凝器：V_condense = V（所有进入冷凝器的蒸气均被冷凝）
+        # 第一版无放空：V_vent = 0
+        V_condense = V  # 全凝器
+        V_vent = 0.0
+        dN_vapor = vapor_boilup - V_condense - V_vent
+
+        # 保存再沸/冷凝负荷用于对外位号
+        self._Q_R_kw = Q_R
+        # 冷凝器负荷 = V_top * ΔH_vap_mix(y_top)
+        # y_top = yE_tray[0]（塔顶板气相组成）
+        dh_vap_top = heat_of_vaporization_kj_per_kmol(yE_tray[0])
+        self._Q_C_kw = V * dh_vap_top  # kW
+
+        return dM, dnE, dU, dM_drum, dnE_drum, dU_drum, dM_sump, dnE_sump, dU_sump, dN_vapor
+
+    # ------------------------------------------------------------------
+    # 积分
+    # ------------------------------------------------------------------
+    def _integrate_substeps(
+        self,
+        feed_flow: float,
+        feed_xE: float,
+        feed_temperature_k: float,
+        reflux_flow: float,
+        distillate_flow: float,
+        bottoms_flow: float,
+        vapor_boilup: float,
+    ) -> None:
+        """Heun/RK2 积分，内部子步。"""
+        dt = self._internal_dt
+        V = vapor_boilup  # CMO 假设
+
+        for _ in range(self._substeps):
+            # ---- k1 = f(state) ----
+            T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump, T_vapor_avg = \
+                self._compute_algebraic(
+                    self._M_tray, self._nE_tray, self._U_tray,
+                    self._M_drum, self._nE_drum, self._U_drum,
+                    self._M_sump, self._nE_sump, self._U_sump,
+                    self._N_vapor, V,
+                )
+            # 保存代数量（用于守恒诊断和对外位号）
+            self._T_tray = T_tray.copy()
+            self._yE_tray = yE_tray.copy()
+            self._T_drum = T_drum
+            self._T_sump = T_sump
+            self._yE_sump = yE_sump
+            self._p_top_kpa = p_top
+            self._pressure_kpa = pressure_kpa.copy()
+            self._p_sump_kpa = p_sump
+            self._T_vapor_avg = T_vapor_avg
+
+            L = self._calculate_hydraulics(self._M_tray)
+
+            dM1, dnE1, dU1, dM_drum1, dnE_drum1, dU_drum1, dM_sump1, dnE_sump1, dU_sump1, dN_v1 = \
+                self._calculate_rhs(
+                    self._M_tray, self._nE_tray, self._U_tray,
+                    self._M_drum, self._nE_drum, self._U_drum,
+                    self._M_sump, self._nE_sump, self._U_sump,
+                    self._N_vapor, L, V,
+                    T_tray, yE_tray, T_drum, T_sump, yE_sump,
+                    feed_flow, feed_xE, feed_temperature_k,
+                    reflux_flow, distillate_flow, bottoms_flow, vapor_boilup,
+                )
+
+            # ---- 预测步 ----
+            M_pred = self._M_tray + dt * dM1
+            nE_pred = self._nE_tray + dt * dnE1
+            U_pred = self._U_tray + dt * dU1
+            M_drum_pred = self._M_drum + dt * dM_drum1
+            nE_drum_pred = self._nE_drum + dt * dnE_drum1
+            U_drum_pred = self._U_drum + dt * dU_drum1
+            M_sump_pred = self._M_sump + dt * dM_sump1
+            nE_sump_pred = self._nE_sump + dt * dnE_sump1
+            U_sump_pred = self._U_sump + dt * dU_sump1
+            N_vapor_pred = self._N_vapor + dt * dN_v1
+
+            # 数值保护（spec §5.8：仅允许 1e-12 级截断）
+            M_pred = np.maximum(M_pred, 1e-12)
+            nE_pred = np.maximum(nE_pred, 0.0)
+            nE_pred = np.minimum(nE_pred, M_pred)
+            M_drum_pred = max(M_drum_pred, 1e-12)
+            nE_drum_pred = max(nE_drum_pred, 0.0)
+            nE_drum_pred = min(nE_drum_pred, M_drum_pred)
+            M_sump_pred = max(M_sump_pred, 1e-12)
+            nE_sump_pred = max(nE_sump_pred, 0.0)
+            nE_sump_pred = min(nE_sump_pred, M_sump_pred)
+            N_vapor_pred = max(N_vapor_pred, 1e-12)
+
+            # ---- k2 = f(predicted) ----
+            T_tray_p, yE_tray_p, T_drum_p, T_sump_p, yE_sump_p, p_top_p, pressure_kpa_p, p_sump_p, T_vapor_avg_p = \
+                self._compute_algebraic(
+                    M_pred, nE_pred, U_pred,
+                    M_drum_pred, nE_drum_pred, U_drum_pred,
+                    M_sump_pred, nE_sump_pred, U_sump_pred,
+                    N_vapor_pred, V,
+                )
+            L_pred = self._calculate_hydraulics(M_pred)
+
+            dM2, dnE2, dU2, dM_drum2, dnE_drum2, dU_drum2, dM_sump2, dnE_sump2, dU_sump2, dN_v2 = \
+                self._calculate_rhs(
+                    M_pred, nE_pred, U_pred,
+                    M_drum_pred, nE_drum_pred, U_drum_pred,
+                    M_sump_pred, nE_sump_pred, U_sump_pred,
+                    N_vapor_pred, L_pred, V,
+                    T_tray_p, yE_tray_p, T_drum_p, T_sump_p, yE_sump_p,
+                    feed_flow, feed_xE, feed_temperature_k,
+                    reflux_flow, distillate_flow, bottoms_flow, vapor_boilup,
+                )
+
+            # ---- Heun 平均 ----
+            self._M_tray = self._M_tray + dt * 0.5 * (dM1 + dM2)
+            self._nE_tray = self._nE_tray + dt * 0.5 * (dnE1 + dnE2)
+            self._U_tray = self._U_tray + dt * 0.5 * (dU1 + dU2)
+            self._M_drum = self._M_drum + dt * 0.5 * (dM_drum1 + dM_drum2)
+            self._nE_drum = self._nE_drum + dt * 0.5 * (dnE_drum1 + dnE_drum2)
+            self._U_drum = self._U_drum + dt * 0.5 * (dU_drum1 + dU_drum2)
+            self._M_sump = self._M_sump + dt * 0.5 * (dM_sump1 + dM_sump2)
+            self._nE_sump = self._nE_sump + dt * 0.5 * (dnE_sump1 + dnE_sump2)
+            self._U_sump = self._U_sump + dt * 0.5 * (dU_sump1 + dU_sump2)
+            self._N_vapor = self._N_vapor + dt * 0.5 * (dN_v1 + dN_v2)
+
+            # 数值保护
+            self._M_tray = np.maximum(self._M_tray, 1e-12)
+            self._nE_tray = np.maximum(self._nE_tray, 0.0)
+            self._nE_tray = np.minimum(self._nE_tray, self._M_tray)
+            self._M_drum = max(self._M_drum, 1e-12)
+            self._nE_drum = max(self._nE_drum, 0.0)
+            self._nE_drum = min(self._nE_drum, self._M_drum)
+            self._M_sump = max(self._M_sump, 1e-12)
+            self._nE_sump = max(self._nE_sump, 0.0)
+            self._nE_sump = min(self._nE_sump, self._M_sump)
+            self._N_vapor = max(self._N_vapor, 1e-12)
+
+        # 最终代数量更新
+        T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump, T_vapor_avg = \
+            self._compute_algebraic(
+                self._M_tray, self._nE_tray, self._U_tray,
+                self._M_drum, self._nE_drum, self._U_drum,
+                self._M_sump, self._nE_sump, self._U_sump,
+                self._N_vapor, V,
+            )
+        # 最后再调用一次 RHS 以更新 Q_R、Q_C
+        L_final = self._calculate_hydraulics(self._M_tray)
+        self._calculate_rhs(
+            self._M_tray, self._nE_tray, self._U_tray,
+            self._M_drum, self._nE_drum, self._U_drum,
+            self._M_sump, self._nE_sump, self._U_sump,
+            self._N_vapor, L_final, V,
+            T_tray, yE_tray, T_drum, T_sump, yE_sump,
+            feed_flow, feed_xE, feed_temperature_k,
+            reflux_flow, distillate_flow, bottoms_flow, vapor_boilup,
+        )
+
+        self._T_tray = T_tray.copy()
+        self._yE_tray = yE_tray.copy()
+        self._T_drum = T_drum
+        self._T_sump = T_sump
+        self._yE_sump = yE_sump
+        self._p_top_kpa = p_top
+        self._pressure_kpa = pressure_kpa.copy()
+        self._p_sump_kpa = p_sump
+        self._T_vapor_avg = T_vapor_avg
+
+    # ------------------------------------------------------------------
+    # 守恒诊断
+    # ------------------------------------------------------------------
+    def _calculate_balances_and_kpis(
+        self,
+        feed_flow: float,
+        feed_xE: float,
+        feed_temperature_k: float,
+        reflux_flow: float,
+        distillate_flow: float,
+        bottoms_flow: float,
+        vapor_boilup: float,
+        dt: float,
+    ) -> None:
+        """
+        计算守恒残差：质量、乙醇、能量。
+
+        瞬时残差（稳态时应接近 0）：
+            mass_residual = F - D - B（kg/h）
+            ethanol_residual = F·xE_F - D·xD - B·xB（kg/h）
+            energy_residual = Q_R + F·h_F - Q_C - D·h_D - B·h_B - Q_loss（kW）
+        """
+        # 当前总存量
+        M_total_kgmol = (
+            float(np.sum(self._M_tray)) + self._M_drum + self._M_sump
+        )
+        nE_total_kgmol = (
+            float(np.sum(self._nE_tray)) + self._nE_drum + self._nE_sump
+        )
+        U_total_kj = (
+            float(np.sum(self._U_tray)) + self._U_drum + self._U_sump
+        )
+
+        # 塔顶/塔底采出组成
+        xD = self._nE_drum / self._M_drum if self._M_drum > 1e-15 else 0.0
+        xD = max(0.0, min(1.0, xD))
+        xB = self._nE_sump / self._M_sump if self._M_sump > 1e-15 else 0.0
+        xB = max(0.0, min(1.0, xB))
+
+        # 平均分子量
+        mw_feed = _mixture_molecular_weight(feed_xE)
+        mw_dist = _mixture_molecular_weight(xD)
+        mw_bot = _mixture_molecular_weight(xB)
+
+        # 瞬时质量残差 = F - D - B（kg/h）
+        feed_mass_kgh = feed_flow * mw_feed * 3600.0
+        distillate_mass_kgh = distillate_flow * mw_dist * 3600.0
+        bottoms_mass_kgh = bottoms_flow * mw_bot * 3600.0
+        self.mass_balance_residual_kg_h = feed_mass_kgh - distillate_mass_kgh - bottoms_mass_kgh
+
+        # 乙醇守恒残差
+        feed_ethanol_kgh = feed_flow * feed_xE * MW_ETHANOL_KG_PER_KMOL * 3600.0
+        distillate_ethanol_kgh = distillate_flow * xD * MW_ETHANOL_KG_PER_KMOL * 3600.0
+        bottoms_ethanol_kgh = bottoms_flow * xB * MW_ETHANOL_KG_PER_KMOL * 3600.0
+        self.ethanol_balance_residual_kg_h = (
+            feed_ethanol_kgh - distillate_ethanol_kgh - bottoms_ethanol_kgh
+        )
+
+        # 能量守恒残差（kW）
+        # 能量输入 = Q_R + F·h_F（进料带入）
+        # 能量输出 = Q_C + D·h_D + B·h_B + Q_loss_total
+        h_F = liquid_enthalpy_kj_per_kmol(feed_xE, feed_temperature_k)  # kJ/kmol
+        h_D = liquid_enthalpy_kj_per_kmol(xD, self._T_drum)             # kJ/kmol
+        h_B = liquid_enthalpy_kj_per_kmol(xB, self._T_sump)             # kJ/kmol
+
+        Q_R = self._Q_R_kw  # kW
+        Q_C = self._Q_C_kw  # kW
+
+        # 总散热损失 (kW)
+        T_amb = self._ambient_temperature_k
+        Q_loss_total = (
+            float(np.sum(self._tray_ua * (self._T_tray - T_amb)))
+            + self._drum_ua * (self._T_drum - T_amb)
+            + self._sump_ua * (self._T_sump - T_amb)
+        )
+
+        # 单位换算：流量 kmol/s × 焓 kJ/kmol = kJ/s = kW
+        energy_in = Q_R + feed_flow * h_F                    # kW
+        energy_out = Q_C + distillate_flow * h_D + bottoms_flow * h_B + Q_loss_total  # kW
+        self.energy_balance_residual_kw = energy_in - energy_out
+
+        if self._first_execute:
+            self._initial_total_mass = M_total_kgmol
+            self._initial_total_ethanol = nE_total_kgmol
+            self._initial_total_energy = U_total_kj
+            self._cumulative_mass_in = 0.0
+            self._cumulative_mass_out = 0.0
+            self._cumulative_ethanol_in = 0.0
+            self._cumulative_ethanol_out = 0.0
+            self._cumulative_energy_in = 0.0
+            self._cumulative_energy_out = 0.0
+            self._first_execute = False
+        else:
+            self._cumulative_mass_in += feed_flow * mw_feed * dt
+            self._cumulative_mass_out += (
+                distillate_flow * mw_dist * dt + bottoms_flow * mw_bot * dt
+            )
+            self._cumulative_ethanol_in += (
+                feed_flow * feed_xE * MW_ETHANOL_KG_PER_KMOL * dt
+            )
+            self._cumulative_ethanol_out += (
+                distillate_flow * xD * MW_ETHANOL_KG_PER_KMOL * dt
+                + bottoms_flow * xB * MW_ETHANOL_KG_PER_KMOL * dt
+            )
+
+    # ------------------------------------------------------------------
+    # 发布对外位号
+    # ------------------------------------------------------------------
+    def _publish_scalar_attributes(self) -> None:
+        """更新对外标量位号。"""
+        # 塔板温度和组成
+        for i in range(self._n_trays):
+            setattr(self, f"stage_{i+1:02d}_temperature_c", float(self._T_tray[i] - 273.15))
+            x_e = float(self._nE_tray[i] / self._M_tray[i]) if self._M_tray[i] > 1e-15 else 0.0
+            x_e = max(0.0, min(1.0, x_e))
+            setattr(self, f"stage_{i+1:02d}_ethanol_x", x_e)
+            mw = _mixture_molecular_weight(x_e)
+            setattr(self, f"stage_{i+1:02d}_liquid_holdup_kg", float(self._M_tray[i] * mw))
+
+        # 塔顶塔底
+        self.top_temperature_c = float(self._T_tray[0] - 273.15)
+        self.bottom_temperature_c = float(self._T_sump - 273.15)
+        self.top_pressure_kpa = float(self._p_top_kpa)
+        self.bottom_pressure_kpa = float(self._p_sump_kpa)
+
+        # 塔顶/塔底组成
+        xD = self._nE_drum / self._M_drum if self._M_drum > 1e-15 else 0.0
+        xD = max(0.0, min(1.0, xD))
+        xB = self._nE_sump / self._M_sump if self._M_sump > 1e-15 else 0.0
+        xB = max(0.0, min(1.0, xB))
+        self.top_ethanol_x = xD
+        self.bottom_ethanol_x = xB
+        self.top_ethanol_wt = ethanol_mole_fraction_to_mass_fraction(xD)
+        self.bottom_ethanol_wt = ethanol_mole_fraction_to_mass_fraction(xB)
+
+        # 流量（kg/h）
+        self.feed_flow_kg_h = _kgmols_to_kgh(
+            self._last_feed_flow, _mixture_molecular_weight(
+                ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
+            )
+        )
+        self.reflux_flow_kg_h = _kgmols_to_kgh(
+            self._last_reflux_flow, _mixture_molecular_weight(xD)
+        )
+        self.distillate_flow_kg_h = _kgmols_to_kgh(
+            self._last_distillate_flow, _mixture_molecular_weight(xD)
+        )
+        self.bottoms_flow_kg_h = _kgmols_to_kgh(
+            self._last_bottoms_flow, _mixture_molecular_weight(xB)
+        )
+        self.vapor_boilup_kg_h = _kgmols_to_kgh(
+            self._last_vapor_boilup, _mixture_molecular_weight(self._yE_sump)
+        )
+
+        # 液位百分比
+        self.reflux_drum_level_pct = float(
+            max(0.0, min(100.0, self._M_drum / self._m_drum_max * 100.0))
+        )
+        self.reboiler_level_pct = float(
+            max(0.0, min(100.0, self._M_sump / self._m_sump_max * 100.0))
+        )
+
+        # 阶段 C 新增：能量与压力位号
+        self.reboiler_duty_kw = float(self._Q_R_kw) if math.isfinite(self._Q_R_kw) else 0.0
+        self.condenser_duty_kw = float(self._Q_C_kw) if math.isfinite(self._Q_C_kw) else 0.0
+        self.vapor_holdup_kgmol = float(self._N_vapor)
+        self.ambient_temperature_c = float(self._ambient_temperature_k - 273.15)
+
+        # 阶段 D 新增：六个阀门位号（spec §6.2 实际开度和流量必须对外暴露）
+        for key, valve in self._valves.items():
+            setattr(self, f"{key}_valve_command_pct", float(valve.command_pct))
+            setattr(self, f"{key}_valve_actual_pct", float(valve.actual_pct))
+
+        # 阶段 D 新增：分析仪位号（spec §6.3 真实值和仪表值分开）
+        # 真实值就是 top_ethanol_wt / bottom_ethanol_wt
+        self.top_ethanol_wt_true = float(self.top_ethanol_wt)
+        self.bottom_ethanol_wt_true = float(self.bottom_ethanol_wt)
+        # 分析仪读数（_analyzers 在 execute 中更新，这里只读取）
+        self.top_ethanol_analyzer = float(self._analyzers["top"].output)
+        self.bottom_ethanol_analyzer = float(self._analyzers["bottom"].output)
+
+    # ------------------------------------------------------------------
+    # 主执行
+    # ------------------------------------------------------------------
+    def execute(
+        self,
+        feed_flow_kgmol_per_s: Optional[float] = None,
+        reflux_flow_kgmol_per_s: Optional[float] = None,
+        distillate_flow_kgmol_per_s: Optional[float] = None,
+        bottoms_flow_kgmol_per_s: Optional[float] = None,
+        vapor_boilup_kgmol_per_s: Optional[float] = None,
+        feed_ethanol_wt: Optional[float] = None,
+        feed_temperature_c: Optional[float] = None,
+        ambient_temperature_c: Optional[float] = None,
+        feed_valve_pct: Optional[float] = None,
+        reflux_valve_pct: Optional[float] = None,
+        distillate_valve_pct: Optional[float] = None,
+        bottoms_valve_pct: Optional[float] = None,
+        steam_valve_pct: Optional[float] = None,
+        cooling_valve_pct: Optional[float] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        执行一个周期的精馏塔动态计算（阶段 D 含阀门和分析仪）。
+
+        优先级规则（向后兼容阶段 B/C）：
+        1. 如果传入任何 *_valve_pct 参数，启用阀位模式：
+           - 阀门命令更新，actual_pct 通过一阶响应演化
+           - 实际流量 = max_flow * characteristic(actual_pct)
+           - 同时传入的 *_flow_kgmol_per_s 被忽略
+        2. 如果只传入 *_flow_kgmol_per_s（不传 valve_pct），保持直接流量模式：
+           - 直接使用流量值，绕过阀门动态
+           - 阶段 B/C 测试使用此模式
+        3. 都不传则使用上一周期值
+
+        Args:
+            feed_flow_kgmol_per_s: 进料摩尔流量 (kmol/s)，直接流量模式。
+            reflux_flow_kgmol_per_s: 回流量 (kmol/s)。
+            distillate_flow_kgmol_per_s: 塔顶采出 (kmol/s)。
+            bottoms_flow_kgmol_per_s: 塔底采出 (kmol/s)。
+            vapor_boilup_kgmol_per_s: 再沸蒸气量 (kmol/s)。
+            feed_ethanol_wt: 进料乙醇质量分数。
+            feed_temperature_c: 进料温度 (℃)。
+            ambient_temperature_c: 环境温度 (℃)。
+            feed_valve_pct: 进料阀命令开度 (0~100%)。
+            reflux_valve_pct: 回流阀命令开度 (%)。
+            distillate_valve_pct: 塔顶采出阀命令开度 (%)。
+            bottoms_valve_pct: 塔底采出阀命令开度 (%)。
+            steam_valve_pct: 蒸汽阀命令开度 (%)。
+            cooling_valve_pct: 冷却水阀命令开度 (%)。
+        """
+        # 处理环境/进料参数
+        if feed_ethanol_wt is not None:
+            w = float(feed_ethanol_wt)
+            if not (0.0 <= w <= 1.0):
+                raise ValueError(f"feed_ethanol_wt 必须位于 [0, 1]，实际值={w!r}")
+            self._feed_ethanol_wt = w
+        if feed_temperature_c is not None:
+            self._feed_temperature_c = float(feed_temperature_c)
+        if ambient_temperature_c is not None:
+            self._ambient_temperature_k = float(ambient_temperature_c) + 273.15
+
+        # 检查是否启用了阀位模式
+        any_valve_input = any(
+            v is not None for v in (
+                feed_valve_pct, reflux_valve_pct, distillate_valve_pct,
+                bottoms_valve_pct, steam_valve_pct, cooling_valve_pct,
+            )
+        )
+
+        if any_valve_input:
+            # ===== 阀位模式：更新阀门命令并计算实际流量 =====
+            self._valve_mode_enabled = True
+            valve_inputs = {
+                "feed": feed_valve_pct,
+                "reflux": reflux_valve_pct,
+                "distillate": distillate_valve_pct,
+                "bottoms": bottoms_valve_pct,
+                "steam": steam_valve_pct,
+                "cooling": cooling_valve_pct,
+            }
+            for key, cmd in valve_inputs.items():
+                if cmd is not None:
+                    self._valves[key].set_command(float(cmd))
+
+            # 阀门一阶响应更新（使用 cycle_time，与外部周期一致）
+            for valve in self._valves.values():
+                valve.update(self.cycle_time)
+
+            # 从阀门实际开度计算流量
+            self._last_feed_flow = self._valves["feed"].get_flow_kgmol_per_s()
+            self._last_reflux_flow = self._valves["reflux"].get_flow_kgmol_per_s()
+            self._last_distillate_flow = self._valves["distillate"].get_flow_kgmol_per_s()
+            self._last_bottoms_flow = self._valves["bottoms"].get_flow_kgmol_per_s()
+            self._last_vapor_boilup = self._valves["steam"].get_flow_kgmol_per_s()
+            self._V_kgmol_per_s = self._last_vapor_boilup
+        else:
+            # ===== 直接流量模式（向后兼容阶段 B/C） =====
+            if feed_flow_kgmol_per_s is not None:
+                self._last_feed_flow = max(0.0, float(feed_flow_kgmol_per_s))
+            if reflux_flow_kgmol_per_s is not None:
+                self._last_reflux_flow = max(0.0, float(reflux_flow_kgmol_per_s))
+            if distillate_flow_kgmol_per_s is not None:
+                self._last_distillate_flow = max(0.0, float(distillate_flow_kgmol_per_s))
+            if bottoms_flow_kgmol_per_s is not None:
+                self._last_bottoms_flow = max(0.0, float(bottoms_flow_kgmol_per_s))
+            if vapor_boilup_kgmol_per_s is not None:
+                self._last_vapor_boilup = max(0.0, float(vapor_boilup_kgmol_per_s))
+                self._V_kgmol_per_s = self._last_vapor_boilup
+
+            # 阀门仍按一阶响应演化（保持动态连续性）
+            # 但实际流量由直接输入决定，阀门只是"跟随显示"
+            # 在直接流量模式下，把阀门命令同步到对应流量
+            if self._valve_mode_enabled:
+                # 从直接流量模式切回阀位模式前的过渡：阀门继续演化
+                for valve in self._valves.values():
+                    valve.update(self.cycle_time)
+            else:
+                # 纯直接流量模式：阀门不演化，保持初始开度
+                pass
+
+        # 进料乙醇摩尔分数和温度（K）
+        feed_xE = ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
+        feed_temperature_k = self._feed_temperature_c + 273.15
+
+        # 积分
+        self._integrate_substeps(
+            feed_flow=self._last_feed_flow,
+            feed_xE=feed_xE,
+            feed_temperature_k=feed_temperature_k,
+            reflux_flow=self._last_reflux_flow,
+            distillate_flow=self._last_distillate_flow,
+            bottoms_flow=self._last_bottoms_flow,
+            vapor_boilup=self._last_vapor_boilup,
+        )
+
+        # 守恒诊断
+        self._calculate_balances_and_kpis(
+            feed_flow=self._last_feed_flow,
+            feed_xE=feed_xE,
+            feed_temperature_k=feed_temperature_k,
+            reflux_flow=self._last_reflux_flow,
+            distillate_flow=self._last_distillate_flow,
+            bottoms_flow=self._last_bottoms_flow,
+            vapor_boilup=self._last_vapor_boilup,
+            dt=self.cycle_time,
+        )
+
+        # 阶段 D：更新浓度分析仪（使用当前真实值）
+        self._analyzers["top"].update(self.top_ethanol_wt, self.cycle_time)
+        self._analyzers["bottom"].update(self.bottom_ethanol_wt, self.cycle_time)
+
+        # 发布对外位号
+        self._publish_scalar_attributes()
+
+        # 物理边界检查
+        self._check_physical_bounds()
+
+    # ------------------------------------------------------------------
+    # 物理边界检查
+    # ------------------------------------------------------------------
+    def _check_physical_bounds(self) -> None:
+        """检查状态是否在物理合理范围，明显越界抛异常。"""
+        # 检查塔板状态
+        for i in range(self._n_trays):
+            if not math.isfinite(float(self._M_tray[i])):
+                raise RuntimeError(f"塔板 {i+1} 持液量非有限: {self._M_tray[i]}")
+            if not math.isfinite(float(self._nE_tray[i])):
+                raise RuntimeError(f"塔板 {i+1} 乙醇物质量非有限: {self._nE_tray[i]}")
+            if not math.isfinite(float(self._U_tray[i])):
+                raise RuntimeError(f"塔板 {i+1} 内能非有限: {self._U_tray[i]}")
+            if self._M_tray[i] <= 0.0:
+                raise RuntimeError(f"塔板 {i+1} 持液量非正: {self._M_tray[i]}")
+            if self._nE_tray[i] < 0.0 or self._nE_tray[i] > self._M_tray[i]:
+                raise RuntimeError(
+                    f"塔板 {i+1} 乙醇物质量越界: nE={self._nE_tray[i]}, M={self._M_tray[i]}"
+                )
+            if not math.isfinite(float(self._T_tray[i])):
+                raise RuntimeError(f"塔板 {i+1} 温度非有限: {self._T_tray[i]}")
+            if self._T_tray[i] < 250.0 or self._T_tray[i] > 500.0:
+                raise RuntimeError(
+                    f"塔板 {i+1} 温度超出合理范围: {self._T_tray[i]} K"
+                )
+            if not math.isfinite(float(self._pressure_kpa[i])) or self._pressure_kpa[i] <= 0.0:
+                raise RuntimeError(
+                    f"塔板 {i+1} 压力异常: {self._pressure_kpa[i]}"
+                )
+
+        # 检查回流罐和塔釜
+        for name, M, nE, U in [
+            ("回流罐", self._M_drum, self._nE_drum, self._U_drum),
+            ("塔釜", self._M_sump, self._nE_sump, self._U_sump),
+        ]:
+            if not math.isfinite(float(M)) or M <= 0.0:
+                raise RuntimeError(f"{name} 持液量异常: {M}")
+            if not math.isfinite(float(nE)) or nE < 0.0 or nE > M:
+                raise RuntimeError(f"{name} 乙醇物质量越界: nE={nE}, M={M}")
+            if not math.isfinite(float(U)):
+                raise RuntimeError(f"{name} 内能非有限: {U}")
+
+        # 检查气相存量和塔压
+        if not math.isfinite(float(self._N_vapor)) or self._N_vapor <= 0.0:
+            raise RuntimeError(f"气相存量异常: {self._N_vapor}")
+        if not math.isfinite(float(self._p_top_kpa)) or self._p_top_kpa <= 0.0:
+            raise RuntimeError(f"塔顶压力异常: {self._p_top_kpa}")
+
+    # ==================================================================
+    # 阶段 D：状态持久化（spec §10.1, §10.2）
+    # ==================================================================
+
+    # 参考稳态文件版本号（变更状态结构时升版）
+    REFERENCE_STATE_VERSION: str = "1.0"
+
+    # 关键设备参数（用于参数哈希，决定稳态文件是否可复用）
+    _PARAMS_HASH_KEYS = (
+        "tray_count", "feed_stage",
+        "top_pressure_kpa", "pressure_drop_per_stage_kpa",
+        "pressure_drop_kv_kpa_s2_per_kgmol2",
+        "m_tray_nom_kmol", "m_drum_nom_kmol", "m_sump_nom_kmol",
+        "m_drum_max_kmol", "m_sump_max_kmol",
+        "feed_flow_kgmol_per_s", "distillate_flow_kgmol_per_s",
+        "bottoms_flow_kgmol_per_s", "reflux_flow_kgmol_per_s",
+        "vapor_boilup_kgmol_per_s",
+        "feed_ethanol_wt", "feed_temperature_c",
+        "vapor_volume_m3",
+        "feed_valve_max_flow_kgmol_per_s",
+        "reflux_valve_max_flow_kgmol_per_s",
+        "distillate_valve_max_flow_kgmol_per_s",
+        "bottoms_valve_max_flow_kgmol_per_s",
+        "steam_valve_max_flow_kgmol_per_s",
+        "cooling_valve_max_flow_kgmol_per_s",
+    )
+
+    def _compute_params_hash(self) -> str:
+        """
+        计算关键设备参数的哈希值。
+
+        spec §10.1: 用户修改关键设备参数后，旧稳态不得静默复用。
+        哈希包括塔结构、压力、持液量、流量、阀门最大流量等。
+        不包括随机种子、环境温度、分析仪参数（不影响稳态形状）。
+
+        使用 __init__ 时的快照（_params_hash_snapshot），避免运行时
+        被覆盖的动态输出（如 top_pressure_kpa）影响哈希。
+        """
+        import hashlib
+        import json
+        # 优先使用 __init__ 快照；若尚未创建（如构造期间调用），回退到当前属性
+        if hasattr(self, "_params_hash_snapshot") and self._params_hash_snapshot:
+            params = dict(self._params_hash_snapshot)
+        else:
+            params = {key: getattr(self, key) for key in self._PARAMS_HASH_KEYS}
+        # 序列化为规范化 JSON（按 key 排序）
+        json_str = json.dumps(params, sort_keys=True, default=str)
+        return hashlib.sha256(json_str.encode("utf-8")).hexdigest()[:16]
+
+    # ------------------------------------------------------------------
+    def _get_full_state_dict(self) -> dict:
+        """导出完整状态用于持久化。"""
+        return {
+            "version": self.REFERENCE_STATE_VERSION,
+            "params_hash": self._compute_params_hash(),
+            # 塔板液相状态
+            "M_tray": self._M_tray.tolist(),
+            "nE_tray": self._nE_tray.tolist(),
+            "U_tray": self._U_tray.tolist(),
+            # 回流罐
+            "M_drum": float(self._M_drum),
+            "nE_drum": float(self._nE_drum),
+            "U_drum": float(self._U_drum),
+            # 塔釜
+            "M_sump": float(self._M_sump),
+            "nE_sump": float(self._nE_sump),
+            "U_sump": float(self._U_sump),
+            # 气相存量
+            "N_vapor": float(self._N_vapor),
+            # 派生量（避免重新计算）
+            "T_tray": self._T_tray.tolist(),
+            "yE_tray": self._yE_tray.tolist(),
+            "pressure_kpa": self._pressure_kpa.tolist(),
+            "T_drum": float(self._T_drum),
+            "T_sump": float(self._T_sump),
+            "yE_sump": float(self._yE_sump),
+            "p_top_kpa": float(self._p_top_kpa),
+            "p_sump_kpa": float(self._p_sump_kpa),
+            "T_vapor_avg": float(self._T_vapor_avg),
+            # 阶段 C 内部热负荷（用于对外位号恢复）
+            "Q_R_kw": float(self._Q_R_kw),
+            "Q_C_kw": float(self._Q_C_kw),
+            # 阶段 C 累计能量（守恒诊断用）
+            "cumulative_energy_in": float(self._cumulative_energy_in),
+            "cumulative_energy_out": float(self._cumulative_energy_out),
+            "initial_total_energy": float(self._initial_total_energy),
+            # 阶段 D V_kgmol_per_s（CMO 当前气相流量）
+            "V_kgmol_per_s": float(self._V_kgmol_per_s),
+            # 阶段 D 阀位模式标志
+            "valve_mode_enabled": bool(self._valve_mode_enabled),
+            # 对外诊断残差（_publish_scalar_attributes 不重新计算这些）
+            "mass_balance_residual_kg_h": float(self.mass_balance_residual_kg_h),
+            "ethanol_balance_residual_kg_h": float(self.ethanol_balance_residual_kg_h),
+            "energy_balance_residual_kw": float(self.energy_balance_residual_kw),
+            # 阀门状态
+            "valves": {k: v.to_state_dict() for k, v in self._valves.items()},
+            # 分析仪状态
+            "analyzers": {k: a.to_state_dict() for k, a in self._analyzers.items()},
+            # 工况参数
+            "feed_ethanol_wt": float(self._feed_ethanol_wt),
+            "feed_temperature_c": float(self._feed_temperature_c),
+            "ambient_temperature_k": float(self._ambient_temperature_k),
+            "last_feed_flow": float(self._last_feed_flow),
+            "last_reflux_flow": float(self._last_reflux_flow),
+            "last_distillate_flow": float(self._last_distillate_flow),
+            "last_bottoms_flow": float(self._last_bottoms_flow),
+            "last_vapor_boilup": float(self._last_vapor_boilup),
+            # 守恒诊断累计
+            "cumulative": {
+                "mass_in": self._cumulative_mass_in,
+                "mass_out": self._cumulative_mass_out,
+                "ethanol_in": self._cumulative_ethanol_in,
+                "ethanol_out": self._cumulative_ethanol_out,
+            },
+            "initial_total_mass": self._initial_total_mass,
+            "initial_total_ethanol": self._initial_total_ethanol,
+            "first_execute": self._first_execute,
+        }
+
+    # ------------------------------------------------------------------
+    def _set_full_state_dict(self, state: dict) -> None:
+        """从 dict 恢复完整状态。"""
+        # 版本校验
+        if state["version"] != self.REFERENCE_STATE_VERSION:
+            raise ValueError(
+                f"参考稳态文件版本不匹配: 文件={state['version']}, "
+                f"当前={self.REFERENCE_STATE_VERSION}"
+            )
+
+        # 参数哈希校验（spec §10.1: 修改参数后不得静默复用）
+        current_hash = self._compute_params_hash()
+        if state["params_hash"] != current_hash:
+            raise ValueError(
+                f"参考稳态文件参数哈希不匹配: 文件={state['params_hash']}, "
+                f"当前={current_hash}。用户修改了关键设备参数，必须重新生成稳态。"
+            )
+
+        # 恢复塔板状态
+        self._M_tray = np.array(state["M_tray"], dtype=np.float64)
+        self._nE_tray = np.array(state["nE_tray"], dtype=np.float64)
+        self._U_tray = np.array(state["U_tray"], dtype=np.float64)
+        self._M_drum = float(state["M_drum"])
+        self._nE_drum = float(state["nE_drum"])
+        self._U_drum = float(state["U_drum"])
+        self._M_sump = float(state["M_sump"])
+        self._nE_sump = float(state["nE_sump"])
+        self._U_sump = float(state["U_sump"])
+        self._N_vapor = float(state["N_vapor"])
+
+        # 恢复派生量
+        self._T_tray = np.array(state["T_tray"], dtype=np.float64)
+        self._yE_tray = np.array(state["yE_tray"], dtype=np.float64)
+        self._pressure_kpa = np.array(state["pressure_kpa"], dtype=np.float64)
+        self._T_drum = float(state["T_drum"])
+        self._T_sump = float(state["T_sump"])
+        self._yE_sump = float(state["yE_sump"])
+        self._p_top_kpa = float(state["p_top_kpa"])
+        self._p_sump_kpa = float(state["p_sump_kpa"])
+        self._T_vapor_avg = float(state["T_vapor_avg"])
+
+        # 恢复内部热负荷（向后兼容：旧版无此键时保持 0）
+        self._Q_R_kw = float(state.get("Q_R_kw", 0.0))
+        self._Q_C_kw = float(state.get("Q_C_kw", 0.0))
+
+        # 恢复累计能量诊断（向后兼容：旧版无此键时保持 0）
+        self._cumulative_energy_in = float(state.get("cumulative_energy_in", 0.0))
+        self._cumulative_energy_out = float(state.get("cumulative_energy_out", 0.0))
+        self._initial_total_energy = float(state.get("initial_total_energy", 0.0))
+
+        # 恢复 V_kgmol_per_s 和阀位模式标志（向后兼容）
+        self._V_kgmol_per_s = float(state.get("V_kgmol_per_s", self._last_vapor_boilup))
+        self._valve_mode_enabled = bool(state.get("valve_mode_enabled", False))
+
+        # 恢复对外诊断残差（_publish_scalar_attributes 不重新计算这些）
+        self.mass_balance_residual_kg_h = float(state.get("mass_balance_residual_kg_h", 0.0))
+        self.ethanol_balance_residual_kg_h = float(state.get("ethanol_balance_residual_kg_h", 0.0))
+        self.energy_balance_residual_kw = float(state.get("energy_balance_residual_kw", 0.0))
+
+        # 恢复阀门
+        for k, v_state in state["valves"].items():
+            self._valves[k].load_state_dict(v_state)
+
+        # 恢复分析仪
+        for k, a_state in state["analyzers"].items():
+            self._analyzers[k].load_state_dict(a_state)
+
+        # 恢复工况参数
+        self._feed_ethanol_wt = float(state["feed_ethanol_wt"])
+        self._feed_temperature_c = float(state["feed_temperature_c"])
+        self._ambient_temperature_k = float(state["ambient_temperature_k"])
+        self._last_feed_flow = float(state["last_feed_flow"])
+        self._last_reflux_flow = float(state["last_reflux_flow"])
+        self._last_distillate_flow = float(state["last_distillate_flow"])
+        self._last_bottoms_flow = float(state["last_bottoms_flow"])
+        self._last_vapor_boilup = float(state["last_vapor_boilup"])
+
+        # 恢复守恒诊断累计
+        self._cumulative_mass_in = float(state["cumulative"]["mass_in"])
+        self._cumulative_mass_out = float(state["cumulative"]["mass_out"])
+        self._cumulative_ethanol_in = float(state["cumulative"]["ethanol_in"])
+        self._cumulative_ethanol_out = float(state["cumulative"]["ethanol_out"])
+        self._initial_total_mass = float(state["initial_total_mass"])
+        self._initial_total_ethanol = float(state["initial_total_ethanol"])
+        self._first_execute = bool(state["first_execute"])
+
+    # ------------------------------------------------------------------
+    def save_reference_state(self, file_path: Optional[str] = None) -> str:
+        """
+        保存当前状态为参考稳态文件（spec §10.1）。
+
+        Args:
+            file_path: 目标文件路径。None 时使用 default_params 中的 reference_state_file。
+
+        Returns:
+            实际保存的绝对路径。
+        """
+        import json
+        import os
+
+        if file_path is None:
+            file_path = str(self.reference_state_file)
+
+        # 转为绝对路径（相对于项目根目录）
+        if not os.path.isabs(file_path):
+            # 找到 review3 项目根目录
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            file_path = os.path.join(project_root, file_path)
+
+        # 确保目录存在
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        state = self._get_full_state_dict()
+        # 附加元数据
+        state["metadata"] = {
+            "created_at": "auto-generated",
+            "description": "Ethanol-water distillation reference steady state",
+            "model_name": "ETHANOL_WATER_DISTILLATION",
+        }
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+
+        self._reference_state_path = file_path
+        self._reference_state_saved = True
+        logger.info(f"参考稳态已保存到: {file_path}")
+        return file_path
+
+    # ------------------------------------------------------------------
+    def load_reference_state(self, file_path: Optional[str] = None) -> bool:
+        """
+        从参考稳态文件加载状态（spec §10.1）。
+
+        Args:
+            file_path: 源文件路径。None 时使用 default_params 中的 reference_state_file。
+
+        Returns:
+            True 加载成功；False 文件不存在或哈希不匹配（保持现有初始化）。
+
+        Raises:
+            ValueError: 文件存在但版本不匹配（明确报错而非静默忽略）。
+        """
+        import json
+        import os
+
+        if file_path is None:
+            file_path = str(self.reference_state_file)
+
+        # 转为绝对路径
+        if not os.path.isabs(file_path):
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            file_path = os.path.join(project_root, file_path)
+
+        if not os.path.exists(file_path):
+            logger.info(f"参考稳态文件不存在，使用默认初始化: {file_path}")
+            return False
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"参考稳态文件读取失败: {e}，使用默认初始化")
+            return False
+
+        try:
+            self._set_full_state_dict(state)
+        except ValueError as e:
+            # 参数哈希不匹配：不允许静默复用（spec §10.1）
+            logger.warning(f"参考稳态文件不可复用: {e}，使用默认初始化")
+            return False
+
+        self._reference_state_path = file_path
+        self._reference_state_loaded = True
+        logger.info(f"参考稳态已加载: {file_path}")
+        return True
+
+    # ------------------------------------------------------------------
+    def save_state(self) -> dict:
+        """
+        导出当前完整运行时状态为 dict（用于运行中暂停/恢复）。
+
+        Returns:
+            完整状态字典，可通过 load_state() 恢复。
+        """
+        return self._get_full_state_dict()
+
+    # ------------------------------------------------------------------
+    def load_state(self, state: dict) -> None:
+        """
+        从 dict 恢复运行时状态。
+
+        Args:
+            state: 由 save_state() 导出的状态字典。
+        """
+        self._set_full_state_dict(state)
+        # 状态恢复后重新发布位号
+        self._publish_scalar_attributes()
+
+
+# 注册模型
+if __name__ != "__main__":
+    InstanceRegistry.register_model("ETHANOL_WATER_DISTILLATION", ETHANOL_WATER_DISTILLATION)

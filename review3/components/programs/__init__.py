@@ -23,6 +23,7 @@ from .pid import PID
 from .pid_delete import PID_DELETE
 from .cylindrical_tank import CYLINDRICAL_TANK
 from .valve import VALVE
+from .ethanol_water_distillation import ETHANOL_WATER_DISTILLATION
 
 # 自动注册算法和模型
 from controller.instance import InstanceRegistry
@@ -39,6 +40,7 @@ InstanceRegistry.register_algorithm("PID-DELETE", PID_DELETE)
 InstanceRegistry.register_algorithm("PID_DELETE", PID_DELETE)
 InstanceRegistry.register_model("CYLINDRICAL_TANK", CYLINDRICAL_TANK)
 InstanceRegistry.register_model("VALVE", VALVE)
+InstanceRegistry.register_model("ETHANOL_WATER_DISTILLATION", ETHANOL_WATER_DISTILLATION)
 
 __all__ = [
     "SINE_WAVE",
@@ -51,5 +53,6 @@ __all__ = [
     "PID_DELETE",
     "CYLINDRICAL_TANK",
     "VALVE",
+    "ETHANOL_WATER_DISTILLATION",
 ]
 
