@@ -354,8 +354,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 基础测量短滞后（spec §6.3：温度、压力、流量用短一阶滞后）
         "basic_measurement_lag_s": 2.0,
         # ===== 阶段 D 新增：参考稳态文件 =====
+        # 阶段 4.1（todo/5.md §9.1）：删除 auto_save_reference_state，
+        # 参考状态只能由显式离线工具 tools/generate_ethanol_water_reference_state.py 生成。
         "reference_state_file": "components/programs/data/ethanol_water_reference_state.json",
-        "auto_save_reference_state": True,  # 首次稳态运行后自动保存
     }
 
     stored_attributes = [
@@ -394,6 +395,16 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 守恒诊断
         "mass_balance_residual_kg_h",
         "ethanol_balance_residual_kg_h",
+        # 阶段 3.2 新增：明确闭合残差位号（todo/5.md §11 + 阶段 3.2 修正）
+        # 兼容位号 mass_balance_residual_kg_h / ethanol_balance_residual_kg_h
+        # / energy_balance_residual_kw 继续指向对应 closure residual
+        "mass_closure_residual_kg_h",
+        "ethanol_closure_residual_kg_h",
+        "energy_closure_residual_kw",
+        # 阶段 2 新增：瞬时积累率（区分 accumulation 和 closure residual）
+        "mass_accumulation_kg_h",
+        "ethanol_accumulation_kg_h",
+        "energy_accumulation_kw",
         # 阶段 D 新增：六个阀门（spec §6.2 实际开度和流量必须对外暴露）
         "feed_valve_command_pct", "feed_valve_actual_pct",
         "reflux_valve_command_pct", "reflux_valve_actual_pct",
@@ -847,9 +858,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             )
 
         mode = str(self.initialization_mode).upper()
-        if mode not in ("STEADY", "COLD"):
+        if mode not in ("STEADY", "COLD", "WARM_GUESS"):
             raise ValueError(
-                f"initialization_mode 必须为 'STEADY' 或 'COLD'，实际值={self.initialization_mode!r}"
+                f"initialization_mode 必须为 'STEADY' / 'WARM_GUESS' / 'COLD'，"
+                f"实际值={self.initialization_mode!r}"
             )
         if mode == "COLD":
             raise NotImplementedError(
@@ -861,12 +873,46 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
     # ------------------------------------------------------------------
     def _load_or_build_initial_state(self) -> None:
         """
-        阶段 C 稳态初始化。
+        初始化分发器（todo/5.md §10 + 阶段 4.1 修正）。
+
+        阶段 4.1 明确语义：
+        - WARM_GUESS：建立线性浓度和泡点初猜，仅供稳态生成器使用；
+        - STEADY：必须加载合格参考状态（文件缺失/哈希不匹配/验收未通过必须报错，
+                  不得回退到初猜）；
+        - COLD：继续抛出 NotImplementedError。
+
+        阶段 4.1 之前：STEADY 静默回退到 warm_guess 初猜（错误）。
+        阶段 4.1 修正：STEADY 严格模式，强制要求参考文件存在并通过验收。
+        """
+        mode = str(self.initialization_mode).upper()
+
+        if mode == "WARM_GUESS":
+            # 仅建立线性+泡点初猜，不加载参考文件
+            self._build_warm_guess_initial_state()
+            return
+
+        if mode == "STEADY":
+            # 必须加载合格参考状态，不得回退
+            self._load_steady_reference_state_strict()
+            return
+
+        # COLD 已在 _validate_configuration 中拦截，但防御性处理
+        raise NotImplementedError(
+            "initialization_mode=COLD 第一版未实现（spec §10.3），后续阶段单独设计"
+        )
+
+    # ------------------------------------------------------------------
+    def _build_warm_guess_initial_state(self) -> None:
+        """
+        WARM_GUESS 初始化：建立线性浓度和泡点初猜（todo/5.md §10.2）。
 
         用线性插值生成接近稳态的浓度剖面，然后用泡点计算初始温度，
         最后由温度反算初始内能 U，保证 U 与 T 在初始时刻一致。
 
         气相存量 N_vapor 由初始 P_top 和 V_gas 通过理想气体状态方程反算。
+
+        注意：此初猜仅供稳态生成器使用，正式运行应使用 STEADY 模式加载
+        合格参考状态。
         """
         # 目标塔顶/塔底乙醇摩尔分数（来自 spec §2.3 参考工况）
         x_top_target_mol = ethanol_mass_fraction_to_mole_fraction(0.85)
@@ -991,6 +1037,12 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self.reboiler_duty_kw = 0.0
         self.condenser_duty_kw = 0.0
         self.energy_balance_residual_kw = 0.0
+        # 阶段 3.2 新增：明确闭合残差位号（兼容位号继续指向 closure residual）
+        self.mass_closure_residual_kg_h = 0.0
+        self.ethanol_closure_residual_kg_h = 0.0
+        self.energy_closure_residual_kw = 0.0
+        self.mass_balance_residual_kg_h = 0.0
+        self.ethanol_balance_residual_kg_h = 0.0
         # 内部用的再沸/冷凝负荷（首次 execute 前的默认值）
         self._Q_R_kw = 0.0
         self._Q_C_kw = 0.0
@@ -1028,6 +1080,113 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._prev_M_total_kgmol = 0.0
         self._prev_nE_total_kgmol = 0.0
         self._prev_U_total_kj = 0.0
+
+    # ------------------------------------------------------------------
+    def _load_steady_reference_state_strict(self) -> None:
+        """
+        STEADY 模式：严格加载合格参考状态（todo/5.md §10.2 + 阶段 4.1）。
+
+        严格语义：
+        - 参考文件必须存在；
+        - 参数哈希必须匹配；
+        - 文件必须包含 passed=True 标志；
+        - 收敛指标必须满足阈值。
+
+        任何一项不满足都抛出 ValueError，不得静默回退到 warm_guess。
+
+        Raises:
+            FileNotFoundError: 参考稳态文件不存在。
+            ValueError: 哈希不匹配 / 版本不匹配 / 验收未通过 / 收敛指标超阈值。
+        """
+        import json
+        import os
+
+        file_path = str(self.reference_state_file)
+        if not os.path.isabs(file_path):
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            file_path = os.path.join(project_root, file_path)
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"initialization_mode=STEADY 要求参考稳态文件存在，但未找到: {file_path}\n"
+                f"请先运行 tools/generate_ethanol_water_reference_state.py 生成参考状态。"
+            )
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            raise ValueError(
+                f"参考稳态文件读取失败: {e}"
+            ) from e
+
+        # 校验文件元数据
+        metadata = state.get("metadata", {})
+        expected_model = metadata.get("model_name", "")
+        if expected_model != "ETHANOL_WATER_DISTILLATION":
+            raise ValueError(
+                f"参考稳态文件 model_name 不匹配: 期望 ETHANOL_WATER_DISTILLATION，实际 {expected_model}"
+            )
+
+        # 校验参数哈希
+        file_hash = state.get("params_hash", "")
+        current_hash = self._compute_params_hash()
+        if file_hash != current_hash:
+            raise ValueError(
+                f"参考稳态参数哈希不匹配: 文件={file_hash}, 当前={current_hash}\n"
+                f"请重新生成参考状态（运行 tools/generate_ethanol_water_reference_state.py）"
+            )
+
+        # 校验版本
+        file_version = state.get("version", "")
+        if file_version != self.REFERENCE_STATE_VERSION:
+            raise ValueError(
+                f"参考稳态版本不匹配: 文件={file_version}, 当前={self.REFERENCE_STATE_VERSION}\n"
+                f"请重新生成参考状态"
+            )
+
+        # 校验 passed 标志（todo/5.md §10.2 + 阶段 4.1）
+        convergence = state.get("convergence", {})
+        passed = convergence.get("passed", False)
+        if not passed:
+            raise ValueError(
+                f"参考稳态验收未通过（passed=False）\n"
+                f"收敛指标: {convergence}\n"
+                f"请重新生成参考状态"
+            )
+
+        # 校验收敛指标阈值（todo/5.md §9.4）
+        mass_residual_rel = float(convergence.get("mass_residual_rel", 1.0))
+        ethanol_residual_rel = float(convergence.get("ethanol_residual_rel", 1.0))
+        energy_residual_rel = float(convergence.get("energy_residual_rel", 1.0))
+        if mass_residual_rel > 0.001:
+            raise ValueError(
+                f"参考稳态质量残差超阈值: {mass_residual_rel} > 0.001"
+            )
+        if ethanol_residual_rel > 0.01:
+            raise ValueError(
+                f"参考稳态乙醇残差超阈值: {ethanol_residual_rel} > 0.01"
+            )
+        if energy_residual_rel > 0.01:
+            raise ValueError(
+                f"参考稳态能量残差超阈值: {energy_residual_rel} > 0.01"
+            )
+
+        # 所有校验通过，加载状态
+        try:
+            self._set_full_state_dict(state)
+        except ValueError as e:
+            raise ValueError(
+                f"参考稳态状态恢复失败: {e}"
+            ) from e
+
+        self._reference_state_path = file_path
+        self._reference_state_loaded = True
+        logger.info(
+            f"参考稳态已加载（STEADY 严格模式）: {file_path}\n"
+            f"收敛指标: mass={mass_residual_rel:.2e}, ethanol={ethanol_residual_rel:.2e}, "
+            f"energy={energy_residual_rel:.2e}"
+        )
 
     # ------------------------------------------------------------------
     # 代数量计算（VLE、温度、压力、流量）
@@ -1378,7 +1537,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         inventory_release_capacity = max(N_vapor - N_floor, 0.0) / self._tau_condenser_inventory_s
         # vapor_available = V_top + inventory_release_capacity
         # V_top 是塔顶板离开进入气相库存的蒸气量
-        vapor_available = V + inventory_release_capacity  # kmol/s
+        # 阶段 3.1 修正：使用本周期 V_boil_internal（CMO 下 V_top = V_boil）
+        # 而不是传入的上一周期 V，确保 RHS 内部塔板出口、气相入口、冷凝可用量一致
+        vapor_available = V_boil_internal + inventory_release_capacity  # kmol/s
 
         # V_condense = min(V_condense_capacity, vapor_available)
         V_condense = min(V_condense_capacity, vapor_available)  # kmol/s
@@ -1480,11 +1641,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 注意：spec §6.5 推荐"气相控制体流出按 vapor enthalpy，回流罐流入按 condensate liquid enthalpy"
         # 因此 dU_vapor 中冷凝流出按气相焓 h_V_vapor（不是液相焓 h_L_cond）
         # 冷凝器从气相带走的潜热通过气相→液相焓差计入总系统，避免重复扣除 Q_C
+        # 阶段 3.1 修正：V_top 使用本周期 V_boil_internal（CMO 假设下 V_top = V_boil）
+        # 不再使用传入的上一周期 V，消除 RHS 内部不一致
         Q_loss_vapor = 0.0  # 第一版气相控制体无散热（散热已在塔板/塔釜计入）
-        dN_vapor = V - V_condense - V_vent
-        dnE_vapor = V * yE_tray[0] - V_condense * yE_vapor - V_vent * yE_vapor
+        dN_vapor = V_boil_internal - V_condense - V_vent
+        dnE_vapor = V_boil_internal * yE_tray[0] - V_condense * yE_vapor - V_vent * yE_vapor
         dU_vapor = (
-            V * h_V_top
+            V_boil_internal * h_V_top
             - V_condense * h_V_vapor
             - V_vent * h_V_vapor
             - Q_loss_vapor
@@ -1810,40 +1973,58 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 瞬时能量积累率（kW）
         self.energy_accumulation_kw = energy_in - energy_out
 
-        # ===== 闭合残差（todo/5.md §11）=====
+        # ===== 闭合残差（todo/5.md §11 + 阶段 3.2 修正）=====
         # spec §11: r_M = dM_inventory/dt - (F - D - B - V_vent)
         # 数值实现：用本期积累率近似 dM/dt，与上一期总存量比较
         # 由于 _calculate_balances_and_kpis 在积分后调用，当前 M_total 已更新
         # dM/dt 近似为 (M_total - M_total_prev) / dt
         # 但 spec 要求 r_M 应为 0（动态守恒），所以 r_M = accumulation - actual_dM/dt
-        # 第一周期无法计算（无 prev），设为 0
+        # 第一周期无法计算（无 prev），设为 0（阶段 3.2 修正：不再用 accumulation 冒充 residual）
         if self._first_execute:
-            # 第一周期：积累率即为残差（无 prev 可比）
-            self.mass_balance_residual_kg_h = self.mass_accumulation_kg_h
-            self.ethanol_balance_residual_kg_h = self.ethanol_accumulation_kg_h
-            self.energy_balance_residual_kw = self.energy_accumulation_kw
+            # 第一周期：无前态，闭合残差设为 0
+            self.mass_closure_residual_kg_h = 0.0
+            self.ethanol_closure_residual_kg_h = 0.0
+            self.energy_closure_residual_kw = 0.0
         else:
             # 闭合残差 = 积累率 - (本期实际存量变化率)
-            # 单位换算：kmol/s → kg/h 需用分子量；kJ/s = kW
-            actual_dM_kgmol_per_s = (M_total_kgmol - self._prev_M_total_kgmol) / dt
-            actual_dnE_kgmol_per_s = (nE_total_kgmol - self._prev_nE_total_kgmol) / dt
-            actual_dU_kj_per_s = (U_total_kj - self._prev_U_total_kj) / dt
+            # 阶段 3.2 修正：真实总质量变化率必须用真实总质量计算
+            # 不能用 delta_total_kmol * mw_feed（错误地用进料 MW 近似）
+            # total_mass_kg = total_ethanol_kmol * MW_ETHANOL + (total_kmol - total_ethanol_kmol) * MW_WATER
+            prev_total_mass_kg = (
+                self._prev_nE_total_kgmol * MW_ETHANOL_KG_PER_KMOL
+                + (self._prev_M_total_kgmol - self._prev_nE_total_kgmol) * MW_WATER_KG_PER_KMOL
+            )
+            curr_total_mass_kg = (
+                nE_total_kgmol * MW_ETHANOL_KG_PER_KMOL
+                + (M_total_kgmol - nE_total_kgmol) * MW_WATER_KG_PER_KMOL
+            )
+            actual_dM_kg_per_h = (curr_total_mass_kg - prev_total_mass_kg) / dt * 3600.0
 
-            actual_dM_kg_per_h = actual_dM_kgmol_per_s * mw_feed * 3600.0
-            actual_dnE_kg_per_h = actual_dnE_kgmol_per_s * MW_ETHANOL_KG_PER_KMOL * 3600.0
+            # 乙醇物质量变化率（kmol/s → kg/h），乙醇分子量恒定
+            actual_dnE_kg_per_h = (
+                (nE_total_kgmol - self._prev_nE_total_kgmol) / dt * MW_ETHANOL_KG_PER_KMOL * 3600.0
+            )
+
+            # 能量变化率（kJ/s = kW）
+            actual_dU_kj_per_s = (U_total_kj - self._prev_U_total_kj) / dt
 
             # closure residual = accumulation - actual_d/dt
             # 注意符号约定：accumulation = in - out，actual_d/dt = (final - init)/dt
             # 稳态时两者都为 0；动态时应相等，残差为 0
-            self.mass_balance_residual_kg_h = (
+            self.mass_closure_residual_kg_h = (
                 self.mass_accumulation_kg_h - actual_dM_kg_per_h
             )
-            self.ethanol_balance_residual_kg_h = (
+            self.ethanol_closure_residual_kg_h = (
                 self.ethanol_accumulation_kg_h - actual_dnE_kg_per_h
             )
-            self.energy_balance_residual_kw = (
+            self.energy_closure_residual_kw = (
                 self.energy_accumulation_kw - actual_dU_kj_per_s
             )
+
+        # 兼容位号：继续指向对应闭合残差（todo/5.md §11 + 阶段 3.2）
+        self.mass_balance_residual_kg_h = self.mass_closure_residual_kg_h
+        self.ethanol_balance_residual_kg_h = self.ethanol_closure_residual_kg_h
+        self.energy_balance_residual_kw = self.energy_closure_residual_kw
 
         # 保存本期总存量供下期使用
         self._prev_M_total_kgmol = M_total_kgmol
@@ -2448,6 +2629,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "mass_balance_residual_kg_h": float(self.mass_balance_residual_kg_h),
             "ethanol_balance_residual_kg_h": float(self.ethanol_balance_residual_kg_h),
             "energy_balance_residual_kw": float(self.energy_balance_residual_kw),
+            # 阶段 3.2: 明确闭合残差位号
+            "mass_closure_residual_kg_h": float(self.mass_closure_residual_kg_h),
+            "ethanol_closure_residual_kg_h": float(self.ethanol_closure_residual_kg_h),
+            "energy_closure_residual_kw": float(self.energy_closure_residual_kw),
             # 阶段 2: 积累率位号（_publish_scalar_attributes 不重新计算这些）
             "mass_accumulation_kg_h": float(self.mass_accumulation_kg_h),
             "ethanol_accumulation_kg_h": float(self.ethanol_accumulation_kg_h),
@@ -2577,6 +2762,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self.mass_balance_residual_kg_h = float(state.get("mass_balance_residual_kg_h", 0.0))
         self.ethanol_balance_residual_kg_h = float(state.get("ethanol_balance_residual_kg_h", 0.0))
         self.energy_balance_residual_kw = float(state.get("energy_balance_residual_kw", 0.0))
+        # 阶段 3.2: 恢复明确闭合残差位号（向后兼容）
+        self.mass_closure_residual_kg_h = float(state.get("mass_closure_residual_kg_h", self.mass_balance_residual_kg_h))
+        self.ethanol_closure_residual_kg_h = float(state.get("ethanol_closure_residual_kg_h", self.ethanol_balance_residual_kg_h))
+        self.energy_closure_residual_kw = float(state.get("energy_closure_residual_kw", self.energy_balance_residual_kw))
         # 阶段 2: 恢复积累率位号（_publish_scalar_attributes 不重新计算这些）
         self.mass_accumulation_kg_h = float(state.get("mass_accumulation_kg_h", 0.0))
         self.ethanol_accumulation_kg_h = float(state.get("ethanol_accumulation_kg_h", 0.0))

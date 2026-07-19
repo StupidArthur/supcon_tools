@@ -62,7 +62,7 @@ def _make_column(**overrides) -> ETHANOL_WATER_DISTILLATION:
         "feed_ethanol_wt": 0.25,
         "feed_temperature_c": 60.0,
         "max_internal_step": 0.05,
-        "initialization_mode": "STEADY",
+        "initialization_mode": "WARM_GUESS",
         "random_seed": 20260719,
     }
     params.update(overrides)
