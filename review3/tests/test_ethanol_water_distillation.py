@@ -1073,8 +1073,9 @@ def test_valve_linear_characteristic():
 
 def test_valve_equal_percentage_characteristic():
     """
-    等百分比阀特性：f(x) = R^(x-1)，R=rangeability=30。
+    等百分比阀特性（阶段 1 修正后）：归一化形式 f(x) = (R^x - 1) / (R - 1)。
 
+    满足 f(0)=0、f(1)=1，0% 开度下流量严格为零（todo/5.md §4.1）。
     feed_valve 在 default_params 中为等百分比。
     """
     from components.programs.ethanol_water_actuators import ValveActuator
@@ -1089,31 +1090,50 @@ def test_valve_equal_percentage_characteristic():
         rangeability=R,
     )
 
-    # 不同开度下的流量
+    # 不同开度下的流量（使用归一化等百分比特性）
     for pct in [0.0, 25.0, 50.0, 75.0, 100.0]:
         v.set_command(pct)
         v.actual_pct = pct
         flow = v.get_flow_kgmol_per_s()
         x = pct / 100.0
-        expected = 0.001 * (R ** (x - 1.0))
+        expected = 0.001 * (R ** x - 1.0) / (R - 1.0)
         assert abs(flow - expected) < 1e-12, (
             f"等百分比阀流量错误: pct={pct}, flow={flow}, expected={expected}"
         )
 
-    # 验证边界特性：x=1 时 f=1，x=0 时 f=1/R
+    # 验证边界特性（todo/5.md §4.1）：
+    # x=1 时 f=1，x=0 时 f=0（严格为零，不再是 1/R）
     v.actual_pct = 100.0
     assert abs(v.get_flow_kgmol_per_s() - 0.001) < 1e-12
     v.actual_pct = 0.0
-    assert abs(v.get_flow_kgmol_per_s() - 0.001 / R) < 1e-12
+    assert abs(v.get_flow_kgmol_per_s() - 0.0) < 1e-15, (
+        "0% 开度下等百分比阀流量必须严格为零"
+    )
+
+    # 反函数往返：ratio → x → ratio
+    for ratio in [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
+        x = v.inverse_characteristic_function(ratio)
+        ratio_back = v.characteristic_function(x)
+        assert abs(ratio - ratio_back) < 1e-12, (
+            f"等百分比阀反函数往返不一致: ratio={ratio}, x={x}, ratio_back={ratio_back}"
+        )
 
 
 def test_valve_mode_overrides_direct_flow():
     """
     阀位模式优先于直接流量模式（spec §6.1）。
 
-    当同时传入 valve_pct 和 flow_kgmol_per_s 时，应使用阀位模式。
-    等阀门 actual_pct 收敛到 command 后，流量由阀门特性计算。
+    阶段 1 修正后：
+    - 阀门输出为质量流量 (kg/h) = 额定质量流量 × flow_fraction
+    - 过程阀再按流股组成换算为 kmol/s
+    - 直接流量参数 (kmol/s) 应被忽略
     """
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+        MW_WATER_KG_PER_KMOL,
+        MW_ETHANOL_KG_PER_KMOL,
+    )
+
     col = _make_column()
     for _ in range(50):
         col.execute()
@@ -1124,10 +1144,17 @@ def test_valve_mode_overrides_direct_flow():
     for _ in range(100):
         col.execute(feed_valve_pct=50.0, feed_flow_kgmol_per_s=0.005)
 
-    # 实际流量应由阀门计算（feed_valve 是等百分比，max=0.001961）
-    # 50% 开度下：f(0.5) = 30^(0.5-1) = 30^(-0.5) ≈ 0.1826
-    # flow ≈ 0.001961 * 0.1826 ≈ 0.000358 kmol/s
-    expected_flow = 0.001961 * (30.0 ** (0.5 - 1.0))
+    # 阶段 1 修正：feed_valve 是归一化等百分比，max_flow_kg_per_h=150
+    # 50% 开度下：f(0.5) = (R^0.5 - 1)/(R-1) = (30^0.5 - 1)/29 ≈ 0.1544
+    # feed_mass_kg_h = 150 × 0.1544 ≈ 23.16 kg/h
+    # feed_mw = 进料平均分子量（按 ethanol_wt=0.25 计算）
+    # flow_kgmol_per_s = feed_mass_kg_h / (feed_mw × 3600)
+    R = 30.0
+    flow_fraction = (R ** 0.5 - 1.0) / (R - 1.0)
+    expected_mass_kg_h = 150.0 * flow_fraction
+    feed_xE = ethanol_mass_fraction_to_mole_fraction(0.25)
+    feed_mw = feed_xE * MW_ETHANOL_KG_PER_KMOL + (1.0 - feed_xE) * MW_WATER_KG_PER_KMOL
+    expected_flow = expected_mass_kg_h / (feed_mw * 3600.0)
     actual_flow = col._last_feed_flow
 
     rel_err = abs(actual_flow - expected_flow) / expected_flow
@@ -1671,3 +1698,253 @@ def test_valve_command_clamped():
     assert abs(col.feed_valve_command_pct - 0.0) < 1e-10, (
         f"命令未截断到 0: {col.feed_valve_command_pct}"
     )
+
+
+# ====================================================================
+# 20. 阶段 1 专项：归一化等百分比阀与公用工程位号（todo/5.md §12.2）
+# ====================================================================
+def test_equal_percentage_valve_is_zero_at_closed():
+    """
+    阶段 1 验收 1：归一化等百分比阀 0% 开度下流量严格为零。
+
+    todo/5.md §4.1: f(x) = (R^x - 1)/(R - 1)，满足 f(0)=0、f(1)=1。
+    """
+    from components.programs.ethanol_water_actuators import ValveActuator
+
+    v = ValveActuator(
+        name="test_eqp_zero",
+        full_travel_time_s=1.0,
+        characteristic="equal_percentage",
+        initial_command_pct=0.0,
+        rangeability=30.0,
+    )
+    v.actual_pct = 0.0
+    fraction = v.get_flow_fraction()
+    assert fraction == 0.0, f"0% 开度下 flow_fraction 必须严格为 0，实际={fraction}"
+
+    # 反函数：0 流量分数 → 0 开度
+    pct = v.opening_from_flow_fraction(0.0)
+    assert pct == 0.0, f"0 流量分数反算开度必须为 0，实际={pct}"
+
+
+def test_equal_percentage_valve_is_one_at_full_open():
+    """
+    阶段 1 验收 2：归一化等百分比阀 100% 开度下流量分数严格为 1。
+
+    todo/5.md §4.1: f(1) = (R - 1)/(R - 1) = 1。
+    """
+    from components.programs.ethanol_water_actuators import ValveActuator
+
+    R = 30.0
+    v = ValveActuator(
+        name="test_eqp_full",
+        full_travel_time_s=1.0,
+        characteristic="equal_percentage",
+        initial_command_pct=100.0,
+        rangeability=R,
+    )
+    v.actual_pct = 100.0
+    fraction = v.get_flow_fraction()
+    assert abs(fraction - 1.0) < 1e-15, (
+        f"100% 开度下 flow_fraction 必须为 1，实际={fraction}"
+    )
+
+    # 反函数：1 流量分数 → 100 开度
+    pct = v.opening_from_flow_fraction(1.0)
+    assert abs(pct - 100.0) < 1e-12, (
+        f"1 流量分数反算开度必须为 100，实际={pct}"
+    )
+
+    # 线性阀也满足边界
+    v_lin = ValveActuator(
+        name="test_lin_full",
+        full_travel_time_s=1.0,
+        characteristic="linear",
+        initial_command_pct=100.0,
+        rangeability=R,
+    )
+    v_lin.actual_pct = 100.0
+    assert v_lin.get_flow_fraction() == 1.0
+    v_lin.actual_pct = 0.0
+    assert v_lin.get_flow_fraction() == 0.0
+
+
+def test_equal_percentage_inverse_round_trip():
+    """
+    阶段 1 验收 3：归一化等百分比阀反函数往返一致。
+
+    对任意 ratio ∈ [0, 1]：f(f⁻¹(ratio)) = ratio。
+    对任意 pct ∈ [0, 100]：f⁻¹(f(pct/100)) * 100 = pct。
+    """
+    from components.programs.ethanol_water_actuators import ValveActuator
+
+    R = 30.0
+    v = ValveActuator(
+        name="test_eqp_inv",
+        full_travel_time_s=1.0,
+        characteristic="equal_percentage",
+        initial_command_pct=50.0,
+        rangeability=R,
+    )
+
+    # 正向：ratio → x → ratio
+    for ratio in [0.0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 1.0]:
+        x = v.inverse_characteristic_function(ratio)
+        assert 0.0 <= x <= 1.0, f"反函数结果越界: ratio={ratio}, x={x}"
+        ratio_back = v.characteristic_function(x)
+        assert abs(ratio - ratio_back) < 1e-12, (
+            f"ratio→x→ratio 往返不一致: ratio={ratio}, x={x}, ratio_back={ratio_back}"
+        )
+
+    # 反向：pct → ratio → pct
+    for pct in [0.0, 10.0, 25.0, 50.0, 75.0, 90.0, 100.0]:
+        v.actual_pct = pct
+        ratio = v.get_flow_fraction()
+        pct_back = v.opening_from_flow_fraction(ratio)
+        assert abs(pct - pct_back) < 1e-9, (
+            f"pct→ratio→pct 往返不一致: pct={pct}, ratio={ratio}, pct_back={pct_back}"
+        )
+
+    # 线性阀的反函数往返（线性）
+    v_lin = ValveActuator(
+        name="test_lin_inv",
+        full_travel_time_s=1.0,
+        characteristic="linear",
+        initial_command_pct=50.0,
+        rangeability=R,
+    )
+    for pct in [0.0, 25.0, 50.0, 75.0, 100.0]:
+        v_lin.actual_pct = pct
+        ratio = v_lin.get_flow_fraction()
+        pct_back = v_lin.opening_from_flow_fraction(ratio)
+        assert abs(pct - pct_back) < 1e-12
+
+
+def test_process_valve_mass_to_molar_conversion():
+    """
+    阶段 1 验收 4：过程阀质量流量 → 摩尔流量转换使用当前流股组成。
+
+    验证：在阀位模式下，给进料阀施加固定开度，比较
+    _last_feed_flow (kmol/s) 与
+    feed_valve_max_flow_kg_per_h × flow_fraction / (feed_mw × 3600)。
+
+    改变进料组成后，相同阀门开度对应的 kmol/s 必须改变。
+    """
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+        MW_WATER_KG_PER_KMOL,
+        MW_ETHANOL_KG_PER_KMOL,
+    )
+
+    def _feed_flow_at_opening(ethanol_wt: float, valve_pct: float) -> float:
+        """在指定进料组成和阀门开度下，跑 100 周期后返回 _last_feed_flow (kmol/s)。"""
+        col = _make_column(feed_ethanol_wt=ethanol_wt)
+        for _ in range(50):
+            col.execute()
+        for _ in range(100):
+            col.execute(feed_valve_pct=valve_pct)
+        return col._last_feed_flow
+
+    # 30% 开度下，乙醇质量分数 0.20 vs 0.40 对应的 kmol/s 不同
+    # （相同质量流量，但分子量不同 → kmol/s 不同）
+    flow_wt_020 = _feed_flow_at_opening(0.20, 30.0)
+    flow_wt_040 = _feed_flow_at_opening(0.40, 30.0)
+
+    # 计算预期值
+    R = 30.0
+    flow_fraction = (R ** 0.3 - 1.0) / (R - 1.0)
+    mass_kg_h = 150.0 * flow_fraction  # feed_valve_max_flow_kg_per_h = 150
+
+    for wt, actual_flow in [(0.20, flow_wt_020), (0.40, flow_wt_040)]:
+        xE = ethanol_mass_fraction_to_mole_fraction(wt)
+        mw = xE * MW_ETHANOL_KG_PER_KMOL + (1.0 - xE) * MW_WATER_KG_PER_KMOL
+        expected = mass_kg_h / (mw * 3600.0)
+        rel_err = abs(actual_flow - expected) / expected
+        assert rel_err < 0.01, (
+            f"质量→摩尔转换错误: ethanol_wt={wt}, actual={actual_flow}, "
+            f"expected={expected}, rel_err={rel_err*100:.2f}%"
+        )
+
+    # 不同组成下流量必须不同（分子量不同）
+    assert abs(flow_wt_020 - flow_wt_040) > 1e-8, (
+        f"不同进料组成下 kmol/s 流量必须不同: {flow_wt_020} vs {flow_wt_040}"
+    )
+
+
+def test_steam_and_cooling_flows_are_utility_mass_flows():
+    """
+    阶段 1 验收 5：蒸汽和冷却水流量是公用工程质量流量（kg/h），不转 kmol/s。
+
+    验证：
+    1. steam_flow_kg_h 和 cooling_flow_kg_h 位号存在
+    2. 数值 = 额定质量流量 × flow_fraction（开度对应）
+    3. 不存在对应的 *_flow_kgmol_per_s 字段
+    4. 阶段 1 关键约束：steam_flow_kg_h 不影响 vapor_boilup_kg_h（阶段 2 才接入）
+       注意：阶段 1 兼容路径下 vapor_boilup 由 steam 流量反算，但两者单位不同。
+       这里仅验证位号语义正确，不验证机理解耦（阶段 2 验收）。
+    """
+    from components.thermo.ethanol_water import (
+        ethanol_mass_fraction_to_mole_fraction,
+        MW_WATER_KG_PER_KMOL,
+        MW_ETHANOL_KG_PER_KMOL,
+    )
+
+    col = _make_column()
+    # 预热
+    for _ in range(50):
+        col.execute()
+
+    # 施加固定蒸汽阀和冷却水阀开度
+    for _ in range(100):
+        col.execute(steam_valve_pct=40.0, cooling_valve_pct=60.0)
+
+    # 1. 位号存在且为有限正数
+    assert math.isfinite(col.steam_flow_kg_h) and col.steam_flow_kg_h > 0.0, (
+        f"steam_flow_kg_h 无效: {col.steam_flow_kg_h}"
+    )
+    assert math.isfinite(col.cooling_flow_kg_h) and col.cooling_flow_kg_h > 0.0, (
+        f"cooling_flow_kg_h 无效: {col.cooling_flow_kg_h}"
+    )
+
+    # 2. 数值与开度对应（考虑一阶响应已收敛）
+    R = 30.0
+    steam_fraction = (R ** 0.4 - 1.0) / (R - 1.0)
+    cooling_fraction = (R ** 0.6 - 1.0) / (R - 1.0)
+    expected_steam = 100.0 * steam_fraction    # steam_valve_max_flow_kg_per_h = 100
+    expected_cooling = 7000.0 * cooling_fraction  # cooling_valve_max_flow_kg_per_h = 7000
+
+    rel_err_steam = abs(col.steam_flow_kg_h - expected_steam) / expected_steam
+    rel_err_cooling = abs(col.cooling_flow_kg_h - expected_cooling) / expected_cooling
+    assert rel_err_steam < 0.01, (
+        f"steam_flow_kg_h 与开度不符: actual={col.steam_flow_kg_h}, "
+        f"expected={expected_steam}, rel_err={rel_err_steam*100:.2f}%"
+    )
+    assert rel_err_cooling < 0.01, (
+        f"cooling_flow_kg_h 与开度不符: actual={col.cooling_flow_kg_h}, "
+        f"expected={expected_cooling}, rel_err={rel_err_cooling*100:.2f}%"
+    )
+
+    # 3. 不存在公用工程的 kmol/s 字段
+    assert not hasattr(col, "steam_flow_kgmol_per_s"), (
+        "蒸汽是公用工程，不应有 kmol/s 字段"
+    )
+    assert not hasattr(col, "cooling_flow_kgmol_per_s"), (
+        "冷却水是公用工程，不应有 kmol/s 字段"
+    )
+
+    # 4. 冷却水流量比蒸汽大得多（7000 vs 100 kg/h 额定值）
+    assert col.cooling_flow_kg_h > col.steam_flow_kg_h, (
+        f"冷却水质量流量应大于蒸汽: steam={col.steam_flow_kg_h}, "
+        f"cooling={col.cooling_flow_kg_h}"
+    )
+
+    # 5. 公用工程位号类型校验：均为 float
+    assert isinstance(col.steam_flow_kg_h, float)
+    assert isinstance(col.cooling_flow_kg_h, float)
+    assert isinstance(col.cooling_water_temperature_c, float)
+    assert isinstance(col.steam_supply_pressure_kpa, float)
+
+    # 6. 公用工程输入接口可写入
+    col.execute(cooling_water_temperature_c=30.0, steam_supply_pressure_kpa=400.0)
+    assert abs(col.cooling_water_temperature_c - 30.0) < 1e-10
+    assert abs(col.steam_supply_pressure_kpa - 400.0) < 1e-10

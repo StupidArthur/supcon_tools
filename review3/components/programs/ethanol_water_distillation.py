@@ -170,26 +170,31 @@ def _compute_initial_valve_pct(
     """
     根据目标流量反算阀门初始开度 (%)。
 
-    linear: pct = (flow / max_flow) * 100
-    equal_percentage: pct = (log(flow/max_flow) / log(R) + 1) * 100
+    使用归一化阀门特性（todo/5.md §4.1）：
+        linear:             ratio = x                → x = ratio
+        equal_percentage:   ratio = (R^x - 1)/(R-1)  → x = log(ratio*(R-1)+1)/log(R)
+
+    其中 ratio = target_flow / max_flow ∈ [0, 1]。
 
     Args:
-        target_flow: 目标流量 (kmol/s)
-        max_flow: 100% 开度下的最大流量 (kmol/s)
+        target_flow: 目标流量（任意单位，与 max_flow 同单位）
+        max_flow: 100% 开度下的最大流量（与 target_flow 同单位）
         characteristic: 'linear' 或 'equal_percentage'
         rangeability: 等百分比阀可调比
 
     Returns:
-        初始开度 (0~100%)
+        初始开度 (0~100%)。0% 开度下流量严格为零（归一化等百分比）。
     """
     if max_flow <= 0.0:
         return 0.0
-    ratio = max(1.0 / rangeability, min(1.0, target_flow / max_flow))
+    if target_flow <= 0.0:
+        return 0.0
+    ratio = max(0.0, min(1.0, target_flow / max_flow))
     if characteristic == "linear":
-        return ratio * 100.0
-    # equal_percentage: f(x) = R^(x-1), x in [0,1]
-    # ratio = R^(x-1) → x = log(ratio)/log(R) + 1
-    x = math.log(ratio) / math.log(rangeability) + 1.0
+        x = ratio
+    else:
+        # equal_percentage 归一化反函数
+        x = math.log(ratio * (rangeability - 1.0) + 1.0) / math.log(rangeability)
     x = max(0.0, min(1.0, x))
     return x * 100.0
 
@@ -280,28 +285,44 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "initialization_mode": "STEADY",
         "random_seed": 20260719,
         # ===== 阶段 D 新增：阀门动态（spec §6.2） =====
-        # 每个阀门：(满行程时间 s, 特性, 最大流量 kmol/s)
-        # 最大流量按参考工况 ×1.5 设计余量
+        # 每个阀门：(满行程时间 s, 特性)
         "feed_valve_full_travel_s": 10.0,
         "feed_valve_characteristic": "equal_percentage",
-        "feed_valve_max_flow_kgmol_per_s": 0.001961,    # 0.001307 * 1.5
         "reflux_valve_full_travel_s": 10.0,
         "reflux_valve_characteristic": "equal_percentage",
-        "reflux_valve_max_flow_kgmol_per_s": 0.000938,  # 0.000625 * 1.5
         "distillate_valve_full_travel_s": 12.0,
         "distillate_valve_characteristic": "linear",
-        "distillate_valve_max_flow_kgmol_per_s": 0.000314,  # 0.000209 * 1.5
         "bottoms_valve_full_travel_s": 12.0,
         "bottoms_valve_characteristic": "linear",
-        "bottoms_valve_max_flow_kgmol_per_s": 0.001647,  # 0.001098 * 1.5
         "steam_valve_full_travel_s": 15.0,
         "steam_valve_characteristic": "equal_percentage",
-        "steam_valve_max_flow_kgmol_per_s": 0.001251,    # 0.000834 * 1.5（蒸气）
         "cooling_valve_full_travel_s": 15.0,
         "cooling_valve_characteristic": "equal_percentage",
-        "cooling_valve_max_flow_kgmol_per_s": 0.001251,  # 与蒸气对应
         # 阀门可调比（等百分比阀参数）
         "valve_rangeability": 30.0,
+        # ===== 阶段 1 新增：阀门额定质量流量（todo/5.md §4.2） =====
+        # 四个过程阀的额定流量按 kg/h 给出（DCS 单位），运行时根据流股组成换算为 kmol/s。
+        # 蒸汽和冷却水是公用工程，保持 kg/h 不转换为 kmol/s。
+        # 额定值按参考工况（spec §2.3）×1.5 设计余量。
+        "feed_valve_max_flow_kg_per_h": 150.0,        # 参考进料 100 kg/h × 1.5
+        "reflux_valve_max_flow_kg_per_h": 150.0,      # 参考回流 84 kg/h × 1.5 ≈ 126，圆整到 150
+        "distillate_valve_max_flow_kg_per_h": 50.0,   # 参考塔顶 28 kg/h × 1.5 ≈ 42，圆整到 50
+        "bottoms_valve_max_flow_kg_per_h": 120.0,     # 参考塔底 72 kg/h × 1.5 ≈ 108，圆整到 120
+        "steam_valve_max_flow_kg_per_h": 100.0,       # 公用工程蒸汽（DCS 可测）
+        "cooling_valve_max_flow_kg_per_h": 7000.0,    # 公用工程冷却水（DCS 可测）
+        # ===== 阶段 1 新增：公用工程参数（todo/5.md §3.2） =====
+        # 注意：阶段 1 仅发布位号和输入接口，不接入再沸/冷凝机理。
+        # Q_R → V_boil、Q_C → V_condense、压力动态属于阶段 2。
+        "cooling_water_temperature_c": 25.0,           # 冷却水供入温度 (℃)
+        "steam_supply_pressure_kpa": 300.0 + 101.325,  # 蒸汽供入压力 kPa(a)（300 kPa(g)）
+        # ===== 阶段 1 兼容字段（仅用于 deprecated get_flow_kgmol_per_s()，将在阶段 2 删除） =====
+        # 注意：正式模型不使用这些字段，应使用上面的 *_valve_max_flow_kg_per_h。
+        "feed_valve_max_flow_kgmol_per_s": 0.001961,
+        "reflux_valve_max_flow_kgmol_per_s": 0.000938,
+        "distillate_valve_max_flow_kgmol_per_s": 0.000314,
+        "bottoms_valve_max_flow_kgmol_per_s": 0.001647,
+        "steam_valve_max_flow_kgmol_per_s": 0.001251,
+        "cooling_valve_max_flow_kgmol_per_s": 0.001251,
         # ===== 阶段 D 新增：浓度分析仪（spec §6.3） =====
         "analyzer_tau_lag_s": 30.0,         # 一阶滞后时间常数
         "analyzer_sample_interval_s": 5.0,  # 采样间隔
@@ -327,6 +348,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "distillate_flow_kg_h",
         "bottoms_flow_kg_h",
         "vapor_boilup_kg_h",
+        # 阶段 1 新增：公用工程质量流量（todo/5.md §4.3）
+        # 注意：阶段 1 仅发布位号，不接入再沸/冷凝机理（阶段 2）
+        "steam_flow_kg_h",
+        "cooling_flow_kg_h",
+        # 阶段 1 新增：公用工程状态（todo/5.md §3.2）
+        "cooling_water_temperature_c",
+        "steam_supply_pressure_kpa",
         # 液位
         "reflux_drum_level_pct",
         "reboiler_level_pct",
@@ -385,6 +413,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         {"name": "bottoms_valve_pct", "type": "float", "connectable": True, "desc": "塔底采出阀命令开度(%)"},
         {"name": "steam_valve_pct", "type": "float", "connectable": True, "desc": "蒸汽阀命令开度(%)"},
         {"name": "cooling_valve_pct", "type": "float", "connectable": True, "desc": "冷却水阀命令开度(%)"},
+        # 阶段 1 新增：公用工程输入（todo/5.md §3.2、§6.1）
+        # 注意：阶段 1 仅接受输入并发布位号，不影响再沸/冷凝/压力动态（阶段 2 接入）
+        {"name": "cooling_water_temperature_c", "type": "float", "connectable": True, "desc": "冷却水供入温度(℃)"},
+        {"name": "steam_supply_pressure_kpa", "type": "float", "connectable": True, "desc": "蒸汽供入压力(kPa(a))"},
     ]
 
     param_descriptions: Dict[str, str] = {
@@ -427,6 +459,11 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "top_ethanol_analyzer": "塔顶乙醇分析仪读数",
         "bottom_ethanol_wt_true": "塔底乙醇质量分数真实值",
         "bottom_ethanol_analyzer": "塔底乙醇分析仪读数",
+        # 阶段 1 新增：公用工程位号（todo/5.md §4.3）
+        "steam_flow_kg_h": "公用工程蒸汽质量流量(kg/h)",
+        "cooling_flow_kg_h": "公用工程冷却水质量流量(kg/h)",
+        "cooling_water_temperature_c": "冷却水供入温度(℃)",
+        "steam_supply_pressure_kpa": "蒸汽供入压力(kPa(a))",
     }
 
     def __init__(self, cycle_time: float, **kwargs: Any) -> None:
@@ -481,90 +518,77 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._feed_ethanol_wt = float(self.feed_ethanol_wt)
         self._feed_temperature_c = float(self.feed_temperature_c)
 
+        # 阶段 1 修正：六个阀门的额定质量流量（todo/5.md §4.2）
+        # 过程阀（feed/reflux/distillate/bottoms）：质量流量 → 运行时按流股组成换算 kmol/s
+        # 公用工程阀（steam/cooling）：保持 kg/h，不转 kmol/s
+        self._valve_max_flow_kg_per_h: Dict[str, float] = {
+            "feed":       float(self.feed_valve_max_flow_kg_per_h),
+            "reflux":     float(self.reflux_valve_max_flow_kg_per_h),
+            "distillate": float(self.distillate_valve_max_flow_kg_per_h),
+            "bottoms":    float(self.bottoms_valve_max_flow_kg_per_h),
+            "steam":      float(self.steam_valve_max_flow_kg_per_h),
+            "cooling":    float(self.cooling_valve_max_flow_kg_per_h),
+        }
+
+        # 阶段 1 修正：稳态初始质量流量（kg/h），用于反算阀门初始开度
+        # 过程阀：kmol/s × 流股平均分子量 × 3600 = kg/h
+        # steam/cooling：阶段 1 仅有位号，初始质量流量按参考工况设定
+        feed_mw_init = _mixture_molecular_weight(
+            ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
+        )
+        reflux_mw_init = _mixture_molecular_weight(
+            ethanol_mass_fraction_to_mole_fraction(float(self.top_ethanol_wt))
+        ) if hasattr(self, "top_ethanol_wt") else feed_mw_init
+        distillate_mw_init = reflux_mw_init  # 塔顶采出与回流同组成
+        bottoms_mw_init = _mixture_molecular_weight(
+            ethanol_mass_fraction_to_mole_fraction(float(self.bottom_ethanol_wt))
+        ) if hasattr(self, "bottom_ethanol_wt") else feed_mw_init
+        # 阶段 1 兼容路径：蒸汽流量初值按旧 vapor_boilup 反算（todo/5.md §4.4）
+        # 注意：阶段 2 将删除此兼容路径，改为 Q_R → V_boil 真实机理
+        vapor_boilup_mw = _mixture_molecular_weight(
+            ethanol_mole_fraction_to_mass_fraction(
+                float(self.bottom_ethanol_x) if hasattr(self, "bottom_ethanol_x") else 0.05
+            )
+        ) if hasattr(self, "bottom_ethanol_x") else feed_mw_init
+        steady_mass_flow_kg_per_h: Dict[str, float] = {
+            "feed":       _kgmols_to_kgh(self._feed_flow_kgmol_per_s, feed_mw_init),
+            "reflux":     _kgmols_to_kgh(self._reflux_flow_kgmol_per_s, reflux_mw_init),
+            "distillate": _kgmols_to_kgh(self._distillate_flow_kgmol_per_s, distillate_mw_init),
+            "bottoms":    _kgmols_to_kgh(self._bottoms_flow_kgmol_per_s, bottoms_mw_init),
+            # 阶段 1 兼容：蒸汽质量流量 = 过程蒸气量 × 蒸汽冷凝潜热对应的质量
+            # 简化为按过程蒸气质量流量初值（阶段 2 由 Q_R 反推）
+            "steam":      _kgmols_to_kgh(self._vapor_boilup_kgmol_per_s, vapor_boilup_mw),
+            # 冷却水：参考工况下约 3500 kg/h（与冷凝负荷匹配），初始按 50% 开度对应值
+            "cooling":    self._valve_max_flow_kg_per_h["cooling"] * 0.5,
+        }
+
         # 阶段 D：创建六个阀门（spec §6.2）
-        # 初始开度根据稳态流量反算
+        # 阶段 1 修正：ValveActuator 不再绑定 kmol/s，初始开度按质量流量反算
         rangeability = float(self.valve_rangeability)
         self._valves: Dict[str, ValveActuator] = {
-            "feed": ValveActuator(
-                name="feed_valve",
-                full_travel_time_s=float(self.feed_valve_full_travel_s),
-                characteristic=str(self.feed_valve_characteristic),  # type: ignore[arg-type]
-                max_flow_kgmol_per_s=float(self.feed_valve_max_flow_kgmol_per_s),
+            key: ValveActuator(
+                name=f"{key}_valve",
+                full_travel_time_s=float(getattr(self, f"{key}_valve_full_travel_s")),
+                characteristic=str(getattr(self, f"{key}_valve_characteristic")),  # type: ignore[arg-type]
                 initial_command_pct=_compute_initial_valve_pct(
-                    self._feed_flow_kgmol_per_s,
-                    float(self.feed_valve_max_flow_kgmol_per_s),
-                    str(self.feed_valve_characteristic),
+                    steady_mass_flow_kg_per_h[key],
+                    self._valve_max_flow_kg_per_h[key],
+                    str(getattr(self, f"{key}_valve_characteristic")),
                     rangeability,
                 ),
                 rangeability=rangeability,
-            ),
-            "reflux": ValveActuator(
-                name="reflux_valve",
-                full_travel_time_s=float(self.reflux_valve_full_travel_s),
-                characteristic=str(self.reflux_valve_characteristic),  # type: ignore[arg-type]
-                max_flow_kgmol_per_s=float(self.reflux_valve_max_flow_kgmol_per_s),
-                initial_command_pct=_compute_initial_valve_pct(
-                    self._reflux_flow_kgmol_per_s,
-                    float(self.reflux_valve_max_flow_kgmol_per_s),
-                    str(self.reflux_valve_characteristic),
-                    rangeability,
-                ),
-                rangeability=rangeability,
-            ),
-            "distillate": ValveActuator(
-                name="distillate_valve",
-                full_travel_time_s=float(self.distillate_valve_full_travel_s),
-                characteristic=str(self.distillate_valve_characteristic),  # type: ignore[arg-type]
-                max_flow_kgmol_per_s=float(self.distillate_valve_max_flow_kgmol_per_s),
-                initial_command_pct=_compute_initial_valve_pct(
-                    self._distillate_flow_kgmol_per_s,
-                    float(self.distillate_valve_max_flow_kgmol_per_s),
-                    str(self.distillate_valve_characteristic),
-                    rangeability,
-                ),
-                rangeability=rangeability,
-            ),
-            "bottoms": ValveActuator(
-                name="bottoms_valve",
-                full_travel_time_s=float(self.bottoms_valve_full_travel_s),
-                characteristic=str(self.bottoms_valve_characteristic),  # type: ignore[arg-type]
-                max_flow_kgmol_per_s=float(self.bottoms_valve_max_flow_kgmol_per_s),
-                initial_command_pct=_compute_initial_valve_pct(
-                    self._bottoms_flow_kgmol_per_s,
-                    float(self.bottoms_valve_max_flow_kgmol_per_s),
-                    str(self.bottoms_valve_characteristic),
-                    rangeability,
-                ),
-                rangeability=rangeability,
-            ),
-            "steam": ValveActuator(
-                name="steam_valve",
-                full_travel_time_s=float(self.steam_valve_full_travel_s),
-                characteristic=str(self.steam_valve_characteristic),  # type: ignore[arg-type]
-                max_flow_kgmol_per_s=float(self.steam_valve_max_flow_kgmol_per_s),
-                initial_command_pct=_compute_initial_valve_pct(
-                    self._vapor_boilup_kgmol_per_s,
-                    float(self.steam_valve_max_flow_kgmol_per_s),
-                    str(self.steam_valve_characteristic),
-                    rangeability,
-                ),
-                rangeability=rangeability,
-            ),
-            "cooling": ValveActuator(
-                name="cooling_valve",
-                full_travel_time_s=float(self.cooling_valve_full_travel_s),
-                characteristic=str(self.cooling_valve_characteristic),  # type: ignore[arg-type]
-                max_flow_kgmol_per_s=float(self.cooling_valve_max_flow_kgmol_per_s),
-                # 冷却水阀初始开度按蒸气量对应（全凝器冷凝能力与蒸气量匹配）
-                initial_command_pct=_compute_initial_valve_pct(
-                    self._vapor_boilup_kgmol_per_s,
-                    float(self.cooling_valve_max_flow_kgmol_per_s),
-                    str(self.cooling_valve_characteristic),
-                    rangeability,
-                ),
-                rangeability=rangeability,
-            ),
+            )
+            for key in ("feed", "reflux", "distillate", "bottoms", "steam", "cooling")
         }
+
+        # 阶段 1 新增：公用工程状态（todo/5.md §3.2）
+        # 注意：阶段 1 仅持有状态和发布位号，不影响再沸/冷凝/压力动态（阶段 2 接入）
+        self._cooling_water_temperature_c = float(self.cooling_water_temperature_c)
+        self._steam_supply_pressure_kpa = float(self.steam_supply_pressure_kpa)
+
+        # 阶段 1 新增：上一周期公用工程质量流量（kg/h），用于在非阀位模式下保持连续性
+        self._last_steam_flow_kg_per_h = steady_mass_flow_kg_per_h["steam"]
+        self._last_cooling_flow_kg_per_h = steady_mass_flow_kg_per_h["cooling"]
 
         # 阶段 D：创建两个浓度分析仪（spec §6.3）
         # 初始真实值用稳态浓度（init 已完成）
@@ -1449,6 +1473,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             setattr(self, f"{key}_valve_command_pct", float(valve.command_pct))
             setattr(self, f"{key}_valve_actual_pct", float(valve.actual_pct))
 
+        # 阶段 1 新增：公用工程质量流量和状态位号（todo/5.md §4.3）
+        # 注意：阶段 1 仅发布位号，不影响再沸/冷凝/压力动态（阶段 2 接入）
+        self.steam_flow_kg_h = float(self._last_steam_flow_kg_per_h)
+        self.cooling_flow_kg_h = float(self._last_cooling_flow_kg_per_h)
+        self.cooling_water_temperature_c = float(self._cooling_water_temperature_c)
+        self.steam_supply_pressure_kpa = float(self._steam_supply_pressure_kpa)
+
         # 阶段 D 新增：分析仪位号（spec §6.3 真实值和仪表值分开）
         # 真实值就是 top_ethanol_wt / bottom_ethanol_wt
         self.top_ethanol_wt_true = float(self.top_ethanol_wt)
@@ -1476,20 +1507,29 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         bottoms_valve_pct: Optional[float] = None,
         steam_valve_pct: Optional[float] = None,
         cooling_valve_pct: Optional[float] = None,
+        cooling_water_temperature_c: Optional[float] = None,
+        steam_supply_pressure_kpa: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
         """
-        执行一个周期的精馏塔动态计算（阶段 D 含阀门和分析仪）。
+        执行一个周期的精馏塔动态计算（阶段 1 含阀门、分析仪、公用工程位号）。
 
         优先级规则（向后兼容阶段 B/C）：
         1. 如果传入任何 *_valve_pct 参数，启用阀位模式：
            - 阀门命令更新，actual_pct 通过一阶响应演化
-           - 实际流量 = max_flow * characteristic(actual_pct)
+           - 实际流量 = valve_max_flow_kg_per_h × get_flow_fraction()
+           - 过程阀：质量流量 → 按当前流股组成换算 kmol/s
+           - 公用工程阀（steam/cooling）：保持 kg/h，发布为 steam_flow_kg_h / cooling_flow_kg_h
            - 同时传入的 *_flow_kgmol_per_s 被忽略
         2. 如果只传入 *_flow_kgmol_per_s（不传 valve_pct），保持直接流量模式：
            - 直接使用流量值，绕过阀门动态
            - 阶段 B/C 测试使用此模式
         3. 都不传则使用上一周期值
+
+        阶段 1 重要说明（todo/5.md §4.4）：
+        - steam_flow_kg_h 和 cooling_flow_kg_h 已发布，但尚未参与再沸/冷凝机理
+        - 蒸汽阀输出 ≠ 过程蒸气量 vapor_boilup；阶段 2 通过 Q_R → V_boil 接入
+        - 冷却水流量不影响冷凝能力和塔压；阶段 2 通过 Q_C → V_condense 接入
 
         Args:
             feed_flow_kgmol_per_s: 进料摩尔流量 (kmol/s)，直接流量模式。
@@ -1506,6 +1546,8 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             bottoms_valve_pct: 塔底采出阀命令开度 (%)。
             steam_valve_pct: 蒸汽阀命令开度 (%)。
             cooling_valve_pct: 冷却水阀命令开度 (%)。
+            cooling_water_temperature_c: 冷却水供入温度 (℃)。
+            steam_supply_pressure_kpa: 蒸汽供入压力 (kPa(a))。
         """
         # 处理环境/进料参数
         if feed_ethanol_wt is not None:
@@ -1517,6 +1559,11 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             self._feed_temperature_c = float(feed_temperature_c)
         if ambient_temperature_c is not None:
             self._ambient_temperature_k = float(ambient_temperature_c) + 273.15
+        # 阶段 1 新增：公用工程输入（仅持有状态，不影响再沸/冷凝）
+        if cooling_water_temperature_c is not None:
+            self._cooling_water_temperature_c = float(cooling_water_temperature_c)
+        if steam_supply_pressure_kpa is not None:
+            self._steam_supply_pressure_kpa = float(steam_supply_pressure_kpa)
 
         # 检查是否启用了阀位模式
         any_valve_input = any(
@@ -1545,12 +1592,46 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             for valve in self._valves.values():
                 valve.update(self.cycle_time)
 
-            # 从阀门实际开度计算流量
-            self._last_feed_flow = self._valves["feed"].get_flow_kgmol_per_s()
-            self._last_reflux_flow = self._valves["reflux"].get_flow_kgmol_per_s()
-            self._last_distillate_flow = self._valves["distillate"].get_flow_kgmol_per_s()
-            self._last_bottoms_flow = self._valves["bottoms"].get_flow_kgmol_per_s()
-            self._last_vapor_boilup = self._valves["steam"].get_flow_kgmol_per_s()
+            # 阶段 1 修正：从阀门实际开度计算流量（todo/5.md §4.3）
+            # 过程阀：质量流量 (kg/h) = 额定质量流量 × flow_fraction，再按流股组成换算 kmol/s
+            # 公用工程阀：质量流量 (kg/h) = 额定质量流量 × flow_fraction，保持 kg/h 不转换
+            feed_mass_kg_h = self._valve_max_flow_kg_per_h["feed"] * self._valves["feed"].get_flow_fraction()
+            reflux_mass_kg_h = self._valve_max_flow_kg_per_h["reflux"] * self._valves["reflux"].get_flow_fraction()
+            distillate_mass_kg_h = self._valve_max_flow_kg_per_h["distillate"] * self._valves["distillate"].get_flow_fraction()
+            bottoms_mass_kg_h = self._valve_max_flow_kg_per_h["bottoms"] * self._valves["bottoms"].get_flow_fraction()
+            self._last_steam_flow_kg_per_h = (
+                self._valve_max_flow_kg_per_h["steam"] * self._valves["steam"].get_flow_fraction()
+            )
+            self._last_cooling_flow_kg_per_h = (
+                self._valve_max_flow_kg_per_h["cooling"] * self._valves["cooling"].get_flow_fraction()
+            )
+
+            # 过程阀：质量流量 → kmol/s，使用当前流股组成对应的平均分子量
+            # feed：用进料组成；reflux/distillate：用塔顶组成；bottoms：用塔底组成
+            feed_mw = _mixture_molecular_weight(
+                ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
+            )
+            # 塔顶组成（reflux 和 distillate 同组成）：
+            # top_ethanol_wt 在 _publish_scalar_attributes 中更新，本周期可能尚未刷新
+            # 使用上一周期的发布值（首次执行用初值）
+            top_wt = float(self.top_ethanol_wt) if hasattr(self, "top_ethanol_wt") else 0.85
+            bottom_wt = float(self.bottom_ethanol_wt) if hasattr(self, "bottom_ethanol_wt") else 0.015
+            reflux_mw = _mixture_molecular_weight(ethanol_mass_fraction_to_mole_fraction(top_wt))
+            distillate_mw = reflux_mw
+            bottoms_mw = _mixture_molecular_weight(ethanol_mass_fraction_to_mole_fraction(bottom_wt))
+
+            self._last_feed_flow = _kgh_to_kgmols(feed_mass_kg_h, feed_mw)
+            self._last_reflux_flow = _kgh_to_kgmols(reflux_mass_kg_h, reflux_mw)
+            self._last_distillate_flow = _kgh_to_kgmols(distillate_mass_kg_h, distillate_mw)
+            self._last_bottoms_flow = _kgh_to_kgmols(bottoms_mass_kg_h, bottoms_mw)
+
+            # 阶段 1 兼容路径：vapor_boilup 仍由 steam_valve 流量初值反算
+            # 注意（todo/5.md §4.4）：此路径在阶段 2 将被 Q_R → V_boil 真实机理替代
+            # 当前用蒸汽质量流量按塔釜液相组成换算为 kmol/s
+            # 不得对外宣称 steam_flow_kg_h 已参与再沸机理
+            sump_xE = float(self.bottom_ethanol_x) if hasattr(self, "bottom_ethanol_x") else 0.05
+            sump_mw = _mixture_molecular_weight(sump_xE)
+            self._last_vapor_boilup = _kgh_to_kgmols(self._last_steam_flow_kg_per_h, sump_mw)
             self._V_kgmol_per_s = self._last_vapor_boilup
         else:
             # ===== 直接流量模式（向后兼容阶段 B/C） =====
@@ -1576,6 +1657,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             else:
                 # 纯直接流量模式：阀门不演化，保持初始开度
                 pass
+
+            # 阶段 1：直接流量模式下，steam_flow_kg_h / cooling_flow_kg_h 保持上一周期值
+            # （阶段 2 删除此兼容路径后，将由 Q_R/Q_C 反推）
 
         # 进料乙醇摩尔分数和温度（K）
         feed_xE = ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
@@ -1681,12 +1765,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "vapor_boilup_kgmol_per_s",
         "feed_ethanol_wt", "feed_temperature_c",
         "vapor_volume_m3",
-        "feed_valve_max_flow_kgmol_per_s",
-        "reflux_valve_max_flow_kgmol_per_s",
-        "distillate_valve_max_flow_kgmol_per_s",
-        "bottoms_valve_max_flow_kgmol_per_s",
-        "steam_valve_max_flow_kgmol_per_s",
-        "cooling_valve_max_flow_kgmol_per_s",
+        # 阶段 1：使用额定质量流量（todo/5.md §4.2）
+        "feed_valve_max_flow_kg_per_h",
+        "reflux_valve_max_flow_kg_per_h",
+        "distillate_valve_max_flow_kg_per_h",
+        "bottoms_valve_max_flow_kg_per_h",
+        "steam_valve_max_flow_kg_per_h",
+        "cooling_valve_max_flow_kg_per_h",
     )
 
     def _compute_params_hash(self) -> str:
@@ -1769,6 +1854,11 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "last_distillate_flow": float(self._last_distillate_flow),
             "last_bottoms_flow": float(self._last_bottoms_flow),
             "last_vapor_boilup": float(self._last_vapor_boilup),
+            # 阶段 1：公用工程状态（todo/5.md §3.2）
+            "cooling_water_temperature_c": float(self._cooling_water_temperature_c),
+            "steam_supply_pressure_kpa": float(self._steam_supply_pressure_kpa),
+            "last_steam_flow_kg_per_h": float(self._last_steam_flow_kg_per_h),
+            "last_cooling_flow_kg_per_h": float(self._last_cooling_flow_kg_per_h),
             # 守恒诊断累计
             "cumulative": {
                 "mass_in": self._cumulative_mass_in,
@@ -1857,6 +1947,20 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._last_distillate_flow = float(state["last_distillate_flow"])
         self._last_bottoms_flow = float(state["last_bottoms_flow"])
         self._last_vapor_boilup = float(state["last_vapor_boilup"])
+
+        # 阶段 1：恢复公用工程状态（向后兼容：旧版无此键时使用 __init__ 值）
+        self._cooling_water_temperature_c = float(
+            state.get("cooling_water_temperature_c", self._cooling_water_temperature_c)
+        )
+        self._steam_supply_pressure_kpa = float(
+            state.get("steam_supply_pressure_kpa", self._steam_supply_pressure_kpa)
+        )
+        self._last_steam_flow_kg_per_h = float(
+            state.get("last_steam_flow_kg_per_h", self._last_steam_flow_kg_per_h)
+        )
+        self._last_cooling_flow_kg_per_h = float(
+            state.get("last_cooling_flow_kg_per_h", self._last_cooling_flow_kg_per_h)
+        )
 
         # 恢复守恒诊断累计
         self._cumulative_mass_in = float(state["cumulative"]["mass_in"])
