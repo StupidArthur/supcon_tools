@@ -188,6 +188,19 @@ DH_VAP_WATER_KJ_PER_KMOL: float = 40660.0
 #: 乙醇的汽化潜热 (kJ/kmol)，取常压沸点 351.5 K 附近的值
 DH_VAP_ETHANOL_KJ_PER_KMOL: float = 38560.0
 
+# ====================================================================
+# 阶段 2 新增：气相焓/内能公式所需常数（spec §6.2）
+# ====================================================================
+
+#: 水的常压沸点 (K)，来源 NIST Chemistry WebBook
+T_BOIL_WATER_K: float = 373.15
+
+#: 乙醇的常压沸点 (K)，来源 NIST Chemistry WebBook
+T_BOIL_ETHANOL_K: float = 351.50
+
+#: 通用气体常数 (kJ/(kmol·K))，用于气相内能 u = h - R*T
+R_KJ_PER_KMOL_K: float = 8.314462618
+
 
 # ====================================================================
 # Antoine 系数（输入 ℃，输出 kPa）
@@ -675,14 +688,13 @@ def vapor_enthalpy_kj_per_kmol(y_ethanol: float, temperature_k: float) -> float:
     """
     二元乙醇—水气相混合物摩尔焓 (kJ/kmol)。
 
-    理想混合，气相热容按温度相关常数近似（详见模块顶部说明）。
+    阶段 2 公式（spec §6.2）：
+        h_v_i(T) = Cp_L_i * (T_b_i - T_ref) + ΔH_vap_i + Cp_V_i * (T - T_b_i)
+        h_vapor(y, T) = (1-y) * h_v_water(T) + y * h_v_ethanol(T)
 
-        h_V_mix(y, T) = (1-y) * (Cp_L_water*(T-T_ref) + ΔH_vap_water)
-                       + y * (Cp_L_ethanol*(T-T_ref) + ΔH_vap_ethanol)
-
-    注意：第一版将气相焓表达为"对应温度下的液相焓 + 该温度下的汽化潜热"，
-    隐含假设气相热容与液相热容相同（spec §5.4 允许"分段常数"近似）。
-    该近似在 330~400 K 范围内引入误差 < 5%，对动态趋势和守恒诊断无影响。
+    物理含义：以 T_ref 下纯液相为参考态，先把液体从 T_ref 显热到沸点 T_b，
+    在 T_b 下汽化（ΔH_vap），再把气相从 T_b 显热到 T。这样气相热容与液相
+    热容分别使用各自的常数，更符合真实物性。
 
     Args:
         y_ethanol: 气相乙醇摩尔分数（0～1）。
@@ -700,10 +712,109 @@ def vapor_enthalpy_kj_per_kmol(y_ethanol: float, temperature_k: float) -> float:
 
     y_e = y_ethanol
     y_w = 1.0 - y_e
-    delta_t = temperature_k - T_REF_K
-    h_v_water = CP_LIQUID_WATER_KJ_PER_KMOL_K * delta_t + DH_VAP_WATER_KJ_PER_KMOL
-    h_v_ethanol = CP_LIQUID_ETHANOL_KJ_PER_KMOL_K * delta_t + DH_VAP_ETHANOL_KJ_PER_KMOL
+    # 纯组分气相焓：液相显热到沸点 + 沸点汽化潜热 + 气相显热到 T
+    h_v_water = (
+        CP_LIQUID_WATER_KJ_PER_KMOL_K * (T_BOIL_WATER_K - T_REF_K)
+        + DH_VAP_WATER_KJ_PER_KMOL
+        + CP_VAPOR_WATER_KJ_PER_KMOL_K * (temperature_k - T_BOIL_WATER_K)
+    )
+    h_v_ethanol = (
+        CP_LIQUID_ETHANOL_KJ_PER_KMOL_K * (T_BOIL_ETHANOL_K - T_REF_K)
+        + DH_VAP_ETHANOL_KJ_PER_KMOL
+        + CP_VAPOR_ETHANOL_KJ_PER_KMOL_K * (temperature_k - T_BOIL_ETHANOL_K)
+    )
     return y_w * h_v_water + y_e * h_v_ethanol
+
+
+def vapor_internal_energy_kj_per_kmol(y_ethanol: float, temperature_k: float) -> float:
+    """
+    二元乙醇—水气相混合物摩尔内能 (kJ/kmol)。
+
+    低压理想气体近似：
+        u_vapor(y, T) = h_vapor(y, T) - R * T
+
+    其中 R = 8.314462618 kJ/(kmol·K)。
+
+    Args:
+        y_ethanol: 气相乙醇摩尔分数（0～1）。
+        temperature_k: 温度 (K)。
+
+    Returns:
+        摩尔气相内能 (kJ/kmol)。
+    """
+    h_vapor = vapor_enthalpy_kj_per_kmol(y_ethanol, temperature_k)
+    return h_vapor - R_KJ_PER_KMOL_K * temperature_k
+
+
+def temperature_from_vapor_internal_energy(
+    internal_energy_kj_per_kmol: float,
+    y_ethanol: float,
+) -> float:
+    """
+    由气相单位物质量内能反算温度 (K)（解析解，常数热容）。
+
+    推导（spec §6.2）：
+        h_v_i(T) = Cp_L_i*(T_b_i - T_ref) + ΔH_vap_i + Cp_V_i*(T - T_b_i)
+                 = A_i + Cp_V_i * T
+        其中 A_i = Cp_L_i*(T_b_i - T_ref) + ΔH_vap_i - Cp_V_i*T_b_i
+
+        h_vapor(y, T) = (1-y)*h_v_water(T) + y*h_v_ethanol(T)
+                      = A + B_h * T
+        其中:
+            A   = (1-y)*A_w + y*A_e
+            B_h = (1-y)*Cp_V_water + y*Cp_V_ethanol
+
+        u_vapor(y, T) = h_vapor(y, T) - R*T = A + (B_h - R)*T = A + B*T
+        其中 B = B_h - R
+
+        解析反算: T = (u - A) / B
+
+    Args:
+        internal_energy_kj_per_kmol: 气相单位物质量内能 (kJ/kmol)。
+            调用方应先计算 U_vapor_kJ / N_vapor_kgmol 得到此值。
+        y_ethanol: 气相乙醇摩尔分数（0～1）。
+
+    Returns:
+        温度 (K)。
+
+    Raises:
+        ValueError: 组成越界或非有限。
+    """
+    if not math.isfinite(y_ethanol) or not (0.0 <= y_ethanol <= 1.0):
+        raise ValueError(
+            f"y_ethanol 必须位于 [0, 1]，实际值={y_ethanol!r}"
+        )
+    if not math.isfinite(internal_energy_kj_per_kmol):
+        raise ValueError(
+            f"internal_energy_kj_per_kmol 必须有限，实际值={internal_energy_kj_per_kmol!r}"
+        )
+
+    y_e = y_ethanol
+    y_w = 1.0 - y_e
+
+    # A_i = Cp_L_i*(T_b_i - T_ref) + ΔH_vap_i - Cp_V_i*T_b_i
+    A_w = (
+        CP_LIQUID_WATER_KJ_PER_KMOL_K * (T_BOIL_WATER_K - T_REF_K)
+        + DH_VAP_WATER_KJ_PER_KMOL
+        - CP_VAPOR_WATER_KJ_PER_KMOL_K * T_BOIL_WATER_K
+    )
+    A_e = (
+        CP_LIQUID_ETHANOL_KJ_PER_KMOL_K * (T_BOIL_ETHANOL_K - T_REF_K)
+        + DH_VAP_ETHANOL_KJ_PER_KMOL
+        - CP_VAPOR_ETHANOL_KJ_PER_KMOL_K * T_BOIL_ETHANOL_K
+    )
+
+    A = y_w * A_w + y_e * A_e
+    B_h = y_w * CP_VAPOR_WATER_KJ_PER_KMOL_K + y_e * CP_VAPOR_ETHANOL_KJ_PER_KMOL_K
+    B = B_h - R_KJ_PER_KMOL_K
+
+    # B 应严格为正（Cp_V_water=33.6, Cp_V_ethanol=65.6, R=8.314）
+    if B <= 0.0:
+        raise ValueError(
+            f"气相热容系数 B 非正: B={B}, y_ethanol={y_ethanol}"
+        )
+
+    return (internal_energy_kj_per_kmol - A) / B
 
 
 def heat_of_vaporization_kj_per_kmol(x_ethanol: float) -> float:

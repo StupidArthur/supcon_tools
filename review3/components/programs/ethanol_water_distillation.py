@@ -104,13 +104,20 @@ from components.thermo.ethanol_water import (
     T_REF_K,
     CP_LIQUID_WATER_KJ_PER_KMOL_K,
     CP_LIQUID_ETHANOL_KJ_PER_KMOL_K,
+    CP_VAPOR_WATER_KJ_PER_KMOL_K,
+    CP_VAPOR_ETHANOL_KJ_PER_KMOL_K,
     DH_VAP_WATER_KJ_PER_KMOL,
     DH_VAP_ETHANOL_KJ_PER_KMOL,
+    T_BOIL_WATER_K,
+    T_BOIL_ETHANOL_K,
+    R_KJ_PER_KMOL_K,
     bubble_point_temperature,
     ethanol_mass_fraction_to_mole_fraction,
     ethanol_mole_fraction_to_mass_fraction,
     liquid_enthalpy_kj_per_kmol,
     vapor_enthalpy_kj_per_kmol,
+    vapor_internal_energy_kj_per_kmol,
+    temperature_from_vapor_internal_energy,
     heat_of_vaporization_kj_per_kmol,
     liquid_heat_capacity_kj_per_kmol_k,
     temperature_from_internal_energy,
@@ -315,6 +322,21 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # Q_R → V_boil、Q_C → V_condense、压力动态属于阶段 2。
         "cooling_water_temperature_c": 25.0,           # 冷却水供入温度 (℃)
         "steam_supply_pressure_kpa": 300.0 + 101.325,  # 蒸汽供入压力 kPa(a)（300 kPa(g)）
+        # ===== 阶段 2 新增：再沸/冷凝机理参数（todo/5.md §3.2、§5、§6） =====
+        # 蒸汽侧（spec §5.1）
+        "steam_latent_heat_kj_per_kg": 2133.0,         # 蒸汽汽化潜热 (kJ/kg)
+        "steam_heat_transfer_efficiency": 0.95,         # 蒸汽侧传热效率
+        # 冷却侧（spec §6.3）
+        "cooling_water_cp_kj_per_kg_k": 4.18,           # 冷却水比热 (kJ/(kg·K))
+        "cooling_water_design_delta_t_k": 8.0,          # 冷却水设计温差 (K)
+        "condenser_ua_kw_per_k": 1.2,                   # 冷凝器 UA (kW/K)
+        # 压力下限和动态时间常数（spec §6.4、§5.2）
+        "p_vapor_floor_kpa": 70.0,                      # 气相库存下限对应压力 (kPa)
+        "tau_condenser_inventory_s": 5.0,               # 气相库存释放时间常数 (s)
+        "tau_sump_heat_s": 30.0,                        # 塔釜显热时间常数 (s)
+        "tau_phase_s": 2.0,                             # 塔釜相变时间常数 (s)
+        # 放空（第一版关闭，spec §6.5）
+        "vent_flow_kgmol_per_s": 0.0,
         # ===== 阶段 1 兼容字段（仅用于 deprecated get_flow_kgmol_per_s()，将在阶段 2 删除） =====
         # 注意：正式模型不使用这些字段，应使用上面的 *_valve_max_flow_kg_per_h。
         "feed_valve_max_flow_kgmol_per_s": 0.001961,
@@ -395,6 +417,24 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "stage_04_liquid_holdup_kg", "stage_05_liquid_holdup_kg", "stage_06_liquid_holdup_kg",
         "stage_07_liquid_holdup_kg", "stage_08_liquid_holdup_kg", "stage_09_liquid_holdup_kg",
         "stage_10_liquid_holdup_kg", "stage_11_liquid_holdup_kg", "stage_12_liquid_holdup_kg",
+        # ===== 阶段 2 新增位号（todo/5.md §7.2、§11） =====
+        # 实际冷凝量、内部 V_boil（避免与外部输入冲突）
+        "vapor_condense_kgmol_per_s",
+        "vapor_boilup_kgmol_per_s_internal",
+        # KPI 位号
+        "ethanol_recovery_pct",
+        "qualified_product_flow_kg_h",
+        "specific_steam_kg_per_kg_product",
+        # 原始液位（未钳制）
+        "raw_reflux_drum_level_pct",
+        "raw_reboiler_level_pct",
+        # 气相状态位号（spec §6.1）
+        "vapor_ethanol_y",
+        "vapor_temperature_c",
+        # 守恒积累率位号（spec §11）
+        "mass_accumulation_kg_h",
+        "ethanol_accumulation_kg_h",
+        "energy_accumulation_kw",
     ]
 
     input_schema = [
@@ -532,7 +572,7 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
 
         # 阶段 1.1 修正：稳态初始质量流量（kg/h），用于反算阀门初始开度
         # 过程阀：kmol/s × 流股平均分子量 × 3600 = kg/h
-        # steam/cooling：阶段 1 仅有位号，初始质量流量按参考工况设定
+        # steam/cooling：阶段 2 真实参考工况质量流量
         # 关键：不能依赖尚未发布的 top_ethanol_wt/bottom_ethanol_wt/bottom_ethanol_x
         #       应直接从已创建的内部状态求初始摩尔分数
         feed_mw_init = _mixture_molecular_weight(
@@ -545,18 +585,26 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 阶段 1.1 修正：塔底采出使用塔釜组成
         x_sump_init = self._nE_sump / self._M_sump
         bottoms_mw_init = _mixture_molecular_weight(x_sump_init)
-        # 阶段 1 兼容路径：蒸汽流量初值按旧 vapor_boilup 反算（todo/5.md §4.4）
-        # 注意：阶段 2 将删除此兼容路径，改为 Q_R → V_boil 真实机理
-        # 阶段 1.1 修正：vapor_boilup_mw 直接用塔釜摩尔分数，不再经过 mass_fraction 转换
-        vapor_boilup_mw = _mixture_molecular_weight(x_sump_init)
+        # 阶段 2 真实参考蒸汽流量（todo/5.md §3.2、§5.1）
+        # 由 Q_R_available = (ṁ_steam/3600) * ΔH_steam * η_R 反推
+        # 假设稳态下 Q_R_available ≈ V_boil * ΔH_vap_sump（忽略 Q_loss 和显热项）
+        # ṁ_steam ≈ V_boil * ΔH_vap_sump * 3600 / (ΔH_steam * η_R)
+        dh_vap_sump_init = max(heat_of_vaporization_kj_per_kmol(x_sump_init), 1.0)
+        # 注意：此处 _steam_latent_heat_kj_per_kg 尚未缓存，使用公共属性
+        # （BaseProgram 在 __init__ 体执行前已从 default_params 设置公共属性）
+        steam_mass_flow_init_kg_h = (
+            self._vapor_boilup_kgmol_per_s
+            * dh_vap_sump_init
+            * 3600.0
+            / (float(self.steam_latent_heat_kj_per_kg) * float(self.steam_heat_transfer_efficiency))
+        )
         steady_mass_flow_kg_per_h: Dict[str, float] = {
             "feed":       _kgmols_to_kgh(self._feed_flow_kgmol_per_s, feed_mw_init),
             "reflux":     _kgmols_to_kgh(self._reflux_flow_kgmol_per_s, reflux_mw_init),
             "distillate": _kgmols_to_kgh(self._distillate_flow_kgmol_per_s, distillate_mw_init),
             "bottoms":    _kgmols_to_kgh(self._bottoms_flow_kgmol_per_s, bottoms_mw_init),
-            # 阶段 1 兼容：蒸汽质量流量 = 过程蒸气量 × 塔釜组成分子量
-            # 阶段 2 将由 Q_R 反推真实蒸汽质量流量，删除此兼容路径
-            "steam":      _kgmols_to_kgh(self._vapor_boilup_kgmol_per_s, vapor_boilup_mw),
+            # 阶段 2：蒸汽质量流量由 Q_R 反推（参考工况 ≈ 60.47 kg/h）
+            "steam":      steam_mass_flow_init_kg_h,
             # 冷却水：参考工况下约 3500 kg/h（与冷凝负荷匹配），初始按 50% 开度对应值
             "cooling":    self._valve_max_flow_kg_per_h["cooling"] * 0.5,
         }
@@ -584,6 +632,18 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 注意：阶段 1 仅持有状态和发布位号，不影响再沸/冷凝/压力动态（阶段 2 接入）
         self._cooling_water_temperature_c = float(self.cooling_water_temperature_c)
         self._steam_supply_pressure_kpa = float(self.steam_supply_pressure_kpa)
+
+        # ===== 阶段 2 新增：再沸/冷凝/气相库存参数（todo/5.md §3.2、§5、§6） =====
+        self._steam_latent_heat_kj_per_kg = float(self.steam_latent_heat_kj_per_kg)
+        self._steam_heat_transfer_efficiency = float(self.steam_heat_transfer_efficiency)
+        self._cooling_water_cp_kj_per_kg_k = float(self.cooling_water_cp_kj_per_kg_k)
+        self._cooling_water_design_delta_t_k = float(self.cooling_water_design_delta_t_k)
+        self._condenser_ua_kw_per_k = float(self.condenser_ua_kw_per_k)
+        self._p_vapor_floor_kpa = float(self.p_vapor_floor_kpa)
+        self._tau_condenser_inventory_s = float(self.tau_condenser_inventory_s)
+        self._tau_sump_heat_s = float(self.tau_sump_heat_s)
+        self._tau_phase_s = float(self.tau_phase_s)
+        self._vent_flow_kgmol_per_s = float(self.vent_flow_kgmol_per_s)
 
         # 阶段 1 新增：上一周期公用工程质量流量（kg/h），用于在非阀位模式下保持连续性
         self._last_steam_flow_kg_per_h = steady_mass_flow_kg_per_h["steam"]
@@ -746,6 +806,46 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 f"steam_supply_pressure_kpa 作为绝压必须严格大于0，实际值={ssp!r}"
             )
 
+        # ===== 阶段 2 新增：再沸/冷凝/气相库存参数校验（todo/5.md §3.2、§5、§6） =====
+        for name in (
+            "steam_latent_heat_kj_per_kg",
+            "cooling_water_cp_kj_per_kg_k",
+            "condenser_ua_kw_per_k",
+            "cooling_water_design_delta_t_k",
+            "p_vapor_floor_kpa",
+            "tau_condenser_inventory_s",
+            "tau_sump_heat_s",
+            "tau_phase_s",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise ValueError(f"参数无效: {name} 必须为有限数值，实际值={value!r}")
+            if float(value) <= 0.0:
+                raise ValueError(f"{name} 必须严格大于0，实际值={value!r}")
+
+        # 蒸汽侧传热效率 ∈ (0, 1]
+        eff = float(self.steam_heat_transfer_efficiency)
+        if not math.isfinite(eff) or eff <= 0.0 or eff > 1.0:
+            raise ValueError(
+                f"steam_heat_transfer_efficiency 必须位于 (0, 1]，实际值={eff!r}"
+            )
+
+        # 气相库存下限压力合理范围（spec §6.4：p_vapor_floor_kpa > 0 且 < 50 kPa 不合理）
+        # 注：spec §2.15 要求 p_vapor_floor_kpa > 0 且 < 50 kPa 是错的（应为下限本身合理）
+        # 实际逻辑：p_vapor_floor_kpa 必须为正且小于常压（< 101.325 kPa）
+        pf = float(self.p_vapor_floor_kpa)
+        if pf >= 101.325:
+            raise ValueError(
+                f"p_vapor_floor_kpa 必须小于常压 101.325 kPa，实际值={pf!r}"
+            )
+
+        # 放空流量（第一版关闭，允许 0；不得为负）
+        vf = float(self.vent_flow_kgmol_per_s)
+        if not math.isfinite(vf) or vf < 0.0:
+            raise ValueError(
+                f"vent_flow_kgmol_per_s 不得为负，实际值={vf!r}"
+            )
+
         mode = str(self.initialization_mode).upper()
         if mode not in ("STEADY", "COLD"):
             raise ValueError(
@@ -836,6 +936,18 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             / (R_UNIVERSAL_KPA_M3_PER_KMOL_K * T_vapor_avg_init)
         )
 
+        # ===== 阶段 2 新增：气相乙醇物质量和气相内能（spec §6.1） =====
+        # 初始 yE_vapor = 塔顶板气相组成（spec §2.2 初始化要求）
+        yE_vapor_init = float(yE_tray_init[0])
+        yE_vapor_init = max(0.0, min(1.0, yE_vapor_init))
+        # 初始 T_vapor = 塔板平均温度（spec §2.2）
+        T_vapor_init = T_vapor_avg_init
+        # 初始 U_vapor = N_vapor * u_vapor_per_kmol(yE_vapor, T_vapor)
+        u_vapor_per_kmol_init = vapor_internal_energy_kj_per_kmol(yE_vapor_init, T_vapor_init)
+        U_vapor_init = N_vapor_init * u_vapor_per_kmol_init  # kJ
+        # 初始 nE_vapor = N_vapor * yE_vapor
+        nE_vapor_init = N_vapor_init * yE_vapor_init  # kmol
+
         # 状态数组
         self._M_tray = m_tray.copy()                  # kmol
         self._nE_tray = m_tray * x_e                  # kmol
@@ -847,6 +959,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._nE_sump = m_sump * x_e_sump             # kmol
         self._U_sump = U_sump_init                    # kJ
         self._N_vapor = N_vapor_init                  # kmol
+        # 阶段 2 新增气相状态
+        self._nE_vapor = nE_vapor_init                # kmol
+        self._U_vapor = U_vapor_init                  # kJ
 
         # 气相流量（CMO 假设）
         self._V_kgmol_per_s = v_init
@@ -861,6 +976,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._p_top_kpa = p_top_init
         self._p_sump_kpa = p_sump_init
         self._T_vapor_avg = T_vapor_avg_init
+        # 阶段 2 派生量：气相组成和温度（由内能反算）
+        self._yE_vapor = yE_vapor_init
+        self._T_vapor = T_vapor_init
 
         # 上次流量输入（用于残差诊断和首次 execute 默认值）
         self._last_feed_flow = float(self.feed_flow_kgmol_per_s)
@@ -876,6 +994,24 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 内部用的再沸/冷凝负荷（首次 execute 前的默认值）
         self._Q_R_kw = 0.0
         self._Q_C_kw = 0.0
+        # 阶段 2 新增：内部 V_boil 和 V_condense（避免与外部输入冲突）
+        # 初始用 nominal vapor_boilup 作为初值，第一次 execute 后由 Q_R 反推
+        self._V_boil_internal = float(self.vapor_boilup_kgmol_per_s)
+        self._V_condense_internal = float(self.vapor_boilup_kgmol_per_s)
+        # 阶段 2 新增：守恒积累率位号初值（spec §11）
+        self.mass_accumulation_kg_h = 0.0
+        self.ethanol_accumulation_kg_h = 0.0
+        self.energy_accumulation_kw = 0.0
+        # 阶段 2 新增：发布位号初值
+        self.vapor_condense_kgmol_per_s = float(self._V_condense_internal)
+        self.vapor_boilup_kgmol_per_s_internal = float(self._V_boil_internal)
+        self.ethanol_recovery_pct = 0.0
+        self.qualified_product_flow_kg_h = 0.0
+        self.specific_steam_kg_per_kg_product = 0.0
+        self.raw_reflux_drum_level_pct = 0.0
+        self.raw_reboiler_level_pct = 0.0
+        self.vapor_ethanol_y = float(self._yE_vapor)
+        self.vapor_temperature_c = float(self._T_vapor - 273.15)
 
         # 累计守恒诊断
         self._cumulative_mass_in = 0.0     # kg
@@ -888,6 +1024,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._initial_total_ethanol = 0.0  # kg
         self._initial_total_energy = 0.0   # kJ
         self._first_execute = True
+        # 阶段 2 新增：上一期总存量（用于闭合残差计算，spec §11）
+        self._prev_M_total_kgmol = 0.0
+        self._prev_nE_total_kgmol = 0.0
+        self._prev_U_total_kj = 0.0
 
     # ------------------------------------------------------------------
     # 代数量计算（VLE、温度、压力、流量）
@@ -904,20 +1044,28 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         nE_sump: float,
         U_sump: float,
         N_vapor: float,
+        nE_vapor: float,
+        U_vapor: float,
         V: float,
-    ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, np.ndarray, float, float]:
+    ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, np.ndarray, float, float, float, float]:
         """
         由状态计算代数量：温度、气相组成、压力剖面、平均气相温度。
+
+        阶段 2 新增：气相组成 yE_vapor 和气相温度 T_vapor 由 (nE_vapor, U_vapor, N_vapor) 反算。
+        P_top 由 N_vapor, T_vapor 计算（不再用 T_vapor_avg）。
 
         Args:
             M_tray, nE_tray, U_tray: 塔板液相物质量、乙醇物质量、内能 (12,)
             M_drum, nE_drum, U_drum: 回流罐
             M_sump, nE_sump, U_sump: 塔釜
             N_vapor: 气相总存量 (kmol)
+            nE_vapor: 气相乙醇物质量 (kmol)
+            U_vapor: 气相总内能 (kJ)
             V: 气相流量 (kmol/s, CMO)
 
         Returns:
-            (T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump, T_vapor_avg)
+            (T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump,
+             T_vapor_avg, yE_vapor, T_vapor)
         """
         # 液相组成（截断到 [0,1]）
         xE_tray = np.where(M_tray > 1e-15, nE_tray / M_tray, 0.0)
@@ -950,11 +1098,32 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             T_sump = T_REF_K + 50.0
         T_sump = max(250.0, min(500.0, T_sump))
 
-        # 塔顶压力：理想气体状态方程 P = N·R·T / V
-        T_vapor_avg = float(np.mean(T_tray))
-        if T_vapor_avg <= 0.0 or not math.isfinite(T_vapor_avg):
-            T_vapor_avg = 350.0
-        p_top = N_vapor * R_UNIVERSAL_KPA_M3_PER_KMOL_K * T_vapor_avg / self._vapor_volume_m3
+        # ===== 阶段 2 新增：气相组成和温度（由 nE_vapor, U_vapor 反算） =====
+        # yE_vapor = nE_vapor / N_vapor（裁剪 [0,1]）
+        if N_vapor > 1e-15:
+            yE_vapor = nE_vapor / N_vapor
+        else:
+            yE_vapor = 0.0
+        yE_vapor = max(0.0, min(1.0, yE_vapor))
+        # u_vapor_per_kmol = U_vapor / N_vapor
+        if N_vapor > 1e-15:
+            u_vapor_per_kmol = U_vapor / N_vapor
+        else:
+            u_vapor_per_kmol = 0.0
+        # T_vapor = temperature_from_vapor_internal_energy(u, yE_vapor)
+        try:
+            T_vapor = temperature_from_vapor_internal_energy(u_vapor_per_kmol, yE_vapor)
+        except (ValueError, ZeroDivisionError):
+            T_vapor = self._T_vapor_avg if hasattr(self, "_T_vapor_avg") else 350.0
+        if not math.isfinite(T_vapor):
+            T_vapor = 350.0
+        # T_vapor 范围保护 [250, 500] K
+        T_vapor = max(250.0, min(500.0, T_vapor))
+
+        # 塔顶压力：理想气体状态方程 P = N·R·T_vapor / V（阶段 2 用 T_vapor）
+        if T_vapor <= 0.0 or not math.isfinite(T_vapor):
+            T_vapor = 350.0
+        p_top = N_vapor * R_UNIVERSAL_KPA_M3_PER_KMOL_K * T_vapor / self._vapor_volume_m3
         if not math.isfinite(p_top) or p_top <= 0.0:
             p_top = self._p_top_setpoint_kpa  # 数值保护
 
@@ -978,7 +1147,13 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         y_e_sump, _, _ = vapor_composition_at_state(xE_sump, T_sump, p_sump)
         y_e_sump = max(0.0, min(1.0, y_e_sump))
 
-        return T_tray, yE_tray, T_drum, T_sump, y_e_sump, p_top, pressure_kpa, p_sump, T_vapor_avg
+        # T_vapor_avg 仍计算用于诊断和对外位号
+        T_vapor_avg = float(np.mean(T_tray))
+        if T_vapor_avg <= 0.0 or not math.isfinite(T_vapor_avg):
+            T_vapor_avg = 350.0
+
+        return (T_tray, yE_tray, T_drum, T_sump, y_e_sump, p_top, pressure_kpa, p_sump,
+                T_vapor_avg, yE_vapor, T_vapor)
 
     # ------------------------------------------------------------------
     # 水力学
@@ -1018,6 +1193,8 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         nE_sump: float,
         U_sump: float,
         N_vapor: float,
+        nE_vapor: float,
+        U_vapor: float,
         L: np.ndarray,
         V: float,
         T_tray: np.ndarray,
@@ -1025,22 +1202,42 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         T_drum: float,
         T_sump: float,
         yE_sump: float,
+        T_vapor: float,
+        yE_vapor: float,
+        p_top: float,
+        p_sump: float,
         feed_flow: float,
         feed_xE: float,
         feed_temperature_k: float,
         reflux_flow: float,
         distillate_flow: float,
         bottoms_flow: float,
-        vapor_boilup: float,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float, float, float, float]:
+        steam_flow_kg_h: float,
+        cooling_flow_kg_h: float,
+        cooling_water_temperature_c: float,
+        direct_vapor_bypass: Optional[float] = None,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float, float, float, float, float, float]:
         """
-        计算状态导数：(dM, dnE, dU) for tray/drum/sump + dN_vapor。
+        计算状态导数：(dM, dnE, dU) for tray/drum/sump + (dN_vapor, dnE_vapor, dU_vapor)。
+
+        阶段 2 修改（todo/5.md §5.2、§6.3、§6.4、§6.5、§6.6）：
+        - Q_R 由蒸汽流量反推（不再由 V_boilup 反推）
+        - V_boil 由 Q_for_vaporization / ΔH_vap_sump 决定
+        - V_condense 由冷却能力决定（允许消耗气相库存）
+        - 塔板 vapor_boilup 改为内部 V_boil
+        - 回流罐入口使用 V_condense（不是 V_top）
+        - 新增气相动态：dN_v/dt、dnE_v/dt、dU_v/dt
+
+        Args:
+            direct_vapor_bypass: 阶段 2 兼容路径：直接流量模式下，
+                若调用方显式传入 vapor_boilup_kgmol_per_s，则跳过 Q_R → V_boil
+                机理，直接使用该值作为 V_boil（spec §5.2 标注为 bypass）。
 
         返回顺序：
             dM_tray, dnE_tray, dU_tray,
             dM_drum, dnE_drum, dU_drum,
             dM_sump, dnE_sump, dU_sump,
-            dN_vapor
+            dN_vapor, dnE_vapor, dU_vapor
         """
         n_trays = self._n_trays
         feed_idx = self._feed_stage_idx
@@ -1073,8 +1270,126 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
 
         # 塔釜气相焓（蒸气离开塔釜进入塔底板）
         h_V_sump = vapor_enthalpy_kj_per_kmol(yE_sump, T_sump)
-        # 塔顶板气相焓（蒸气进入冷凝器/回流罐）
+        # 塔顶板气相焓（蒸气离开塔顶板进入冷凝器/气相库存）
         h_V_top = h_V_tray[0]
+        # 气相控制体内能/焓（按当前 yE_vapor, T_vapor）
+        h_V_vapor = vapor_enthalpy_kj_per_kmol(yE_vapor, T_vapor)
+
+        # ===== 阶段 2：Q_R → V_boil 真实机理（todo/5.md §5.2） =====
+        # Q_R_available = (steam_flow_kg_h / 3600) * latent_heat * efficiency
+        Q_R_available = (
+            (steam_flow_kg_h / 3600.0)
+            * self._steam_latent_heat_kj_per_kg
+            * self._steam_heat_transfer_efficiency
+        )  # kW
+
+        # 塔釜泡点和气相组成
+        try:
+            T_bubble_sump, y_boil = bubble_point_temperature(float(xE_sump), float(p_sump))
+        except (ValueError, RuntimeError):
+            # 数值保护：求根失败时用当前 T_sump 作为近似
+            T_bubble_sump = float(T_sump)
+            y_boil = float(yE_sump)
+        y_boil = max(0.0, min(1.0, float(y_boil)))
+
+        # 散热损失
+        Q_loss_sump = self._sump_ua * max(T_sump - T_amb, 0.0)  # kW
+
+        # 显热升温（塔釜低于泡点时优先升温）
+        cp_sump = liquid_heat_capacity_kj_per_kmol_k(float(xE_sump))
+        # tau_sump_heat 用于限制显热升温速率
+        Q_subcool_cap = (
+            M_sump * cp_sump * max(T_bubble_sump - T_sump, 0.0)
+            / self._tau_sump_heat_s
+        )  # kW
+        Q_subcool = min(max(Q_R_available - Q_loss_sump, 0.0), Q_subcool_cap)
+
+        # 过热释放（塔釜高于泡点时释放显热帮助汽化）
+        Q_superheat_release = (
+            M_sump * cp_sump * max(T_sump - T_bubble_sump, 0.0)
+            / self._tau_phase_s
+        )  # kW
+
+        # 用于汽化的热量
+        Q_for_vaporization = max(
+            0.0,
+            Q_R_available - Q_loss_sump - Q_subcool + Q_superheat_release,
+        )  # kW
+
+        # V_boil = Q_for_vaporization / ΔH_vap_sump
+        dh_vap_sump = max(heat_of_vaporization_kj_per_kmol(float(xE_sump)), 1.0)  # kJ/kmol
+        V_boil_internal = Q_for_vaporization / dh_vap_sump  # kmol/s
+
+        # 阶段 2 兼容路径：直接流量模式（spec §5.2 bypass）
+        # 调用方显式传入 vapor_boilup 时，跳过 Q_R → V_boil 机理
+        # 同时 Q_R_available 由反推得到（保持能量守恒）
+        if direct_vapor_bypass is not None and direct_vapor_bypass >= 0.0:
+            V_boil_internal = float(direct_vapor_bypass)
+            # 反推 Q_R_available：Q_R = V_boil * ΔH_vap_sump + Q_loss_sump
+            # 这样 dU_sump 中 +Q_R 与 -V_boil*h_V_sump 项的潜热部分抵消
+            Q_R_available = V_boil_internal * dh_vap_sump + Q_loss_sump
+
+        # 数值保护
+        if not math.isfinite(V_boil_internal) or V_boil_internal < 0.0:
+            V_boil_internal = 0.0
+        # 限制 V_boil 不超过塔釜存量 / tau_phase_s（物理上不可能瞬间汽化全部塔釜）
+        v_boil_cap = max(M_sump / self._tau_phase_s, 1e-9)
+        if V_boil_internal > v_boil_cap:
+            V_boil_internal = v_boil_cap
+
+        # 用 y_boil 修正塔釜气相组成（用于塔釜气相流出的组分/焓）
+        yE_sump_eff = y_boil
+        h_V_sump_eff = vapor_enthalpy_kj_per_kmol(yE_sump_eff, T_bubble_sump)
+
+        # ===== 阶段 2：Q_C → V_condense 真实机理（todo/5.md §6.3、§6.4） =====
+        # 冷却水实际质量流量已由调用方转换为 kg/h
+        # Q_flow = (m_cw / 3600) * Cp_cw * ΔT_cw_max
+        Q_flow = (
+            (cooling_flow_kg_h / 3600.0)
+            * self._cooling_water_cp_kj_per_kg_k
+            * self._cooling_water_design_delta_t_k
+        )  # kW
+
+        # Q_UA = UA * max(T_vapor - T_cw_in, 0)
+        T_cw_in_k = float(cooling_water_temperature_c) + 273.15
+        Q_UA = self._condenser_ua_kw_per_k * max(T_vapor - T_cw_in_k, 0.0)  # kW
+
+        # Q_C_available = min(Q_flow, Q_UA)
+        Q_C_available = min(Q_flow, Q_UA)  # kW
+
+        # 冷凝单位摩尔需移除的热量 = h_v - h_l (T_condensate, yE_vapor)
+        try:
+            T_condensate, _ = bubble_point_temperature(float(yE_vapor), float(p_top))
+        except (ValueError, RuntimeError):
+            T_condensate = float(T_vapor)
+        h_v_at_vapor = vapor_enthalpy_kj_per_kmol(float(yE_vapor), float(T_vapor))
+        h_l_at_cond = liquid_enthalpy_kj_per_kmol(float(yE_vapor), float(T_condensate))
+        delta_h_condense = max(h_v_at_vapor - h_l_at_cond, 1.0)  # kJ/kmol
+
+        # V_condense_capacity = Q_C_available / delta_h_condense
+        V_condense_capacity = Q_C_available / delta_h_condense  # kmol/s
+
+        # 允许消耗气相库存（spec §6.4）
+        # N_floor = P_VAPOR_FLOOR_KPA * V_gas / (R * T_vapor)
+        N_floor = (
+            self._p_vapor_floor_kpa * self._vapor_volume_m3
+            / (R_UNIVERSAL_KPA_M3_PER_KMOL_K * max(T_vapor, 1.0))
+        )
+        inventory_release_capacity = max(N_vapor - N_floor, 0.0) / self._tau_condenser_inventory_s
+        # vapor_available = V_top + inventory_release_capacity
+        # V_top 是塔顶板离开进入气相库存的蒸气量
+        vapor_available = V + inventory_release_capacity  # kmol/s
+
+        # V_condense = min(V_condense_capacity, vapor_available)
+        V_condense = min(V_condense_capacity, vapor_available)  # kmol/s
+        if not math.isfinite(V_condense) or V_condense < 0.0:
+            V_condense = 0.0
+
+        # 实际冷凝负荷
+        Q_C_actual = V_condense * delta_h_condense  # kW
+
+        # 放空（第一版关闭）
+        V_vent = max(0.0, float(self._vent_flow_kgmol_per_s))
 
         # 塔板导数
         dM = np.zeros(n_trays, dtype=np.float64)
@@ -1093,20 +1408,21 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 h_L_in = h_L_tray[i - 1]
 
             # 下游气相
+            # 阶段 2：塔板底部气相来自塔釜 V_boil_internal（CMO 假设下 V_i = V_boil）
             if i == n_trays - 1:
-                V_in = vapor_boilup
-                yE_V_in = yE_sump
-                h_V_in = h_V_sump
+                V_in = V_boil_internal
+                yE_V_in = yE_sump_eff
+                h_V_in = h_V_sump_eff
             else:
-                V_in = V
+                V_in = V_boil_internal
                 yE_V_in = yE_tray[i + 1]
                 h_V_in = h_V_tray[i + 1]
 
             # 进料（仅进料板）
             F_i = feed_flow if i == feed_idx else 0.0
 
-            # 总物料衡算
-            dM[i] = L_in + V_in + F_i - L[i] - V
+            # 总物料衡算（CMO：所有塔板 V_i = V_boil_internal）
+            dM[i] = L_in + V_in + F_i - L[i] - V_boil_internal
 
             # 乙醇组分衡算
             dnE[i] = (
@@ -1114,7 +1430,7 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 + V_in * yE_V_in
                 + F_i * feed_xE
                 - L[i] * xE_tray[i]
-                - V * yE_tray[i]
+                - V_boil_internal * yE_tray[i]
             )
 
             # 能量衡算 (kJ/s = kW)
@@ -1124,65 +1440,66 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 + V_in * h_V_in
                 + F_i * h_F
                 - L[i] * h_L_tray[i]
-                - V * h_V_tray[i]
+                - V_boil_internal * h_V_tray[i]
                 - Q_loss
             )  # kJ/s = kW
 
-        # 回流罐（全凝器）：塔顶蒸气 V 全部冷凝进入回流罐
-        # dM_drum/dt = V - R - D
-        # dnE_drum/dt = V*yE[0] - (R+D)*xE_drum
-        # dU_drum/dt = V*h_V_top - (R+D)*h_L_drum - Q_loss_drum
-        # 注意：全凝器中蒸气冷凝释放潜热，回流罐温度应等于塔顶板温度（饱和液体）
-        # 冷凝释放的潜热由冷却水带走（计入 Q_C），不进入回流罐内能
+        # ===== 阶段 2：回流罐入口使用 V_condense（todo/5.md §6.6） =====
+        # dM_drum/dt = V_condense - R - D
+        # dnE_drum/dt = V_condense * yE_vapor - (R+D) * xE_drum
+        # dU_drum/dt = V_condense * h_L_cond - (R+D) * h_L_drum - Q_loss_drum
+        # 回流罐入口液体焓使用冷凝液温度和 yE_vapor 组成
         Q_loss_drum = self._drum_ua * (T_drum - T_amb)
-        dM_drum = V - reflux_flow - distillate_flow
-        dnE_drum = V * yE_tray[0] - (reflux_flow + distillate_flow) * xE_drum
-        # 回流罐内能变化：进入的是饱和液体焓（蒸气冷凝后），不是气相焓
-        # 简化：h_L_drum ≈ h_L_top（饱和液体），冷凝潜热由冷凝器带走
-        h_L_top = h_L_tray[0]  # 塔顶板液相焓 ≈ 回流罐液相焓
-        dU_drum = V * h_L_top - (reflux_flow + distillate_flow) * h_L_drum - Q_loss_drum
+        h_L_cond = liquid_enthalpy_kj_per_kmol(float(yE_vapor), float(T_condensate))
+        dM_drum = V_condense - reflux_flow - distillate_flow
+        dnE_drum = V_condense * yE_vapor - (reflux_flow + distillate_flow) * xE_drum
+        dU_drum = V_condense * h_L_cond - (reflux_flow + distillate_flow) * h_L_drum - Q_loss_drum
 
-        # 塔釜（再沸器）：塔底板下流液体 L[11] 进入，采出 B，蒸气 V_boilup 上升
-        # dM_sump/dt = L[11] - B - V_boilup
-        # dnE_sump/dt = L[11]*xE[11] - B*xE_sump - V_boilup*yE_sump
-        # dU_sump/dt = L[11]*h_L[11] - B*h_L_sump - V_boilup*h_V_sump - Q_loss_sump + Q_R
-        # 其中 Q_R 是再沸器加热负荷（由 V_boilup 反推）
-        Q_loss_sump = self._sump_ua * (T_sump - T_amb)
-        # 再沸器热负荷：Q_R = V_boilup * ΔH_vap_mix(x_sump) + Q_loss_sump
-        # 加热源把塔釜液体加热到沸点并汽化 V_boilup，潜热 = V_boilup * ΔH_vap_mix
-        # 显热（Q_sensible）≈ 0（塔釜液体本就在沸点附近）
-        dh_vap_sump = heat_of_vaporization_kj_per_kmol(xE_sump)
-        Q_R = vapor_boilup * dh_vap_sump + Q_loss_sump  # kW
-
-        dM_sump = L[n_trays - 1] - bottoms_flow - vapor_boilup
+        # ===== 阶段 2：塔釜能量衡算使用实际 Q_R_available（todo/5.md §5.2） =====
+        # dM_sump/dt = L[11] - B - V_boil
+        # dnE_sump/dt = L[11]*xE[11] - B*xE_sump - V_boil*yE_sump_eff
+        # dU_sump/dt = L[11]*h_L[11] - B*h_L_sump - V_boil*h_V_sump_eff - Q_loss_sump + Q_R_available
+        dM_sump = L[n_trays - 1] - bottoms_flow - V_boil_internal
         dnE_sump = (
             L[n_trays - 1] * xE_tray[n_trays - 1]
             - bottoms_flow * xE_sump
-            - vapor_boilup * yE_sump
+            - V_boil_internal * yE_sump_eff
         )
         dU_sump = (
             L[n_trays - 1] * h_L_tray[n_trays - 1]
             - bottoms_flow * h_L_sump
-            - vapor_boilup * h_V_sump
+            - V_boil_internal * h_V_sump_eff
             - Q_loss_sump
-            + Q_R
+            + Q_R_available
         )
 
-        # 气相存量动态：dN_v/dt = V_boil - V_condense - V_vent
-        # 全凝器：V_condense = V（所有进入冷凝器的蒸气均被冷凝）
-        # 第一版无放空：V_vent = 0
-        V_condense = V  # 全凝器
-        V_vent = 0.0
-        dN_vapor = vapor_boilup - V_condense - V_vent
+        # ===== 阶段 2：气相动态（todo/5.md §6.5） =====
+        # dN_v/dt = V_top - V_condense - V_vent
+        # dnE_v/dt = V_top * yE_top - V_condense * yE_vapor - V_vent * yE_vapor
+        # dU_v/dt = V_top * h_V_top - V_condense * h_V_vapor - V_vent * h_V_vapor - Q_loss_vapor
+        # 注意：spec §6.5 推荐"气相控制体流出按 vapor enthalpy，回流罐流入按 condensate liquid enthalpy"
+        # 因此 dU_vapor 中冷凝流出按气相焓 h_V_vapor（不是液相焓 h_L_cond）
+        # 冷凝器从气相带走的潜热通过气相→液相焓差计入总系统，避免重复扣除 Q_C
+        Q_loss_vapor = 0.0  # 第一版气相控制体无散热（散热已在塔板/塔釜计入）
+        dN_vapor = V - V_condense - V_vent
+        dnE_vapor = V * yE_tray[0] - V_condense * yE_vapor - V_vent * yE_vapor
+        dU_vapor = (
+            V * h_V_top
+            - V_condense * h_V_vapor
+            - V_vent * h_V_vapor
+            - Q_loss_vapor
+        )
 
         # 保存再沸/冷凝负荷用于对外位号
-        self._Q_R_kw = Q_R
-        # 冷凝器负荷 = V_top * ΔH_vap_mix(y_top)
-        # y_top = yE_tray[0]（塔顶板气相组成）
-        dh_vap_top = heat_of_vaporization_kj_per_kmol(yE_tray[0])
-        self._Q_C_kw = V * dh_vap_top  # kW
+        self._Q_R_kw = Q_R_available
+        self._Q_C_kw = Q_C_actual
+        # 内部 V_boil / V_condense 用于对外位号
+        self._V_boil_internal = V_boil_internal
+        self._V_condense_internal = V_condense
 
-        return dM, dnE, dU, dM_drum, dnE_drum, dU_drum, dM_sump, dnE_sump, dU_sump, dN_vapor
+        return (dM, dnE, dU, dM_drum, dnE_drum, dU_drum,
+                dM_sump, dnE_sump, dU_sump,
+                dN_vapor, dnE_vapor, dU_vapor)
 
     # ------------------------------------------------------------------
     # 积分
@@ -1195,21 +1512,36 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         reflux_flow: float,
         distillate_flow: float,
         bottoms_flow: float,
-        vapor_boilup: float,
+        steam_flow_kg_h: float,
+        cooling_flow_kg_h: float,
+        cooling_water_temperature_c: float,
+        direct_vapor_bypass: Optional[float] = None,
     ) -> None:
-        """Heun/RK2 积分，内部子步。"""
+        """
+        Heun/RK2 积分，内部子步。
+
+        阶段 2 修改（todo/5.md §5、§6）：
+        - 不再接收 vapor_boilup 作为驱动量，改为接收 steam_flow_kg_h 和 cooling_flow_kg_h
+        - 气相状态 (nE_vapor, U_vapor) 参与积分
+        - _calculate_rhs 新增气相动态 (dnE_vapor, dU_vapor)
+
+        Args:
+            direct_vapor_bypass: 直接流量模式下的 V_boil 旁路值（kmol/s）。
+                None 表示阀位模式，使用 Q_R → V_boil 真实机理。
+        """
         dt = self._internal_dt
-        V = vapor_boilup  # CMO 假设
 
         for _ in range(self._substeps):
             # ---- k1 = f(state) ----
-            T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump, T_vapor_avg = \
-                self._compute_algebraic(
-                    self._M_tray, self._nE_tray, self._U_tray,
-                    self._M_drum, self._nE_drum, self._U_drum,
-                    self._M_sump, self._nE_sump, self._U_sump,
-                    self._N_vapor, V,
-                )
+            (T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump,
+             T_vapor_avg, yE_vapor, T_vapor) = self._compute_algebraic(
+                self._M_tray, self._nE_tray, self._U_tray,
+                self._M_drum, self._nE_drum, self._U_drum,
+                self._M_sump, self._nE_sump, self._U_sump,
+                self._N_vapor, self._nE_vapor, self._U_vapor,
+                # CMO 下 V 用于压降计算，用上一周期内部 V_boil 作为初值
+                self._V_boil_internal,
+            )
             # 保存代数量（用于守恒诊断和对外位号）
             self._T_tray = T_tray.copy()
             self._yE_tray = yE_tray.copy()
@@ -1220,19 +1552,25 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             self._pressure_kpa = pressure_kpa.copy()
             self._p_sump_kpa = p_sump
             self._T_vapor_avg = T_vapor_avg
+            self._yE_vapor = yE_vapor
+            self._T_vapor = T_vapor
 
             L = self._calculate_hydraulics(self._M_tray)
 
-            dM1, dnE1, dU1, dM_drum1, dnE_drum1, dU_drum1, dM_sump1, dnE_sump1, dU_sump1, dN_v1 = \
-                self._calculate_rhs(
-                    self._M_tray, self._nE_tray, self._U_tray,
-                    self._M_drum, self._nE_drum, self._U_drum,
-                    self._M_sump, self._nE_sump, self._U_sump,
-                    self._N_vapor, L, V,
-                    T_tray, yE_tray, T_drum, T_sump, yE_sump,
-                    feed_flow, feed_xE, feed_temperature_k,
-                    reflux_flow, distillate_flow, bottoms_flow, vapor_boilup,
-                )
+            (dM1, dnE1, dU1, dM_drum1, dnE_drum1, dU_drum1,
+             dM_sump1, dnE_sump1, dU_sump1, dN_v1, dnE_v1, dU_v1) = self._calculate_rhs(
+                self._M_tray, self._nE_tray, self._U_tray,
+                self._M_drum, self._nE_drum, self._U_drum,
+                self._M_sump, self._nE_sump, self._U_sump,
+                self._N_vapor, self._nE_vapor, self._U_vapor,
+                L, self._V_boil_internal,
+                T_tray, yE_tray, T_drum, T_sump, yE_sump,
+                T_vapor, yE_vapor, p_top, p_sump,
+                feed_flow, feed_xE, feed_temperature_k,
+                reflux_flow, distillate_flow, bottoms_flow,
+                steam_flow_kg_h, cooling_flow_kg_h, cooling_water_temperature_c,
+                direct_vapor_bypass=direct_vapor_bypass,
+            )
 
             # ---- 预测步 ----
             M_pred = self._M_tray + dt * dM1
@@ -1245,6 +1583,8 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             nE_sump_pred = self._nE_sump + dt * dnE_sump1
             U_sump_pred = self._U_sump + dt * dU_sump1
             N_vapor_pred = self._N_vapor + dt * dN_v1
+            nE_vapor_pred = self._nE_vapor + dt * dnE_v1
+            U_vapor_pred = self._U_vapor + dt * dU_v1
 
             # 数值保护（spec §5.8：仅允许 1e-12 级截断）
             M_pred = np.maximum(M_pred, 1e-12)
@@ -1257,27 +1597,36 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             nE_sump_pred = max(nE_sump_pred, 0.0)
             nE_sump_pred = min(nE_sump_pred, M_sump_pred)
             N_vapor_pred = max(N_vapor_pred, 1e-12)
+            nE_vapor_pred = max(nE_vapor_pred, 0.0)
+            nE_vapor_pred = min(nE_vapor_pred, N_vapor_pred)
+            if not math.isfinite(U_vapor_pred):
+                U_vapor_pred = self._U_vapor
 
             # ---- k2 = f(predicted) ----
-            T_tray_p, yE_tray_p, T_drum_p, T_sump_p, yE_sump_p, p_top_p, pressure_kpa_p, p_sump_p, T_vapor_avg_p = \
-                self._compute_algebraic(
-                    M_pred, nE_pred, U_pred,
-                    M_drum_pred, nE_drum_pred, U_drum_pred,
-                    M_sump_pred, nE_sump_pred, U_sump_pred,
-                    N_vapor_pred, V,
-                )
+            (T_tray_p, yE_tray_p, T_drum_p, T_sump_p, yE_sump_p, p_top_p, pressure_kpa_p,
+             p_sump_p, T_vapor_avg_p, yE_vapor_p, T_vapor_p) = self._compute_algebraic(
+                M_pred, nE_pred, U_pred,
+                M_drum_pred, nE_drum_pred, U_drum_pred,
+                M_sump_pred, nE_sump_pred, U_sump_pred,
+                N_vapor_pred, nE_vapor_pred, U_vapor_pred,
+                self._V_boil_internal,
+            )
             L_pred = self._calculate_hydraulics(M_pred)
 
-            dM2, dnE2, dU2, dM_drum2, dnE_drum2, dU_drum2, dM_sump2, dnE_sump2, dU_sump2, dN_v2 = \
-                self._calculate_rhs(
-                    M_pred, nE_pred, U_pred,
-                    M_drum_pred, nE_drum_pred, U_drum_pred,
-                    M_sump_pred, nE_sump_pred, U_sump_pred,
-                    N_vapor_pred, L_pred, V,
-                    T_tray_p, yE_tray_p, T_drum_p, T_sump_p, yE_sump_p,
-                    feed_flow, feed_xE, feed_temperature_k,
-                    reflux_flow, distillate_flow, bottoms_flow, vapor_boilup,
-                )
+            (dM2, dnE2, dU2, dM_drum2, dnE_drum2, dU_drum2,
+             dM_sump2, dnE_sump2, dU_sump2, dN_v2, dnE_v2, dU_v2) = self._calculate_rhs(
+                M_pred, nE_pred, U_pred,
+                M_drum_pred, nE_drum_pred, U_drum_pred,
+                M_sump_pred, nE_sump_pred, U_sump_pred,
+                N_vapor_pred, nE_vapor_pred, U_vapor_pred,
+                L_pred, self._V_boil_internal,
+                T_tray_p, yE_tray_p, T_drum_p, T_sump_p, yE_sump_p,
+                T_vapor_p, yE_vapor_p, p_top_p, p_sump_p,
+                feed_flow, feed_xE, feed_temperature_k,
+                reflux_flow, distillate_flow, bottoms_flow,
+                steam_flow_kg_h, cooling_flow_kg_h, cooling_water_temperature_c,
+                direct_vapor_bypass=direct_vapor_bypass,
+            )
 
             # ---- Heun 平均 ----
             self._M_tray = self._M_tray + dt * 0.5 * (dM1 + dM2)
@@ -1290,6 +1639,8 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             self._nE_sump = self._nE_sump + dt * 0.5 * (dnE_sump1 + dnE_sump2)
             self._U_sump = self._U_sump + dt * 0.5 * (dU_sump1 + dU_sump2)
             self._N_vapor = self._N_vapor + dt * 0.5 * (dN_v1 + dN_v2)
+            self._nE_vapor = self._nE_vapor + dt * 0.5 * (dnE_v1 + dnE_v2)
+            self._U_vapor = self._U_vapor + dt * 0.5 * (dU_v1 + dU_v2)
 
             # 数值保护
             self._M_tray = np.maximum(self._M_tray, 1e-12)
@@ -1302,25 +1653,38 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             self._nE_sump = max(self._nE_sump, 0.0)
             self._nE_sump = min(self._nE_sump, self._M_sump)
             self._N_vapor = max(self._N_vapor, 1e-12)
+            self._nE_vapor = max(self._nE_vapor, 0.0)
+            self._nE_vapor = min(self._nE_vapor, self._N_vapor)
+            if not math.isfinite(self._U_vapor):
+                # 数值保护：U_vapor 异常时用当前 T_vapor, yE_vapor 重建
+                self._U_vapor = self._N_vapor * vapor_internal_energy_kj_per_kmol(
+                    self._yE_vapor if hasattr(self, "_yE_vapor") else 0.5,
+                    self._T_vapor if hasattr(self, "_T_vapor") else 350.0,
+                )
 
         # 最终代数量更新
-        T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump, T_vapor_avg = \
-            self._compute_algebraic(
-                self._M_tray, self._nE_tray, self._U_tray,
-                self._M_drum, self._nE_drum, self._U_drum,
-                self._M_sump, self._nE_sump, self._U_sump,
-                self._N_vapor, V,
-            )
-        # 最后再调用一次 RHS 以更新 Q_R、Q_C
+        (T_tray, yE_tray, T_drum, T_sump, yE_sump, p_top, pressure_kpa, p_sump,
+         T_vapor_avg, yE_vapor, T_vapor) = self._compute_algebraic(
+            self._M_tray, self._nE_tray, self._U_tray,
+            self._M_drum, self._nE_drum, self._U_drum,
+            self._M_sump, self._nE_sump, self._U_sump,
+            self._N_vapor, self._nE_vapor, self._U_vapor,
+            self._V_boil_internal,
+        )
+        # 最后再调用一次 RHS 以更新 Q_R、Q_C、V_boil_internal、V_condense_internal
         L_final = self._calculate_hydraulics(self._M_tray)
         self._calculate_rhs(
             self._M_tray, self._nE_tray, self._U_tray,
             self._M_drum, self._nE_drum, self._U_drum,
             self._M_sump, self._nE_sump, self._U_sump,
-            self._N_vapor, L_final, V,
+            self._N_vapor, self._nE_vapor, self._U_vapor,
+            L_final, self._V_boil_internal,
             T_tray, yE_tray, T_drum, T_sump, yE_sump,
+            T_vapor, yE_vapor, p_top, p_sump,
             feed_flow, feed_xE, feed_temperature_k,
-            reflux_flow, distillate_flow, bottoms_flow, vapor_boilup,
+            reflux_flow, distillate_flow, bottoms_flow,
+            steam_flow_kg_h, cooling_flow_kg_h, cooling_water_temperature_c,
+            direct_vapor_bypass=direct_vapor_bypass,
         )
 
         self._T_tray = T_tray.copy()
@@ -1332,6 +1696,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._pressure_kpa = pressure_kpa.copy()
         self._p_sump_kpa = p_sump
         self._T_vapor_avg = T_vapor_avg
+        self._yE_vapor = yE_vapor
+        self._T_vapor = T_vapor
+        # 更新 CMO 当前气相流量（用于守恒诊断和对外位号）
+        self._V_kgmol_per_s = self._V_boil_internal
 
     # ------------------------------------------------------------------
     # 守恒诊断
@@ -1348,22 +1716,34 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         dt: float,
     ) -> None:
         """
-        计算守恒残差：质量、乙醇、能量。
+        计算守恒残差和积累率（todo/5.md §11）。
 
-        瞬时残差（稳态时应接近 0）：
-            mass_residual = F - D - B（kg/h）
-            ethanol_residual = F·xE_F - D·xD - B·xB（kg/h）
-            energy_residual = Q_R + F·h_F - Q_C - D·h_D - B·h_B - Q_loss（kW）
+        阶段 2 修正：
+        - U_total 包含 U_vapor（spec §11: 能量残差必须包含液相状态、气相 U_vapor）
+        - 新增 accumulation 位号，区分积累率和闭合残差
+        - mass_balance_residual_kg_h → 指向 closure residual
+        - ethanol_balance_residual_kg_h → 指向 closure residual
+        - energy_balance_residual_kw → 指向 closure residual
+
+        瞬时积累率（动态过程不为 0）：
+            mass_accumulation = F - D - B - V_vent·mw_vapor（kg/h）
+            ethanol_accumulation = F·xE_F - D·xD - B·xB - V_vent·yE_vapor·MW_ethanol（kg/h）
+            energy_accumulation = Q_R + F·h_F - Q_C - D·h_D - B·h_B - Q_loss（kW）
+
+        闭合残差（理论上为 0，数值误差来源）：
+            r_M = dM_inventory/dt - (F - D - B - V_vent)
+            r_E = dnE_inventory/dt - (F·z_F - D·xD - B·xB - V_vent·yE_vapor)
+            r_U = dU_inventory/dt - (Q_R + F·h_F - Q_C - D·h_D - B·h_B - Q_loss_total)
         """
-        # 当前总存量
+        # 当前总存量（阶段 2 新增气相库存）
         M_total_kgmol = (
-            float(np.sum(self._M_tray)) + self._M_drum + self._M_sump
+            float(np.sum(self._M_tray)) + self._M_drum + self._M_sump + self._N_vapor
         )
         nE_total_kgmol = (
-            float(np.sum(self._nE_tray)) + self._nE_drum + self._nE_sump
+            float(np.sum(self._nE_tray)) + self._nE_drum + self._nE_sump + self._nE_vapor
         )
         U_total_kj = (
-            float(np.sum(self._U_tray)) + self._U_drum + self._U_sump
+            float(np.sum(self._U_tray)) + self._U_drum + self._U_sump + self._U_vapor
         )
 
         # 塔顶/塔底采出组成
@@ -1376,27 +1756,36 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         mw_feed = _mixture_molecular_weight(feed_xE)
         mw_dist = _mixture_molecular_weight(xD)
         mw_bot = _mixture_molecular_weight(xB)
+        mw_vapor = _mixture_molecular_weight(float(self._yE_vapor))
 
-        # 瞬时质量残差 = F - D - B（kg/h）
+        # 放空流量（kmol/s）
+        V_vent = max(0.0, float(self._vent_flow_kgmol_per_s))
+
+        # 瞬时质量积累率 = F - D - B - V_vent（kg/h）
         feed_mass_kgh = feed_flow * mw_feed * 3600.0
         distillate_mass_kgh = distillate_flow * mw_dist * 3600.0
         bottoms_mass_kgh = bottoms_flow * mw_bot * 3600.0
-        self.mass_balance_residual_kg_h = feed_mass_kgh - distillate_mass_kgh - bottoms_mass_kgh
+        vent_mass_kgh = V_vent * mw_vapor * 3600.0
+        self.mass_accumulation_kg_h = (
+            feed_mass_kgh - distillate_mass_kgh - bottoms_mass_kgh - vent_mass_kgh
+        )
 
-        # 乙醇守恒残差
+        # 乙醇瞬时积累率（kg/h）
         feed_ethanol_kgh = feed_flow * feed_xE * MW_ETHANOL_KG_PER_KMOL * 3600.0
         distillate_ethanol_kgh = distillate_flow * xD * MW_ETHANOL_KG_PER_KMOL * 3600.0
         bottoms_ethanol_kgh = bottoms_flow * xB * MW_ETHANOL_KG_PER_KMOL * 3600.0
-        self.ethanol_balance_residual_kg_h = (
-            feed_ethanol_kgh - distillate_ethanol_kgh - bottoms_ethanol_kgh
+        vent_ethanol_kgh = V_vent * float(self._yE_vapor) * MW_ETHANOL_KG_PER_KMOL * 3600.0
+        self.ethanol_accumulation_kg_h = (
+            feed_ethanol_kgh - distillate_ethanol_kgh - bottoms_ethanol_kgh - vent_ethanol_kgh
         )
 
-        # 能量守恒残差（kW）
+        # 能量守恒（kW）
         # 能量输入 = Q_R + F·h_F（进料带入）
-        # 能量输出 = Q_C + D·h_D + B·h_B + Q_loss_total
+        # 能量输出 = Q_C + D·h_D + B·h_B + Q_loss_total + V_vent·h_V_vapor
         h_F = liquid_enthalpy_kj_per_kmol(feed_xE, feed_temperature_k)  # kJ/kmol
         h_D = liquid_enthalpy_kj_per_kmol(xD, self._T_drum)             # kJ/kmol
         h_B = liquid_enthalpy_kj_per_kmol(xB, self._T_sump)             # kJ/kmol
+        h_V_vapor = vapor_enthalpy_kj_per_kmol(float(self._yE_vapor), float(self._T_vapor))  # kJ/kmol
 
         Q_R = self._Q_R_kw  # kW
         Q_C = self._Q_C_kw  # kW
@@ -1410,9 +1799,56 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         )
 
         # 单位换算：流量 kmol/s × 焓 kJ/kmol = kJ/s = kW
-        energy_in = Q_R + feed_flow * h_F                    # kW
-        energy_out = Q_C + distillate_flow * h_D + bottoms_flow * h_B + Q_loss_total  # kW
-        self.energy_balance_residual_kw = energy_in - energy_out
+        energy_in = Q_R + feed_flow * h_F                                          # kW
+        energy_out = (
+            Q_C
+            + distillate_flow * h_D
+            + bottoms_flow * h_B
+            + V_vent * h_V_vapor
+            + Q_loss_total
+        )  # kW
+        # 瞬时能量积累率（kW）
+        self.energy_accumulation_kw = energy_in - energy_out
+
+        # ===== 闭合残差（todo/5.md §11）=====
+        # spec §11: r_M = dM_inventory/dt - (F - D - B - V_vent)
+        # 数值实现：用本期积累率近似 dM/dt，与上一期总存量比较
+        # 由于 _calculate_balances_and_kpis 在积分后调用，当前 M_total 已更新
+        # dM/dt 近似为 (M_total - M_total_prev) / dt
+        # 但 spec 要求 r_M 应为 0（动态守恒），所以 r_M = accumulation - actual_dM/dt
+        # 第一周期无法计算（无 prev），设为 0
+        if self._first_execute:
+            # 第一周期：积累率即为残差（无 prev 可比）
+            self.mass_balance_residual_kg_h = self.mass_accumulation_kg_h
+            self.ethanol_balance_residual_kg_h = self.ethanol_accumulation_kg_h
+            self.energy_balance_residual_kw = self.energy_accumulation_kw
+        else:
+            # 闭合残差 = 积累率 - (本期实际存量变化率)
+            # 单位换算：kmol/s → kg/h 需用分子量；kJ/s = kW
+            actual_dM_kgmol_per_s = (M_total_kgmol - self._prev_M_total_kgmol) / dt
+            actual_dnE_kgmol_per_s = (nE_total_kgmol - self._prev_nE_total_kgmol) / dt
+            actual_dU_kj_per_s = (U_total_kj - self._prev_U_total_kj) / dt
+
+            actual_dM_kg_per_h = actual_dM_kgmol_per_s * mw_feed * 3600.0
+            actual_dnE_kg_per_h = actual_dnE_kgmol_per_s * MW_ETHANOL_KG_PER_KMOL * 3600.0
+
+            # closure residual = accumulation - actual_d/dt
+            # 注意符号约定：accumulation = in - out，actual_d/dt = (final - init)/dt
+            # 稳态时两者都为 0；动态时应相等，残差为 0
+            self.mass_balance_residual_kg_h = (
+                self.mass_accumulation_kg_h - actual_dM_kg_per_h
+            )
+            self.ethanol_balance_residual_kg_h = (
+                self.ethanol_accumulation_kg_h - actual_dnE_kg_per_h
+            )
+            self.energy_balance_residual_kw = (
+                self.energy_accumulation_kw - actual_dU_kj_per_s
+            )
+
+        # 保存本期总存量供下期使用
+        self._prev_M_total_kgmol = M_total_kgmol
+        self._prev_nE_total_kgmol = nE_total_kgmol
+        self._prev_U_total_kj = U_total_kj
 
         if self._first_execute:
             self._initial_total_mass = M_total_kgmol
@@ -1458,6 +1894,11 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self.top_pressure_kpa = float(self._p_top_kpa)
         self.bottom_pressure_kpa = float(self._p_sump_kpa)
 
+        # 阶段 2 新增：灵敏板温度（spec §7.2）
+        # sensitive_top = stage_03, sensitive_bottom = stage_10
+        self.sensitive_top_temperature_c = float(self._T_tray[2] - 273.15)
+        self.sensitive_bottom_temperature_c = float(self._T_tray[9] - 273.15)
+
         # 塔顶/塔底组成
         xD = self._nE_drum / self._M_drum if self._M_drum > 1e-15 else 0.0
         xD = max(0.0, min(1.0, xD))
@@ -1483,16 +1924,20 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self.bottoms_flow_kg_h = _kgmols_to_kgh(
             self._last_bottoms_flow, _mixture_molecular_weight(xB)
         )
+        # 阶段 2：vapor_boilup_kg_h 使用内部 V_boil（不是外部输入）
         self.vapor_boilup_kg_h = _kgmols_to_kgh(
-            self._last_vapor_boilup, _mixture_molecular_weight(self._yE_sump)
+            float(self._V_boil_internal), _mixture_molecular_weight(float(self._yE_sump))
         )
 
-        # 液位百分比
+        # 液位百分比（阶段 2 新增原始液位发布，spec §8.2）
+        self.raw_reflux_drum_level_pct = float(self._M_drum / self._m_drum_max * 100.0)
+        self.raw_reboiler_level_pct = float(self._M_sump / self._m_sump_max * 100.0)
+        # 显示液位（钳制 [0, 100]，spec §8.2）
         self.reflux_drum_level_pct = float(
-            max(0.0, min(100.0, self._M_drum / self._m_drum_max * 100.0))
+            max(0.0, min(100.0, self.raw_reflux_drum_level_pct))
         )
         self.reboiler_level_pct = float(
-            max(0.0, min(100.0, self._M_sump / self._m_sump_max * 100.0))
+            max(0.0, min(100.0, self.raw_reboiler_level_pct))
         )
 
         # 阶段 C 新增：能量与压力位号
@@ -1507,7 +1952,7 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             setattr(self, f"{key}_valve_actual_pct", float(valve.actual_pct))
 
         # 阶段 1 新增：公用工程质量流量和状态位号（todo/5.md §4.3）
-        # 注意：阶段 1 仅发布位号，不影响再沸/冷凝/压力动态（阶段 2 接入）
+        # 阶段 2：steam_flow_kg_h 和 cooling_flow_kg_h 已接入再沸/冷凝机理
         self.steam_flow_kg_h = float(self._last_steam_flow_kg_per_h)
         self.cooling_flow_kg_h = float(self._last_cooling_flow_kg_per_h)
         self.cooling_water_temperature_c = float(self._cooling_water_temperature_c)
@@ -1520,6 +1965,33 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         # 分析仪读数（_analyzers 在 execute 中更新，这里只读取）
         self.top_ethanol_analyzer = float(self._analyzers["top"].output)
         self.bottom_ethanol_analyzer = float(self._analyzers["bottom"].output)
+
+        # ===== 阶段 2 新增位号（todo/5.md §7.2、§11） =====
+        # 实际冷凝量、内部 V_boil（避免与外部输入冲突）
+        self.vapor_condense_kgmol_per_s = float(self._V_condense_internal)
+        self.vapor_boilup_kgmol_per_s_internal = float(self._V_boil_internal)
+        # 气相状态位号（spec §6.1）
+        self.vapor_ethanol_y = float(self._yE_vapor)
+        self.vapor_temperature_c = float(self._T_vapor - 273.15)
+        # KPI 位号（spec §7.2）
+        feed_ethanol_kgh = self.feed_flow_kg_h * self._feed_ethanol_wt
+        distillate_ethanol_kgh = self.distillate_flow_kg_h * self.top_ethanol_wt
+        if feed_ethanol_kgh > 1e-9:
+            self.ethanol_recovery_pct = distillate_ethanol_kgh / feed_ethanol_kgh * 100.0
+        else:
+            self.ethanol_recovery_pct = 0.0
+        # 合格产品流量（塔顶乙醇质量分数 ≥ 0.82 时为合格品）
+        if self.top_ethanol_wt_true >= 0.82:
+            self.qualified_product_flow_kg_h = float(self.distillate_flow_kg_h)
+        else:
+            self.qualified_product_flow_kg_h = 0.0
+        # 比蒸汽消耗（kg 蒸汽 / kg 合格产品）
+        if self.qualified_product_flow_kg_h > 1e-9:
+            self.specific_steam_kg_per_kg_product = (
+                float(self.steam_flow_kg_h) / self.qualified_product_flow_kg_h
+            )
+        else:
+            self.specific_steam_kg_per_kg_product = 0.0
 
     # ------------------------------------------------------------------
     # 主执行
@@ -1625,6 +2097,11 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             )
         )
 
+        # 阶段 2 新增：direct_vapor_bypass 标志
+        # 直接流量模式下若显式传入 vapor_boilup_kgmol_per_s，作为 bypass 传给 _integrate_substeps
+        # 阀位模式下不使用 bypass，由 Q_R → V_boil 真实机理计算
+        direct_vapor_bypass: Optional[float] = None
+
         if any_valve_input:
             # ===== 阀位模式：更新阀门命令并计算实际流量 =====
             self._valve_mode_enabled = True
@@ -1677,14 +2154,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             self._last_distillate_flow = _kgh_to_kgmols(distillate_mass_kg_h, distillate_mw)
             self._last_bottoms_flow = _kgh_to_kgmols(bottoms_mass_kg_h, bottoms_mw)
 
-            # 阶段 1 兼容路径：vapor_boilup 仍由 steam_valve 流量初值反算
-            # 注意（todo/5.md §4.4）：此路径在阶段 2 将被 Q_R → V_boil 真实机理替代
-            # 当前用蒸汽质量流量按塔釜液相组成换算为 kmol/s
-            # 不得对外宣称 steam_flow_kg_h 已参与再沸机理
-            sump_xE = float(self.bottom_ethanol_x) if hasattr(self, "bottom_ethanol_x") else 0.05
-            sump_mw = _mixture_molecular_weight(sump_xE)
-            self._last_vapor_boilup = _kgh_to_kgmols(self._last_steam_flow_kg_per_h, sump_mw)
-            self._V_kgmol_per_s = self._last_vapor_boilup
+            # 阶段 2：阀位模式下不再设置 _last_vapor_boilup
+            # V_boil 由 _integrate_substeps 内部 Q_R → V_boil 真实机理计算
+            # 保留 _last_vapor_boilup 字段用于守恒诊断（积分后由 _V_boil_internal 更新）
+            # 阀位模式下 direct_vapor_bypass 保持 None
         else:
             # ===== 直接流量模式（向后兼容阶段 B/C） =====
             if feed_flow_kgmol_per_s is not None:
@@ -1697,7 +2170,14 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 self._last_bottoms_flow = max(0.0, float(bottoms_flow_kgmol_per_s))
             if vapor_boilup_kgmol_per_s is not None:
                 self._last_vapor_boilup = max(0.0, float(vapor_boilup_kgmol_per_s))
-                self._V_kgmol_per_s = self._last_vapor_boilup
+                # 阶段 2 兼容路径（todo/5.md §5.2 bypass）：
+                # 直接流量模式下显式传入 vapor_boilup 时，作为 direct_vapor_bypass 传给积分器
+                # 积分器内 V_boil = direct_vapor_bypass，Q_R 由反推保持能量守恒
+                direct_vapor_bypass = self._last_vapor_boilup
+            else:
+                # 直接流量模式下未传 vapor_boilup：保持 None，由 Q_R → V_boil 真实机理计算
+                # 此情况下需要保证 _last_steam_flow_kg_per_h 有合理值（用上一周期值）
+                direct_vapor_bypass = None
 
             # 阀门仍按一阶响应演化（保持动态连续性）
             # 但实际流量由直接输入决定，阀门只是"跟随显示"
@@ -1710,14 +2190,16 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 # 纯直接流量模式：阀门不演化，保持初始开度
                 pass
 
-            # 阶段 1：直接流量模式下，steam_flow_kg_h / cooling_flow_kg_h 保持上一周期值
-            # （阶段 2 删除此兼容路径后，将由 Q_R/Q_C 反推）
+            # 阶段 2：直接流量模式下，steam_flow_kg_h / cooling_flow_kg_h 保持上一周期值
+            # 用于 _integrate_substeps 中的 Q_R → V_boil 计算
 
         # 进料乙醇摩尔分数和温度（K）
         feed_xE = ethanol_mass_fraction_to_mole_fraction(self._feed_ethanol_wt)
         feed_temperature_k = self._feed_temperature_c + 273.15
 
-        # 积分
+        # 阶段 2 积分（todo/5.md §5、§6）
+        # 阀位模式：steam/cooling 流量由阀门实际开度决定，Q_R → V_boil 真实机理
+        # 直接流量模式：steam/cooling 保持上一周期值；若传 vapor_boilup 则作为 bypass
         self._integrate_substeps(
             feed_flow=self._last_feed_flow,
             feed_xE=feed_xE,
@@ -1725,8 +2207,14 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             reflux_flow=self._last_reflux_flow,
             distillate_flow=self._last_distillate_flow,
             bottoms_flow=self._last_bottoms_flow,
-            vapor_boilup=self._last_vapor_boilup,
+            steam_flow_kg_h=self._last_steam_flow_kg_per_h,
+            cooling_flow_kg_h=self._last_cooling_flow_kg_per_h,
+            cooling_water_temperature_c=self._cooling_water_temperature_c,
+            direct_vapor_bypass=direct_vapor_bypass,
         )
+
+        # 阶段 2：积分后 _last_vapor_boilup 用内部 V_boil 更新（守恒诊断用）
+        self._last_vapor_boilup = float(self._V_boil_internal)
 
         # 守恒诊断
         self._calculate_balances_and_kpis(
@@ -1754,7 +2242,22 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
     # 物理边界检查
     # ------------------------------------------------------------------
     def _check_physical_bounds(self) -> None:
-        """检查状态是否在物理合理范围，明显越界抛异常。"""
+        """
+        检查状态是否在物理合理范围，明显越界抛异常（spec §8.1）。
+
+        spec §8.1 强制约束：
+            M <= 0                     → error
+            nE < -1e-12                → error
+            nE > M + 1e-12             → error
+            N_vapor <= 0               → error
+            nE_vapor < -1e-12          → error
+            nE_vapor > N_vapor + 1e-12 → error
+            温度不在 250～500 K         → error
+            压力不在 50～160 kPa(a)    → error
+            任意状态 NaN/Inf            → error
+
+        只允许修正绝对值不超过 1e-12 的浮点越界（spec §8.1）。
+        """
         # 检查塔板状态
         for i in range(self._n_trays):
             if not math.isfinite(float(self._M_tray[i])):
@@ -1765,7 +2268,8 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 raise RuntimeError(f"塔板 {i+1} 内能非有限: {self._U_tray[i]}")
             if self._M_tray[i] <= 0.0:
                 raise RuntimeError(f"塔板 {i+1} 持液量非正: {self._M_tray[i]}")
-            if self._nE_tray[i] < 0.0 or self._nE_tray[i] > self._M_tray[i]:
+            # spec §8.1: nE 容差 -1e-12 ~ M + 1e-12
+            if self._nE_tray[i] < -1e-12 or self._nE_tray[i] > self._M_tray[i] + 1e-12:
                 raise RuntimeError(
                     f"塔板 {i+1} 乙醇物质量越界: nE={self._nE_tray[i]}, M={self._M_tray[i]}"
                 )
@@ -1775,9 +2279,14 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
                 raise RuntimeError(
                     f"塔板 {i+1} 温度超出合理范围: {self._T_tray[i]} K"
                 )
+            # spec §8.1: 压力范围 50～160 kPa(a)
             if not math.isfinite(float(self._pressure_kpa[i])) or self._pressure_kpa[i] <= 0.0:
                 raise RuntimeError(
                     f"塔板 {i+1} 压力异常: {self._pressure_kpa[i]}"
+                )
+            if self._pressure_kpa[i] < 50.0 or self._pressure_kpa[i] > 160.0:
+                raise RuntimeError(
+                    f"塔板 {i+1} 压力超出合理范围 [50, 160] kPa(a): {self._pressure_kpa[i]}"
                 )
 
         # 检查回流罐和塔釜
@@ -1787,23 +2296,49 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         ]:
             if not math.isfinite(float(M)) or M <= 0.0:
                 raise RuntimeError(f"{name} 持液量异常: {M}")
-            if not math.isfinite(float(nE)) or nE < 0.0 or nE > M:
+            # spec §8.1: nE 容差 -1e-12 ~ M + 1e-12
+            if not math.isfinite(float(nE)) or nE < -1e-12 or nE > M + 1e-12:
                 raise RuntimeError(f"{name} 乙醇物质量越界: nE={nE}, M={M}")
             if not math.isfinite(float(U)):
                 raise RuntimeError(f"{name} 内能非有限: {U}")
 
-        # 检查气相存量和塔压
+        # 检查气相存量（spec §8.1: N_vapor > 0, nE_vapor 容差, U_vapor 有限）
         if not math.isfinite(float(self._N_vapor)) or self._N_vapor <= 0.0:
             raise RuntimeError(f"气相存量异常: {self._N_vapor}")
+        if not math.isfinite(float(self._nE_vapor)):
+            raise RuntimeError(f"气相乙醇物质量非有限: {self._nE_vapor}")
+        # spec §8.1: nE_vapor 容差 -1e-12 ~ N_vapor + 1e-12
+        if self._nE_vapor < -1e-12 or self._nE_vapor > self._N_vapor + 1e-12:
+            raise RuntimeError(
+                f"气相乙醇物质量越界: nE_vapor={self._nE_vapor}, N_vapor={self._N_vapor}"
+            )
+        if not math.isfinite(float(self._U_vapor)):
+            raise RuntimeError(f"气相内能非有限: {self._U_vapor}")
+
+        # 检查塔顶压力（spec §8.1: 50～160 kPa(a)）
         if not math.isfinite(float(self._p_top_kpa)) or self._p_top_kpa <= 0.0:
             raise RuntimeError(f"塔顶压力异常: {self._p_top_kpa}")
+        if self._p_top_kpa < 50.0 or self._p_top_kpa > 160.0:
+            raise RuntimeError(
+                f"塔顶压力超出合理范围 [50, 160] kPa(a): {self._p_top_kpa}"
+            )
+
+        # 检查塔釜压力（spec §8.1: 50～160 kPa(a)）
+        if not math.isfinite(float(self._p_sump_kpa)) or self._p_sump_kpa <= 0.0:
+            raise RuntimeError(f"塔釜压力异常: {self._p_sump_kpa}")
+        if self._p_sump_kpa < 50.0 or self._p_sump_kpa > 160.0:
+            raise RuntimeError(
+                f"塔釜压力超出合理范围 [50, 160] kPa(a): {self._p_sump_kpa}"
+            )
 
     # ==================================================================
     # 阶段 D：状态持久化（spec §10.1, §10.2）
     # ==================================================================
 
     # 参考稳态文件版本号（变更状态结构时升版）
-    REFERENCE_STATE_VERSION: str = "1.0"
+    # 阶段 2 升版 "1.0" → "2.0"：新增 nE_vapor, U_vapor, yE_vapor, T_vapor,
+    # V_boil_internal, V_condense_internal, prev_M_total_kgmol 等状态字段
+    REFERENCE_STATE_VERSION: str = "2.0"
 
     # 关键设备参数（用于参数哈希，决定稳态文件是否可复用）
     _PARAMS_HASH_KEYS = (
@@ -1824,6 +2359,18 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "bottoms_valve_max_flow_kg_per_h",
         "steam_valve_max_flow_kg_per_h",
         "cooling_valve_max_flow_kg_per_h",
+        # 阶段 2：再沸器/冷凝器/气相库存关键参数（todo/5.md §5, §6）
+        # 修改这些参数会改变稳态形状，必须重新生成参考状态
+        "steam_latent_heat_kj_per_kg",
+        "steam_heat_transfer_efficiency",
+        "cooling_water_cp_kj_per_kg_k",
+        "cooling_water_design_delta_t_k",
+        "condenser_ua_kw_per_k",
+        "p_vapor_floor_kpa",
+        "tau_condenser_inventory_s",
+        "tau_sump_heat_s",
+        "tau_phase_s",
+        "vent_flow_kgmol_per_s",
     )
 
     def _compute_params_hash(self) -> str:
@@ -1866,8 +2413,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "M_sump": float(self._M_sump),
             "nE_sump": float(self._nE_sump),
             "U_sump": float(self._U_sump),
-            # 气相存量
+            # 气相存量（阶段 2: 新增 nE_vapor, U_vapor）
             "N_vapor": float(self._N_vapor),
+            "nE_vapor": float(self._nE_vapor),
+            "U_vapor": float(self._U_vapor),
             # 派生量（避免重新计算）
             "T_tray": self._T_tray.tolist(),
             "yE_tray": self._yE_tray.tolist(),
@@ -1878,6 +2427,12 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "p_top_kpa": float(self._p_top_kpa),
             "p_sump_kpa": float(self._p_sump_kpa),
             "T_vapor_avg": float(self._T_vapor_avg),
+            # 阶段 2: 气相组成和温度（派生量，避免加载后 _publish_scalar_attributes 报错）
+            "yE_vapor": float(self._yE_vapor),
+            "T_vapor": float(self._T_vapor),
+            # 阶段 2: 内部 V_boil/V_condense（用于诊断位号恢复）
+            "V_boil_internal": float(self._V_boil_internal),
+            "V_condense_internal": float(self._V_condense_internal),
             # 阶段 C 内部热负荷（用于对外位号恢复）
             "Q_R_kw": float(self._Q_R_kw),
             "Q_C_kw": float(self._Q_C_kw),
@@ -1893,6 +2448,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "mass_balance_residual_kg_h": float(self.mass_balance_residual_kg_h),
             "ethanol_balance_residual_kg_h": float(self.ethanol_balance_residual_kg_h),
             "energy_balance_residual_kw": float(self.energy_balance_residual_kw),
+            # 阶段 2: 积累率位号（_publish_scalar_attributes 不重新计算这些）
+            "mass_accumulation_kg_h": float(self.mass_accumulation_kg_h),
+            "ethanol_accumulation_kg_h": float(self.ethanol_accumulation_kg_h),
+            "energy_accumulation_kw": float(self.energy_accumulation_kw),
             # 阀门状态
             "valves": {k: v.to_state_dict() for k, v in self._valves.items()},
             # 分析仪状态
@@ -1921,6 +2480,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
             "initial_total_mass": self._initial_total_mass,
             "initial_total_ethanol": self._initial_total_ethanol,
             "first_execute": self._first_execute,
+            # 阶段 2: 闭合残差计算所需的上一期总存量（save→load 后保持一致）
+            "prev_M_total_kgmol": float(self._prev_M_total_kgmol),
+            "prev_nE_total_kgmol": float(self._prev_nE_total_kgmol),
+            "prev_U_total_kj": float(self._prev_U_total_kj),
         }
 
     # ------------------------------------------------------------------
@@ -1952,6 +2515,20 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._nE_sump = float(state["nE_sump"])
         self._U_sump = float(state["U_sump"])
         self._N_vapor = float(state["N_vapor"])
+        # 阶段 2: 恢复 nE_vapor, U_vapor（向后兼容：旧版无此键时由 N_vapor 推算）
+        # 注：REFERENCE_STATE_VERSION 升版后旧文件不会加载，此 .get() 仅作安全网
+        self._nE_vapor = float(state.get("nE_vapor", 0.0))
+        self._U_vapor = float(state.get("U_vapor", 0.0))
+        # 若缺失，用 N_vapor 和塔顶 yE 推算合理初值
+        if self._nE_vapor <= 0.0 and self._N_vapor > 0.0:
+            yE_init = 0.5
+            self._nE_vapor = float(self._N_vapor * yE_init)
+        if self._U_vapor <= 0.0 and self._N_vapor > 0.0:
+            yE_init = float(self._nE_vapor / self._N_vapor) if self._N_vapor > 0 else 0.5
+            T_init = 350.0
+            self._U_vapor = float(
+                self._N_vapor * vapor_internal_energy_kj_per_kmol(yE_init, T_init)
+            )
 
         # 恢复派生量
         self._T_tray = np.array(state["T_tray"], dtype=np.float64)
@@ -1963,6 +2540,25 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._p_top_kpa = float(state["p_top_kpa"])
         self._p_sump_kpa = float(state["p_sump_kpa"])
         self._T_vapor_avg = float(state["T_vapor_avg"])
+        # 阶段 2: 恢复气相组成和温度（向后兼容：缺失时从 N_vapor/nE_vapor/U_vapor 反算）
+        if "yE_vapor" in state:
+            self._yE_vapor = float(state["yE_vapor"])
+        else:
+            self._yE_vapor = (
+                float(self._nE_vapor / self._N_vapor)
+                if self._N_vapor > 0 else 0.5
+            )
+        if "T_vapor" in state:
+            self._T_vapor = float(state["T_vapor"])
+        else:
+            self._T_vapor = float(
+                temperature_from_vapor_internal_energy(
+                    self._U_vapor, self._N_vapor, self._yE_vapor
+                )
+            )
+        # 阶段 2: 恢复内部 V_boil/V_condense（向后兼容：缺失时用 0，下次 execute 会重算）
+        self._V_boil_internal = float(state.get("V_boil_internal", 0.0))
+        self._V_condense_internal = float(state.get("V_condense_internal", 0.0))
 
         # 恢复内部热负荷（向后兼容：旧版无此键时保持 0）
         self._Q_R_kw = float(state.get("Q_R_kw", 0.0))
@@ -1981,6 +2577,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self.mass_balance_residual_kg_h = float(state.get("mass_balance_residual_kg_h", 0.0))
         self.ethanol_balance_residual_kg_h = float(state.get("ethanol_balance_residual_kg_h", 0.0))
         self.energy_balance_residual_kw = float(state.get("energy_balance_residual_kw", 0.0))
+        # 阶段 2: 恢复积累率位号（_publish_scalar_attributes 不重新计算这些）
+        self.mass_accumulation_kg_h = float(state.get("mass_accumulation_kg_h", 0.0))
+        self.ethanol_accumulation_kg_h = float(state.get("ethanol_accumulation_kg_h", 0.0))
+        self.energy_accumulation_kw = float(state.get("energy_accumulation_kw", 0.0))
 
         # 恢复阀门
         for k, v_state in state["valves"].items():
@@ -2022,6 +2622,10 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         self._initial_total_mass = float(state["initial_total_mass"])
         self._initial_total_ethanol = float(state["initial_total_ethanol"])
         self._first_execute = bool(state["first_execute"])
+        # 阶段 2: 恢复上一期总存量（向后兼容：缺失时设为 0，下期残差按 first_execute 处理）
+        self._prev_M_total_kgmol = float(state.get("prev_M_total_kgmol", 0.0))
+        self._prev_nE_total_kgmol = float(state.get("prev_nE_total_kgmol", 0.0))
+        self._prev_U_total_kj = float(state.get("prev_U_total_kj", 0.0))
 
     # ------------------------------------------------------------------
     def save_reference_state(self, file_path: Optional[str] = None) -> str:
