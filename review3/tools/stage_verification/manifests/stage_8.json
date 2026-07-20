@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "stage": 8,
+  "name": "全量回归和端到端验收",
+  "required_documents": ["todo/second_order_tank_agent_start_here.md", "todo/second_order_tank_visual_dsl_template_design.md", "todo/second_order_tank_repository_contracts.md", "todo/second_order_tank_implementation_playbook.md"],
+  "allowed_paths": ["tests/**", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "tools/stage_verification/evidence/**"],
+  "forbidden_paths": ["components/programs/pid.py", "components/programs/valve.py", "components/programs/cylindrical_tank.py", "components/programs/base.py", "datacenter/opcua_server.py", "config/单阀门二阶水箱.yaml", "debug_gui/**", "controller/**", "datacenter/**", "config-tool/internal/**"],
+  "preserved_paths": ["config-tool/frontend/src/components/Canvas.tsx", "config-tool/frontend/src/components/Palette.tsx", "config-tool/frontend/src/components/PropertyPanel.tsx", "config-tool/frontend/src/components/SimulationPanel.tsx", "config-tool/frontend/src/store/useCanvasStore.ts"],
+  "required_paths": ["tests/**", "config-tool/frontend/src/**/*.test.tsx"],
+  "forbidden_symbols": [{"id": "no_acceptance_bypass", "path_globs": ["tests/**", "config-tool/frontend/src/**/*.test.*"], "pattern": "acceptanceBypass|skipAcceptance|pytestmark\\s*=\\s*pytest\\.mark\\.skip|describe\\.skip|test\\.skip"}],
+  "locked_paths": ["todo/second_order_tank_*.md", "tools/stage_verification/**"],
+  "locked_acceptance_paths": ["tests/test_*.py", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "config-tool/internal/**/*_test.go", "tools/stage_verification/acceptance/stage_5/test_atomic_writes_acceptance.py", "tools/stage_verification/acceptance/stage_5/test_pid_faceplate_acceptance.py", "tools/stage_verification/acceptance/stage_6/test_trend_quality_acceptance.py", "tools/stage_verification/acceptance/stage_7/test_batch_export_acceptance.py", "tools/stage_verification/acceptance/stage_8/test_end_to_end_acceptance.py"],
+  "commands": [
+    {"id": "locked_acceptance", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tools/stage_verification/acceptance/stage_8", "-q"], "timeout_seconds": 900},
+    {"id": "frontend_tests", "cwd": "config-tool/frontend", "argv": ["npm", "run", "test:run"], "windows_argv": ["npm.cmd", "run", "test:run"], "timeout_seconds": 600},
+    {"id": "frontend_build", "cwd": "config-tool/frontend", "argv": ["npm", "run", "build"], "windows_argv": ["npm.cmd", "run", "build"], "timeout_seconds": 300},
+    {"id": "go_all", "cwd": "config-tool", "argv": ["go", "test", "./..."], "timeout_seconds": 600, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "wails_build", "cwd": "config-tool", "argv": ["wails", "build"], "timeout_seconds": 600, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "python_all", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tests", "-q"], "timeout_seconds": 900}
+  ],
+  "git_diff_check": true,
+  "gates": [
+    {"id": "acceptance_scope_and_cleanliness", "mode": "automated", "description": "阶段 8 只增加验收证据/测试；无业务补丁、核心算法修改、跳过标记、越界文件或空白错误。", "checks": ["required_documents", "required_paths", "preserved_paths", "manifest_locked", "locked_files", "locked_acceptance_files", "changed_paths_allowed", "forbidden_paths", "forbidden_symbols", "git_diff_check"]},
+    {"id": "full_regression", "mode": "automated", "description": "前端测试/构建、Go 全量、Wails build 和 Python 全量测试通过。", "checks": ["command:locked_acceptance", "command:frontend_tests", "command:frontend_build", "command:go_all", "command:wails_build", "command:python_all"]},
+    {"id": "complete_e2e_review", "mode": "manual", "description": "验收者执行设计 18.5 的组态、另存、仿真、在线写值、写回重启、2000 周期 batch、实时 OPC UA、退出清理闭环并留存证据。"},
+    {"id": "design_acceptance_review", "mode": "manual", "description": "验收者逐条核对产品设计第 19 节 18 条标准并确认高级 React Flow 仍可用、无假数据和运行污染。"}
+  ]
+}

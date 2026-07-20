@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "stage": 0,
+  "name": "基线与可构建性",
+  "required_documents": ["todo/second_order_tank_agent_start_here.md", "todo/second_order_tank_visual_dsl_template_design.md", "todo/second_order_tank_repository_contracts.md", "todo/second_order_tank_implementation_playbook.md"],
+  "allowed_paths": [".gitignore", "config-tool/frontend/package.json", "config-tool/frontend/package-lock.json", "config-tool/frontend/package.json.md5", "config-tool/frontend/vite.config.ts", "config-tool/frontend/vitest.config.ts", "config-tool/frontend/src/lib/**", "config-tool/frontend/src/test/**", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "config-tool/frontend/src/App.tsx", "config-tool/frontend/src/components/Toolbar.tsx", "config-tool/frontend/src/components/SystemPanel.tsx", "config-tool/frontend/src/components/SimulationPanel.tsx", "config-tool/frontend/src/store/useCanvasStore.ts", "config-tool/frontend/wailsjs/**", "config-tool/go.mod", "config-tool/go.sum"],
+  "forbidden_paths": ["components/programs/pid.py", "components/programs/valve.py", "components/programs/cylindrical_tank.py", "components/programs/base.py", "datacenter/opcua_server.py", "config/单阀门二阶水箱.yaml", "debug_gui/**", "config-tool/frontend/src/features/templates/**", "config-tool/frontend/src/features/runtime/**"],
+  "preserved_paths": ["config-tool/frontend/src/components/Canvas.tsx", "config-tool/frontend/src/components/Palette.tsx", "config-tool/frontend/src/components/PropertyPanel.tsx", "config-tool/frontend/src/components/SimulationPanel.tsx", "config-tool/frontend/src/store/useCanvasStore.ts"],
+  "required_paths": ["config-tool/frontend/src/lib/api.ts", "config-tool/frontend/vitest.config.ts", "config-tool/frontend/src/**/*.test.ts"],
+  "forbidden_symbols": [{"id": "no_stage_1_template_state", "path_globs": ["config-tool/frontend/src/**", "config-tool/internal/**"], "pattern": "TemplateService|useTemplateStore|SecondOrderTankPage|TemplateConfigBinding"}],
+  "locked_paths": ["todo/second_order_tank_*.md", "tools/stage_verification/**"],
+  "locked_acceptance_paths": ["tests/test_*.py", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "config-tool/internal/**/*_test.go", "config-tool/frontend/src/lib/api.test.ts"],
+  "commands": [
+    {"id": "frontend_tests", "cwd": "config-tool/frontend", "argv": ["npm", "run", "test:run"], "windows_argv": ["npm.cmd", "run", "test:run"], "timeout_seconds": 300},
+    {"id": "frontend_build", "cwd": "config-tool/frontend", "argv": ["npm", "run", "build"], "windows_argv": ["npm.cmd", "run", "build"], "timeout_seconds": 300},
+    {"id": "go_internal", "cwd": "config-tool", "argv": ["go", "test", "./internal/..."], "timeout_seconds": 300, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "wails_build", "cwd": "config-tool", "argv": ["wails", "build"], "timeout_seconds": 600, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "go_all", "cwd": "config-tool", "argv": ["go", "test", "./..."], "timeout_seconds": 300, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "python_baseline", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tests/test_tank_pid_configs.py", "tests/test_pid_industrial.py", "tests/test_structured_dsl.py", "-q"], "timeout_seconds": 300}
+  ],
+  "git_diff_check": true,
+  "gates": [
+    {"id": "scope_and_locked_assets", "mode": "automated", "description": "仅修改阶段 0 文件，保留旧视图且验收资产未被实施者更改。", "checks": ["required_documents", "required_paths", "preserved_paths", "manifest_locked", "locked_files", "locked_acceptance_files", "changed_paths_allowed", "forbidden_paths", "forbidden_symbols", "git_diff_check"]},
+    {"id": "buildable_baseline", "mode": "automated", "description": "前端测试与构建、Go 内部/全量测试、Wails 构建和目标 Python 基线均通过。", "checks": ["command:frontend_tests", "command:frontend_build", "command:go_internal", "command:wails_build", "command:go_all", "command:python_baseline"]}
+  ]
+}

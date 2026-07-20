@@ -6,12 +6,20 @@ export function BrowseExe() {
   return window['go']['bindings']['SystemBinding']['BrowseExe']();
 }
 
+export function Cleanup() {
+  return window['go']['bindings']['SystemBinding']['Cleanup']();
+}
+
 export function ExportBatch(arg1, arg2, arg3) {
   return window['go']['bindings']['SystemBinding']['ExportBatch'](arg1, arg2, arg3);
 }
 
 export function GetDataFactoryPath() {
   return window['go']['bindings']['SystemBinding']['GetDataFactoryPath']();
+}
+
+export function GetRecentLogs() {
+  return window['go']['bindings']['SystemBinding']['GetRecentLogs']();
 }
 
 export function ListConfigs() {

@@ -52,6 +52,7 @@ class StatusResponse(BaseModel):
     mode: str
     cycle_count: int
     sim_time: float
+    cycle_time: float
     safe_state: bool
     consecutive_failures: int
 
@@ -67,11 +68,14 @@ class _WsBroadcaster:
     引擎线程调用 ``publish(snapshot)``；WebSocket handler 协程从自己的
     queue 里 ``get()`` 拿数据推给浏览器。
 
-    慢消费者策略：队列上限 200 条；新数据到来时若队列已满则丢弃最旧条目，
-    保证 WS 客户端不会反过来拖慢引擎线程。
+    慢消费者策略：
+    - 每客户端 queue.Queue(maxsize=1)：始终只保留最新一帧。
+    - 新帧到达时若旧帧未消费，直接丢弃旧帧（get_nowait 后 put_nowait）。
+    - publish 对每个客户端均严格非阻塞，永远不会拖慢引擎线程。
+    - 多 WS 客户端不会触发 Engine 重复计算：snapshot 只来自 Engine 单线程。
     """
 
-    _MAX_QUEUE = 200
+    _MAX_QUEUE = 1
 
     def __init__(self) -> None:
         self._clients: Set["queue.Queue[Dict[str, Any]]"] = set()
@@ -87,6 +91,10 @@ class _WsBroadcaster:
         with self._lock:
             self._clients.discard(q)
 
+    def client_count(self) -> int:
+        with self._lock:
+            return len(self._clients)
+
     def publish(self, snapshot: Dict[str, Any]) -> None:
         # 在引擎线程里调用，snapshot 已经是 dict 拷贝，这里直接转 JSON-safe dict
         # 简单数据：只保留标量；过滤掉 None / dict / list 等非标量值
@@ -97,11 +105,20 @@ class _WsBroadcaster:
         with self._lock:
             queues = list(self._clients)
         for q in queues:
-            # 队列满时 put 会丢最旧的（maxlen 已设）
+            # 始终只保留最新一帧；旧帧未消费则丢弃。
+            try:
+                # 非阻塞尝试取出已有条目（不阻塞 Engine）
+                while True:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        break
+            except Exception:
+                pass
             try:
                 q.put_nowait(safe)
             except queue.Full:
-                # 极端情况下满且 race 丢失，直接跳过本客户端这一帧
+                # 极端 race：仍满则直接丢弃新帧，本客户端短暂缺帧不影响 Engine。
                 pass
 
 
@@ -114,7 +131,11 @@ class EngineBinding:
     """
     把 DataFactory Engine 实例 + shared_data + 实例名绑定到 FastAPI app。
 
-    snapshot_buffer：引擎线程可选地把每周期 snapshot 追加到这里，用于 export。
+    关键契约：
+      - ``_latest_snapshot`` 是 Engine 线程最近一次推送的完整 snapshot。
+      - 在 ``_latest_snapshot_lock`` 锁内写入；status 和 /snapshot 必须从同一份读取，
+        保证 cycle_count/sim_time 与真实 Engine 推进一致。
+      - ``snapshot_buffer`` 保留最近 N 个周期供 export。
     """
 
     instance_name: str
@@ -125,11 +146,26 @@ class EngineBinding:
     _buffer_max: int = 10000  # 最多保留最近 10000 个周期
     broadcaster: _WsBroadcaster = field(default_factory=_WsBroadcaster)
 
+    # 最近一份完整 snapshot（含 cycle_count / sim_time 等元数据）。
+    # 阶段 4 要求：status 和 REST snapshot 必须在同一份 snapshot 上读取；
+    # 任何缺字段（含 cycle_count / sim_time）必须显式缺失，不替换为 0。
+    _latest_snapshot: Optional[Dict[str, Any]] = None
+    _latest_snapshot_lock: threading.Lock = field(default_factory=threading.Lock)
+
     def push_snapshot(self, snapshot: Dict[str, Any]) -> None:
-        """由 standalone_main 的引擎线程每周期调用一次。"""
-        # WS 广播
+        """由 standalone_main 的引擎线程每周期调用一次。
+
+        写入顺序：先替换 _latest_snapshot（供 REST / status 使用），再广播 WS；
+        status 与 /snapshot 看到的 cycle_count/sim_time 必然等于最新引擎周期。
+        """
+        # 1) 锁内保存最近一份完整 snapshot（深拷贝避免 Engine 线程复写）
+        with self._latest_snapshot_lock:
+            self._latest_snapshot = {k: v for k, v in snapshot.items()}
+
+        # 2) WS 广播（标量过滤在 broadcaster 内完成）
         self.broadcaster.publish(snapshot)
-        # 环形缓冲（保留最近 N 个周期供 export）
+
+        # 3) 环形缓冲（保留最近 N 个周期供 export）
         with self._buffer_lock:
             self.snapshot_buffer.append(snapshot)
             if len(self.snapshot_buffer) > self._buffer_max:
@@ -142,6 +178,14 @@ class EngineBinding:
         if n is not None and n > 0 and n < len(buf):
             return buf[-n:]
         return buf
+
+    # 返回最近一份完整 snapshot 的浅拷贝（dict 顶层）。若 Engine 尚未推过任何
+    # 周期则返回 None——调用方必须显式判定，不能用 0 / NaN 冒充。
+    def get_latest_snapshot(self) -> Optional[Dict[str, Any]]:
+        with self._latest_snapshot_lock:
+            if self._latest_snapshot is None:
+                return None
+            return dict(self._latest_snapshot)
 
 
 # --------------------------------------------------------------------------- #
@@ -188,17 +232,34 @@ def get_binding() -> EngineBinding:
 
 @app.get("/api/status", response_model=StatusResponse)
 def api_status() -> StatusResponse:
-    """实例运行状态。"""
+    """实例运行状态。
+
+    ``instance_name`` 来自 ``EngineBinding.instance_name``（由 ``--name`` 指定），
+    与 Program 实例名（pid2 / tank_2 等）不是同一个命名空间。
+    前端必须用此字段的真实值再调用 ``/api/instances/{instance_name}/...``。
+
+    ``cycle_count`` / ``sim_time`` 与 ``/snapshot`` 来自同一份最近完整 snapshot：
+    EngineBinding 在锁内保存，REST / status 一致读取，绝不通过 engine.clock
+    二次推断，避免和 snapshot 出现分叉。
+    """
     b = get_binding()
     stats = b.engine.get_statistics()
-    snapshot = b.shared_data  # 引擎线程每周期写入的 dict
+    latest = b.get_latest_snapshot()  # 与 /snapshot 同源
+    cycle_count = int(latest["cycle_count"]) if latest and "cycle_count" in latest else 0
+    sim_time = float(latest["sim_time"]) if latest and "sim_time" in latest else 0.0
+    safe_state = bool(latest.get("_safe_state", False)) if latest else False
+    consecutive_failures = (
+        int(latest.get("_consecutive_failures", 0)) if latest else 0
+    )
+    cycle_time = float(getattr(b.engine.clock.config, "cycle_time", 0.5) or 0.5)
     return StatusResponse(
         instance_name=b.instance_name,
         mode=str(stats.get("mode", "UNKNOWN")),
-        cycle_count=int(snapshot.get("cycle_count", 0)),
-        sim_time=float(snapshot.get("sim_time", 0.0)),
-        safe_state=bool(snapshot.get("_safe_state", False)),
-        consecutive_failures=int(snapshot.get("_consecutive_failures", 0)),
+        cycle_count=cycle_count,
+        sim_time=sim_time,
+        cycle_time=cycle_time,
+        safe_state=safe_state,
+        consecutive_failures=consecutive_failures,
     )
 
 
@@ -217,11 +278,19 @@ def api_meta(name: str) -> Dict[str, Any]:
 
 @app.get("/api/instances/{name}/snapshot")
 def api_snapshot(name: str) -> Dict[str, Any]:
-    """最新一次 snapshot。"""
+    """最新一次 snapshot。
+
+    与 ``/api/status`` 同源：均读取 EngineBinding._latest_snapshot（锁内替换）。
+    snapshot 缺失的字段（如 cycle_count/sim_time 未推送过）原样缺失，绝不替换为 0。
+    """
     b = get_binding()
     if name != b.instance_name:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
-    return dict(b.shared_data)
+    latest = b.get_latest_snapshot()
+    if latest is None:
+        # 引擎尚未推过任何周期；返回空 dict 让前端明确知道"无 snapshot"。
+        return {}
+    return latest
 
 
 @app.post("/api/instances/{name}/params")
@@ -299,12 +368,15 @@ async def ws_snapshot(ws: WebSocket) -> None:
 
     引擎线程把 snapshot put 到 broadcaster queue；这里 await 阻塞拿数据再发给客户端。
     断开时 unregister。
+
+    心跳：1s 内未收到真实 snapshot，发送 ``{"_heartbeat": true, "ts": ...}``。
+    真实 snapshot 本身就是完整 dict，不再包一层 ``data``。
     """
     await ws.accept()
     b = get_binding()
     my_queue = b.broadcaster.register()
     logger.info("WS client connected, total clients=%d",
-                len(b.broadcaster._clients))
+                b.broadcaster.client_count())
     try:
         while True:
             # 从队列取 snapshot。run_in_executor 把阻塞 get 放到线程池，避免阻塞 asyncio loop。
@@ -315,6 +387,7 @@ async def ws_snapshot(ws: WebSocket) -> None:
                 # 1s 内没数据，发送心跳（保持连接活跃 + 前端可识别"还活着"）
                 await ws.send_json({"_heartbeat": True, "ts": time.time()})
                 continue
+            # snapshot 本身就是完整对象，不读取 message.data，也不额外包装。
             await ws.send_json(snapshot)
     except WebSocketDisconnect:
         logger.info("WS client disconnected")

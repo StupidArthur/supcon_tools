@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Second-order tank stage verification manifest",
+  "type": "object",
+  "required": [
+    "schema_version", "stage", "name", "required_documents", "allowed_paths",
+    "forbidden_paths", "preserved_paths", "required_paths", "forbidden_symbols",
+    "locked_paths", "locked_acceptance_paths", "commands", "git_diff_check", "gates"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "stage": {"type": "integer", "minimum": 0, "maximum": 8},
+    "name": {"type": "string", "minLength": 1},
+    "required_documents": {"type": "array", "items": {"type": "string"}},
+    "allowed_paths": {"type": "array", "items": {"type": "string"}},
+    "forbidden_paths": {"type": "array", "items": {"type": "string"}},
+    "preserved_paths": {"type": "array", "items": {"type": "string"}},
+    "required_paths": {"type": "array", "items": {"type": "string"}},
+    "locked_paths": {"type": "array", "items": {"type": "string"}},
+    "locked_acceptance_paths": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "git_diff_check": {"type": "boolean"},
+    "forbidden_symbols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path_globs", "pattern"],
+        "properties": {
+          "id": {"type": "string"},
+          "path_globs": {"type": "array", "items": {"type": "string"}},
+          "pattern": {"type": "string"},
+          "scope": {"enum": ["changed", "repository"]}
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "cwd", "argv", "timeout_seconds"],
+        "properties": {
+          "id": {"type": "string"},
+          "cwd": {"type": "string"},
+          "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "windows_argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+          "env": {"type": "object", "additionalProperties": {"type": "string"}}
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "mode", "description"],
+        "properties": {
+          "id": {"type": "string"},
+          "mode": {"enum": ["automated", "manual"]},
+          "description": {"type": "string"},
+          "checks": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

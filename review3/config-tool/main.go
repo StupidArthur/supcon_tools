@@ -36,6 +36,7 @@ func main() {
 			container.ComponentBinding,
 			container.ConfigBinding,
 			container.SystemBinding,
+			container.TemplateConfigBinding,
 		},
 	})
 	if err != nil {

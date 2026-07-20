@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "stage": 7,
+  "name": "批量生成、下采样和 CSV 导出",
+  "required_documents": ["todo/second_order_tank_agent_start_here.md", "todo/second_order_tank_visual_dsl_template_design.md", "todo/second_order_tank_repository_contracts.md", "todo/second_order_tank_implementation_playbook.md"],
+  "allowed_paths": ["config-tool/internal/bindings/system.go", "config-tool/internal/bindings/system_batch_test.go", "config-tool/frontend/src/features/templates/**", "config-tool/frontend/src/features/runtime/downsample.ts", "config-tool/frontend/src/features/runtime/*batch*.test.ts", "config-tool/frontend/src/features/runtime/*batch*.test.tsx", "config-tool/frontend/src/lib/api.ts", "config-tool/frontend/wailsjs/**", "config-tool/frontend/package.json.md5", "config-tool/go.mod", "config-tool/go.sum", "tests/test_*batch*.py"],
+  "forbidden_paths": ["components/programs/pid.py", "components/programs/valve.py", "components/programs/cylindrical_tank.py", "components/programs/base.py", "datacenter/opcua_server.py", "config/单阀门二阶水箱.yaml", "debug_gui/**", "controller/engine.py", "datacenter/engine_api.py"],
+  "preserved_paths": ["config-tool/frontend/src/components/Canvas.tsx", "config-tool/frontend/src/components/Palette.tsx", "config-tool/frontend/src/components/PropertyPanel.tsx", "config-tool/frontend/src/components/SimulationPanel.tsx", "config-tool/frontend/src/store/useCanvasStore.ts"],
+  "required_paths": ["config-tool/internal/bindings/system_batch_test.go", "config-tool/frontend/src/features/runtime/*batch*.test.ts"],
+  "forbidden_symbols": [{"id": "no_stage_8_e2e_pollution", "path_globs": ["config-tool/frontend/src/**", "config-tool/internal/**"], "pattern": "e2eOnly|acceptanceBypass|skipAcceptance"}],
+  "locked_paths": ["todo/second_order_tank_*.md", "tools/stage_verification/**"],
+  "locked_acceptance_paths": ["tests/test_*.py", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "config-tool/internal/**/*_test.go", "tools/stage_verification/acceptance/stage_5/test_atomic_writes_acceptance.py", "tools/stage_verification/acceptance/stage_5/test_pid_faceplate_acceptance.py", "tools/stage_verification/acceptance/stage_6/test_trend_quality_acceptance.py", "tools/stage_verification/acceptance/stage_7/test_batch_export_acceptance.py"],
+  "commands": [
+    {"id": "locked_acceptance", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tools/stage_verification/acceptance/stage_7", "-q"], "timeout_seconds": 300},
+    {"id": "go_bindings", "cwd": "config-tool", "argv": ["go", "test", "./internal/bindings", "-count=1"], "timeout_seconds": 300, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "go_all", "cwd": "config-tool", "argv": ["go", "test", "./..."], "timeout_seconds": 300, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "frontend_tests", "cwd": "config-tool/frontend", "argv": ["npm", "run", "test:run"], "windows_argv": ["npm.cmd", "run", "test:run"], "timeout_seconds": 300},
+    {"id": "frontend_build", "cwd": "config-tool/frontend", "argv": ["npm", "run", "build"], "windows_argv": ["npm.cmd", "run", "build"], "timeout_seconds": 300},
+    {"id": "wails_build", "cwd": "config-tool", "argv": ["wails", "build"], "timeout_seconds": 600, "env": {"GOCACHE": "{temp}/review3-go-cache"}},
+    {"id": "python_related", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tests/test_engine_api.py", "tests/test_engine_atomic_writes.py", "tests/test_tank_pid_configs.py", "tests/test_pid_industrial.py", "tests/test_structured_dsl.py", "-q"], "timeout_seconds": 300}
+  ],
+  "git_diff_check": true,
+  "gates": [
+    {"id": "scope_and_safety", "mode": "automated", "description": "batch 复用唯一 SystemBinding，不修改核心算法/API，不引入验收绕过。", "checks": ["required_documents", "required_paths", "preserved_paths", "manifest_locked", "locked_files", "locked_acceptance_files", "changed_paths_allowed", "forbidden_paths", "forbidden_symbols", "git_diff_check"]},
+    {"id": "batch_and_export_contract", "mode": "automated", "description": "2000 周期、Unicode、唯一临时文件、错误传播、dirty 阻止、极值保留下采样、CSV 行列和对话框类型由测试证明。", "checks": ["command:locked_acceptance", "command:go_bindings", "command:go_all", "command:frontend_tests", "command:frontend_build", "command:wails_build", "command:python_related"]},
+    {"id": "single_page_batch_review", "mode": "manual", "description": "验收者确认 batch 进度、结果和 CSV 导出在同一模板页可发现且失败不会显示为空成功图。"}
+  ]
+}

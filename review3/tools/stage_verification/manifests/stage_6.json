@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "stage": 6,
+  "name": "趋势、事件和控制品质",
+  "required_documents": ["todo/second_order_tank_agent_start_here.md", "todo/second_order_tank_visual_dsl_template_design.md", "todo/second_order_tank_repository_contracts.md", "todo/second_order_tank_implementation_playbook.md"],
+  "allowed_paths": ["config-tool/frontend/src/features/runtime/**", "config-tool/frontend/src/features/templates/**", "config-tool/frontend/src/style.css", "config-tool/frontend/package.json", "config-tool/frontend/package-lock.json"],
+  "forbidden_paths": ["components/programs/pid.py", "components/programs/valve.py", "components/programs/cylindrical_tank.py", "components/programs/base.py", "datacenter/opcua_server.py", "config/单阀门二阶水箱.yaml", "debug_gui/**", "controller/**", "datacenter/**", "config-tool/internal/**"],
+  "preserved_paths": ["config-tool/frontend/src/components/Canvas.tsx", "config-tool/frontend/src/components/Palette.tsx", "config-tool/frontend/src/components/PropertyPanel.tsx", "config-tool/frontend/src/components/SimulationPanel.tsx", "config-tool/frontend/src/store/useCanvasStore.ts"],
+  "required_paths": ["config-tool/frontend/src/features/templates/RuntimeTrendPanel.tsx", "config-tool/frontend/src/features/runtime/controlQuality.ts", "config-tool/frontend/src/features/runtime/downsample.ts", "config-tool/frontend/src/features/runtime/controlQuality.test.ts", "config-tool/frontend/src/features/runtime/downsample.test.ts"],
+  "forbidden_symbols": [{"id": "no_stage_7_batch_integration", "path_globs": ["config-tool/frontend/src/features/**"], "pattern": "batchCsv|batchResult|runBatchTask|uniqueBatchPath|3000.*batch"}],
+  "locked_paths": ["todo/second_order_tank_*.md", "tools/stage_verification/**"],
+  "locked_acceptance_paths": ["tests/test_*.py", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "config-tool/internal/**/*_test.go", "tools/stage_verification/acceptance/stage_5/test_atomic_writes_acceptance.py", "tools/stage_verification/acceptance/stage_5/test_pid_faceplate_acceptance.py", "tools/stage_verification/acceptance/stage_6/test_trend_quality_acceptance.py"],
+  "commands": [
+    {"id": "locked_acceptance", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tools/stage_verification/acceptance/stage_6", "-q"], "timeout_seconds": 300},
+    {"id": "frontend_tests", "cwd": "config-tool/frontend", "argv": ["npm", "run", "test:run"], "windows_argv": ["npm.cmd", "run", "test:run"], "timeout_seconds": 300},
+    {"id": "frontend_build", "cwd": "config-tool/frontend", "argv": ["npm", "run", "build"], "windows_argv": ["npm.cmd", "run", "build"], "timeout_seconds": 300},
+    {"id": "python_regression", "cwd": ".", "argv": ["{python}", "-m", "pytest", "tests/test_engine_api.py", "tests/test_engine_atomic_writes.py", "tests/test_tank_pid_configs.py", "tests/test_pid_industrial.py", "tests/test_structured_dsl.py", "-q"], "timeout_seconds": 300},
+    {"id": "go_all", "cwd": "config-tool", "argv": ["go", "test", "./..."], "timeout_seconds": 300, "env": {"GOCACHE": "{temp}/review3-go-cache"}}
+  ],
+  "git_diff_check": true,
+  "gates": [
+    {"id": "scope_and_stage_boundary", "mode": "automated", "description": "趋势和控制品质保持在前端职责内，未提前整合 batch。", "checks": ["required_documents", "required_paths", "preserved_paths", "manifest_locked", "locked_files", "locked_acceptance_files", "changed_paths_allowed", "forbidden_paths", "forbidden_symbols", "git_diff_check"]},
+    {"id": "bounded_trend_and_quality", "mode": "automated", "description": "环形容量、顺序、心跳/stale、上一轮归档、事件确认、60 秒稳定窗口和指标重置均由测试证明。", "checks": ["command:locked_acceptance", "command:frontend_tests", "command:frontend_build", "command:python_regression", "command:go_all"]},
+    {"id": "trend_visual_review", "mode": "manual", "description": "验收者确认双轴、曲线开关、上一轮灰色对照、事件与 PV 绑定说明清晰可见。"}
+  ]
+}

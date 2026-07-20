@@ -52,6 +52,10 @@ export function SystemPanel() {
         mode,
         cycleTime,
         port,
+        apiHost: '127.0.0.1',
+        apiPort: 8000,
+        runtimeName: 'default',
+        enableOpcUa: true,
       })
       refreshStatus()
     } catch (e: any) {

@@ -8,6 +8,7 @@ import { Canvas } from './components/Canvas'
 import { PropertyPanel } from './components/PropertyPanel'
 import { SystemPanel } from './components/SystemPanel'
 import { SimulationPanel } from './components/SimulationPanel'
+import { TemplateWorkspace } from './features/templates/TemplateWorkspace'
 
 function App() {
   const init = useCanvasStore((s) => s.init)
@@ -35,12 +36,14 @@ function App() {
             <SystemPanel />
           ) : view === 'simulation' ? (
             <SimulationPanel />
-          ) : (
+          ) : view === 'config' ? (
             <>
               <Palette />
               <Canvas />
               <PropertyPanel />
             </>
+          ) : (
+            <TemplateWorkspace />
           )}
         </div>
       </div>

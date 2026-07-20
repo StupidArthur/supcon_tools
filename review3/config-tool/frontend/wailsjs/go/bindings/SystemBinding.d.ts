@@ -5,9 +5,13 @@ import {context} from '../models';
 
 export function BrowseExe():Promise<string>;
 
+export function Cleanup():Promise<void>;
+
 export function ExportBatch(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function GetDataFactoryPath():Promise<string>;
+
+export function GetRecentLogs():Promise<Array<string>>;
 
 export function ListConfigs():Promise<Array<string>>;
 

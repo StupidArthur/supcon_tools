@@ -50,6 +50,16 @@ export function Toolbar() {
       {/* Tab buttons */}
       <div className="flex items-center gap-1">
         <button
+          onClick={() => setView('template')}
+          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            view === 'template'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-secondary'
+          }`}
+        >
+          二阶水箱模板
+        </button>
+        <button
           onClick={() => setView('system')}
           className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
             view === 'system'
@@ -77,7 +87,7 @@ export function Toolbar() {
               : 'text-muted-foreground hover:bg-secondary'
           }`}
         >
-          组态编辑
+          高级组态
         </button>
       </div>
 

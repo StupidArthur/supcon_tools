@@ -26,7 +26,7 @@ interface CanvasStore {
   loading: boolean
 
   // 系统管理
-  view: 'config' | 'system' | 'simulation'
+  view: 'config' | 'system' | 'simulation' | 'template'
   dfPath: string
   configs: string[]
   dfStatus: { running: boolean; pid: number; configPath: string; mode: string; cycleTime: number; port: number }
@@ -43,7 +43,7 @@ interface CanvasStore {
   loadCanvasState: (state: config.CanvasState) => void
   getCanvasState: () => config.CanvasState
 
-  setView: (view: 'config' | 'system' | 'simulation') => void
+  setView: (view: 'config' | 'system' | 'simulation' | 'template') => void
   setDfPath: (path: string) => void
   setConfigs: (configs: string[]) => void
   setDfStatus: (status: any) => void
@@ -82,7 +82,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   cycleTime: 0.5,
   loading: true,
 
-  view: 'system',
+  view: 'template',
   dfPath: '',
   configs: [],
   dfStatus: { running: false, pid: 0, configPath: '', mode: '', cycleTime: 0, port: 0 },
@@ -248,8 +248,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   refreshStatus: () => {
-    systemApi.status().then((status) => {
-      set({ dfStatus: status as any })
+    systemApi.status().then((status: any) => {
+      set({ dfStatus: status })
     }).catch(console.error)
   },
 }))

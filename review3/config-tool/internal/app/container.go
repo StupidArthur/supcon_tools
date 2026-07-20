@@ -6,10 +6,11 @@ import (
 )
 
 type Container struct {
-	Lifecycle        *Lifecycle
-	ComponentBinding *bindings.ComponentBinding
-	ConfigBinding    *bindings.ConfigBinding
-	SystemBinding    *bindings.SystemBinding
+	Lifecycle             *Lifecycle
+	ComponentBinding      *bindings.ComponentBinding
+	ConfigBinding         *bindings.ConfigBinding
+	SystemBinding         *bindings.SystemBinding
+	TemplateConfigBinding *bindings.TemplateConfigBinding
 }
 
 func NewContainer() (*Container, error) {
@@ -23,13 +24,15 @@ func NewContainer() (*Container, error) {
 	componentBinding := bindings.NewComponentBinding(metadata)
 	configBinding := bindings.NewConfigBinding(configService)
 	systemBinding := bindings.NewSystemBinding()
+	templateBinding := bindings.NewTemplateConfigBinding()
 
-	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding)
+	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding, templateBinding)
 
 	return &Container{
-		Lifecycle:        lifecycle,
-		ComponentBinding: componentBinding,
-		ConfigBinding:    configBinding,
-		SystemBinding:    systemBinding,
+		Lifecycle:             lifecycle,
+		ComponentBinding:      componentBinding,
+		ConfigBinding:         configBinding,
+		SystemBinding:         systemBinding,
+		TemplateConfigBinding: templateBinding,
 	}, nil
 }

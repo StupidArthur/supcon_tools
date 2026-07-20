@@ -65,3 +65,7 @@ htmlcov/
 web_frontend/node_modules/
 web_frontend/dist/
 web_frontend/.vite/
+
+# 允许 config-tool/frontend/src/lib/ 纳入版本控制（覆盖上面的 Python lib/ 规则）
+!config-tool/frontend/src/lib/
+!config-tool/frontend/src/lib/**
