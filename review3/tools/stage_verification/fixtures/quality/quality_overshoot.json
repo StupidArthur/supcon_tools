@@ -1,0 +1,13 @@
+{
+  "id": "quality_overshoot",
+  "options": { "errorBand": 0.05, "levelHigh": 1.2, "levelLow": 0.0 },
+  "samples": [
+    {"t": 0, "pv": 0.0, "sv": 1.0, "mv": 80},
+    {"t": 1, "pv": 0.5, "sv": 1.0, "mv": 80},
+    {"t": 2, "pv": 1.2, "sv": 1.0, "mv": 50},
+    {"t": 3, "pv": 1.15, "sv": 1.0, "mv": 40},
+    {"t": 4, "pv": 1.05, "sv": 1.0, "mv": 35},
+    {"t": 10, "pv": 1.0, "sv": 1.0, "mv": 30}
+  ],
+  "expect": { "overshootMin": 0.15 }
+}

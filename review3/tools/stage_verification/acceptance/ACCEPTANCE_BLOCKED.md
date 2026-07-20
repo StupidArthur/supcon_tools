@@ -38,20 +38,21 @@ npm run test:acceptance -- acceptance/stage_2/pid_diagram.acceptance.test.tsx -t
 
 ---
 
-## STAGE-5 / STAGE-6：Prospective 业务能力缺失（批次 5）
+## STAGE-5 / STAGE-6：Prospective 业务能力缺失（批次 5 / 5.1）
 
-阶段 5～6 acceptance 在业务实现前锁定。下列失败为**预期契约断言失败**，不是验收基础设施错误。在业务落地前不得记录 prospective baseline。
+阶段 5～6 acceptance 锁定**公共行为**（见 `CONTRACT_SURFACES.md`），不锁定内部 helper/文件名。  
+当前失败为预期契约断言（路由/组件/Binding 方法尚未实现），不是验收基础设施错误。
 
-| 类别 | 契约编号（代表） | 当前行为 | 预期行为 |
-|------|------------------|----------|----------|
-| 原子写 `/writes` | STAGE5-ATOMIC-001…015 | 仅有 legacy `/params` / `/override` | 整批验证、同周期应用、pending→applied/failed |
-| Faceplate 模式矩阵 | STAGE5-MODE-001…006 | `PidFaceplate` 模块不存在 | AUTO/MAN/CAS 可编辑性与有效给定规则 |
-| DSL 写回 | STAGE5-WRITEBACK-001…005 | 无 writeback / runtimeOverrides 表面 | 白名单写回、与 draft 隔离、禁止 PV/实时位 |
-| 趋势策略 | STAGE6-TREND-006…013 | 缺 `trendPolicy` / `RuntimeTrendPanel` | heartbeat/stale 不追加、双轴、PV 绑定、stale 冻结 |
-| 事件时间线 | STAGE6-EVENT-001…003 | 缺 `trendEvents` | pending/applied/failed + snapshot 确认时间 |
-| 控制品质 | STAGE6-QUALITY-001…006 | 缺 `controlQuality.ts` | 误差带/超调/稳态/60s 窗/分段重置等 |
+| 类别 | 契约编号 | 当前行为 | 预期行为 |
+|------|----------|----------|----------|
+| HTTP `/writes` | STAGE5-ATOMIC-001…015 | 无 `/writes`；仅有 `/params` | 整批验证、同周期确认、pending→applied/failed |
+| PidFaceplate UI | STAGE5-MODE-002…006 | 组件不存在 | AUTO/MAN/CAS 可编辑性与状态展示 |
+| `submitAtomicWrites` | STAGE5-ATOMIC-*（前端） | 模块不存在 | mock fetch 行为契约 |
+| `ApplyRuntimeOverrides` | STAGE5-WRITEBACK-001…005 | Binding 方法不存在 | 白名单写回、拒 PV/实时位 |
+| `computeControlQuality` | STAGE6-QUALITY-* | 模块不存在 | 数值 fixture 指标正确 |
+| `RuntimeTrendPanel` | STAGE6-TREND/EVENT-* | 组件不存在 | 双轴、事件、stale 冻结 |
 
-阻塞 baseline：**是**（阶段 5～6 prospective baseline 须等业务实现后全绿再记录）。
+阻塞 baseline：**是**（prospective baseline 须等业务实现后全绿）。
 
 ---
 

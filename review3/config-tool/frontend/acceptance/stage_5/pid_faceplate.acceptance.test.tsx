@@ -1,67 +1,115 @@
 /**
- * Stage 5 prospective acceptance: PidFaceplate mode/edit/status contracts.
+ * Stage 5 prospective: PidFaceplate behavioral render contracts.
+ * See CONTRACT_SURFACES.md — no internal FACEPLATE_* constant requirements.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { candidatesFor, frontendSrc, importContractModule } from '../prospectiveImport'
 
-async function loadFaceplate(contractId: string): Promise<Record<string, unknown>> {
+async function loadFaceplateModule(contractId: string) {
   return importContractModule(
     candidatesFor(frontendSrc('features', 'templates', 'secondOrderTank', 'PidFaceplate')),
     contractId,
-    'Expected AUTO/MAN/CAS editability, pending/applied/failed statuses.',
+    'Public React component PidFaceplate with accessible SV/MV/CSV/PV controls.',
   )
 }
 
 describe('stage 5 pid faceplate acceptance', () => {
-  it('exports PidFaceplate component', async () => {
-    const mod = await loadFaceplate('STAGE5-MODE-001')
-    expect(mod.PidFaceplate, 'STAGE5-MODE-001: PidFaceplate export required').toBeTypeOf('function')
-  })
-
-  it('AUTO: SV editable, MV locked', async () => {
-    const mod = await loadFaceplate('STAGE5-MODE-002')
-    const policy = mod.FACEPLATE_MODE_POLICY as
-      | { AUTO?: { svEditable?: boolean; mvEditable?: boolean } }
-      | undefined
-    expect(policy?.AUTO?.svEditable, 'STAGE5-MODE-002: AUTO SV must be editable').toBe(true)
-    expect(policy?.AUTO?.mvEditable, 'STAGE5-MODE-002: AUTO MV must be locked').toBe(false)
-  })
-
-  it('MAN: MV editable; SV is not the actual manipulated value', async () => {
-    const mod = await loadFaceplate('STAGE5-MODE-003')
-    const policy = mod.FACEPLATE_MODE_POLICY as
-      | { MAN?: { mvEditable?: boolean; svIsManipulatedValue?: boolean } }
-      | undefined
-    expect(policy?.MAN?.mvEditable, 'STAGE5-MODE-003: MAN MV must be editable').toBe(true)
-    expect(
-      policy?.MAN?.svIsManipulatedValue,
-      'STAGE5-MODE-003: MAN must not present SV as the actual manipulated value',
-    ).toBe(false)
-  })
-
-  it('CAS: CSV is effective setpoint; SV is not displayed as effective', async () => {
-    const mod = await loadFaceplate('STAGE5-MODE-004')
-    const policy = mod.FACEPLATE_MODE_POLICY as
-      | { CAS?: { effectiveSetpoint?: string } }
-      | undefined
-    expect(policy?.CAS?.effectiveSetpoint, 'STAGE5-MODE-004: CAS effective setpoint is CSV').toBe(
-      'CSV',
+  it('AUTO: SV enabled, MV disabled; PV readonly', async () => {
+    const mod = await loadFaceplateModule('STAGE5-MODE-002')
+    const { render, screen } = await import('@testing-library/react')
+    const PidFaceplate = mod.PidFaceplate as React.FC<Record<string, unknown>>
+    render(
+      <PidFaceplate
+        mode="AUTO"
+        values={{ PV: 0.5, SV: 0.8, CSV: 0.7, MV: 30, PB: 30, TI: 90, TD: 20, KD: 10, MODE: 5, SWPN: 1 }}
+        writeStatus="idle"
+        onSubmit={vi.fn()}
+      />,
     )
+    const sv = screen.getByTestId('faceplate-sv') as HTMLInputElement
+    const mv = screen.getByTestId('faceplate-mv') as HTMLInputElement
+    const pv = screen.getByTestId('faceplate-pv') as HTMLInputElement
+    expect(sv.disabled, 'STAGE5-MODE-002: AUTO SV editable').toBe(false)
+    expect(mv.disabled, 'STAGE5-MODE-002: AUTO MV locked').toBe(true)
+    expect(pv.disabled || pv.readOnly, 'STAGE5-MODE-006: PV always readonly').toBe(true)
   })
 
-  it('exposes pending/applied/failed write status vocabulary', async () => {
-    const mod = await loadFaceplate('STAGE5-MODE-005')
-    const statuses = mod.WRITE_STATUSES as string[] | undefined
-    expect(statuses, 'STAGE5-MODE-005: WRITE_STATUSES required').toEqual(
-      expect.arrayContaining(['pending', 'applied', 'failed']),
+  it('MAN: MV enabled; does not present SV as manipulated value', async () => {
+    const mod = await loadFaceplateModule('STAGE5-MODE-003')
+    const { render, screen } = await import('@testing-library/react')
+    const PidFaceplate = mod.PidFaceplate as React.FC<Record<string, unknown>>
+    render(
+      <PidFaceplate
+        mode="MAN"
+        values={{ PV: 0.5, SV: 0.8, CSV: 0.7, MV: 40, PB: 30, TI: 90, TD: 20, KD: 10, MODE: 4, SWPN: 1 }}
+        writeStatus="idle"
+        onSubmit={vi.fn()}
+      />,
     )
+    const mv = screen.getByTestId('faceplate-mv') as HTMLInputElement
+    expect(mv.disabled, 'STAGE5-MODE-003: MAN MV editable').toBe(false)
+    expect(screen.queryByTestId('faceplate-effective-setpoint')?.textContent || '').not.toMatch(/SV\s*=\s*manipulat/i)
   })
 
-  it('covers PV SV CSV MV PB TI TD KD MODE SWPN fields', async () => {
-    const mod = await loadFaceplate('STAGE5-MODE-006')
-    const fields = mod.FACEPLATE_FIELDS as string[] | undefined
-    expect(fields, 'STAGE5-MODE-006: FACEPLATE_FIELDS required').toEqual(
-      expect.arrayContaining(['PV', 'SV', 'CSV', 'MV', 'PB', 'TI', 'TD', 'KD', 'MODE', 'SWPN']),
+  it('CAS: effective setpoint shows CSV not SV', async () => {
+    const mod = await loadFaceplateModule('STAGE5-MODE-004')
+    const { render, screen } = await import('@testing-library/react')
+    const PidFaceplate = mod.PidFaceplate as React.FC<Record<string, unknown>>
+    render(
+      <PidFaceplate
+        mode="CAS"
+        values={{ PV: 0.5, SV: 0.8, CSV: 0.55, MV: 30, PB: 30, TI: 90, TD: 20, KD: 10, MODE: 3, SWPN: 1 }}
+        writeStatus="idle"
+        onSubmit={vi.fn()}
+      />,
     )
+    const effective = screen.getByTestId('faceplate-effective-setpoint')
+    expect(effective.textContent, 'STAGE5-MODE-004').toContain('0.55')
+    expect(effective.textContent, 'STAGE5-MODE-004: must not show SV as effective').not.toContain('0.80')
+  })
+
+  it('shows pending → applied → failed write statuses', async () => {
+    const mod = await loadFaceplateModule('STAGE5-MODE-005')
+    const { render, screen, rerender } = await import('@testing-library/react')
+    const PidFaceplate = mod.PidFaceplate as React.FC<Record<string, unknown>>
+    const props = {
+      mode: 'AUTO',
+      values: { PV: 0.5, SV: 0.8, CSV: 0.7, MV: 30, PB: 30, TI: 90, TD: 20, KD: 10, MODE: 5, SWPN: 1 },
+      onSubmit: vi.fn(),
+    }
+    const { rerender: rr } = render(<PidFaceplate {...props} writeStatus="pending" />)
+    expect(screen.getByTestId('faceplate-write-status').textContent?.toLowerCase()).toContain('pending')
+    rr(<PidFaceplate {...props} writeStatus="applied" />)
+    expect(screen.getByTestId('faceplate-write-status').textContent?.toLowerCase()).toContain('applied')
+    rr(<PidFaceplate {...props} writeStatus="failed" writeError="timeout" />)
+    expect(screen.getByTestId('faceplate-write-status').textContent?.toLowerCase()).toContain('failed')
+  })
+
+  it('covers all faceplate fields with labels', async () => {
+    const mod = await loadFaceplateModule('STAGE5-MODE-006')
+    const { render, screen } = await import('@testing-library/react')
+    const PidFaceplate = mod.PidFaceplate as React.FC<Record<string, unknown>>
+    render(
+      <PidFaceplate
+        mode="AUTO"
+        values={{ PV: 0.5, SV: 0.8, CSV: 0.7, MV: 30, PB: 30, TI: 90, TD: 20, KD: 10, MODE: 5, SWPN: 1 }}
+        writeStatus="idle"
+        onSubmit={vi.fn()}
+      />,
+    )
+    for (const id of [
+      'faceplate-pv',
+      'faceplate-sv',
+      'faceplate-csv',
+      'faceplate-mv',
+      'faceplate-pb',
+      'faceplate-ti',
+      'faceplate-td',
+      'faceplate-kd',
+      'faceplate-mode',
+      'faceplate-swpn',
+    ]) {
+      expect(screen.getByTestId(id), `STAGE5-MODE-006: ${id}`).toBeTruthy()
+    }
   })
 })

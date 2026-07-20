@@ -1,0 +1,11 @@
+{
+  "id": "quality_irregular_sampling",
+  "options": { "errorBand": 0.02, "mvHigh": 100, "mvLow": 0 },
+  "samples": [
+    {"t": 0.0, "pv": 0.8, "sv": 0.8, "mv": 100},
+    {"t": 0.5, "pv": 0.8, "sv": 0.8, "mv": 100},
+    {"t": 10.5, "pv": 0.8, "sv": 0.8, "mv": 50},
+    {"t": 11.0, "pv": 0.8, "sv": 0.8, "mv": 50}
+  ],
+  "expect": { "mvSaturationTimeApprox": 10.5, "integrateByTimeNotSampleCount": true }
+}

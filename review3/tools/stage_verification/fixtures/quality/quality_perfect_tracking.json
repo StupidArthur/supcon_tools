@@ -1,0 +1,14 @@
+{
+  "id": "quality_perfect_tracking",
+  "options": { "errorBand": 0.02, "levelHigh": 1.2, "levelLow": 0.0, "mvHigh": 100, "mvLow": 0 },
+  "samples": [
+    {"t": 0, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 10, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 20, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 30, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 40, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 50, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 60, "pv": 0.8, "sv": 0.8, "mv": 40}
+  ],
+  "expect": { "steadyStateErrorMax": 0.001, "settled": true }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "quality_missing_nonfinite",
+  "options": { "errorBand": 0.02 },
+  "samples": [
+    {"t": 0, "pv": 0.8, "sv": 0.8, "mv": 40},
+    {"t": 1, "pv": null, "sv": 0.8, "mv": 40},
+    {"t": 2, "pv": "NaN", "sv": 0.8, "mv": 40},
+    {"t": 3, "pv": "Infinity", "sv": 0.8, "mv": 40},
+    {"t": 4, "pv": 0.8, "sv": 0.8, "mv": 40}
+  ],
+  "expect": { "metricsMustBeFinite": true, "invalidSampleCountMin": 3 }
+}

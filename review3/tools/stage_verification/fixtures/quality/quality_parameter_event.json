@@ -1,0 +1,12 @@
+{
+  "id": "quality_parameter_event",
+  "options": { "errorBand": 0.02, "parameterEventAt": 5.0 },
+  "samples": [
+    {"t": 0, "pv": 0.5, "sv": 0.5, "mv": 30},
+    {"t": 4, "pv": 0.5, "sv": 0.5, "mv": 30},
+    {"t": 5, "pv": 0.5, "sv": 0.9, "mv": 60},
+    {"t": 6, "pv": 0.7, "sv": 0.9, "mv": 55},
+    {"t": 20, "pv": 0.9, "sv": 0.9, "mv": 40}
+  ],
+  "expect": { "segmentCountMin": 2, "previousSegmentArchived": true }
+}

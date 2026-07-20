@@ -1,0 +1,14 @@
+{
+  "id": "quality_level_limit_hits",
+  "options": { "errorBand": 0.02, "levelHigh": 1.0, "levelLow": 0.1 },
+  "samples": [
+    {"t": 0, "pv": 0.5, "sv": 0.5, "mv": 40},
+    {"t": 1, "pv": 1.05, "sv": 0.5, "mv": 40},
+    {"t": 2, "pv": 1.06, "sv": 0.5, "mv": 40},
+    {"t": 3, "pv": 0.9, "sv": 0.5, "mv": 40},
+    {"t": 4, "pv": 0.05, "sv": 0.5, "mv": 40},
+    {"t": 5, "pv": 0.04, "sv": 0.5, "mv": 40},
+    {"t": 6, "pv": 0.2, "sv": 0.5, "mv": 40}
+  ],
+  "expect": { "levelHighHits": 1, "levelLowHits": 1 }
+}
