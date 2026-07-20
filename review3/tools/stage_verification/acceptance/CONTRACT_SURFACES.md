@@ -129,13 +129,27 @@ Fixture 目录：`tools/stage_verification/fixtures/quality/*.json`
 
 ---
 
-## STAGE7 / STAGE8
+## STAGE7 — Batch / downsample / dialogs
 
-见后续批次登记；Batch / E2E 公共表面包括：
+| 字段 | 内容 |
+|------|------|
+| 契约 ID | STAGE7-BATCH-* / STAGE7-STATE-* / STAGE7-CSV-* / STAGE7-DOWNSAMPLE-* |
+| 阶段 | 7 |
+| 公共表面 | `SystemBinding.RunBatch` / `ExportBatch` / `AllocateBatchWorkDir` / `CanRunBatch`；前端 `BatchPanel`、`canStartBatch`/`canStartRealtime`；`downsample`；`batchExportDialogOptions` |
+| 类型 | Go Binding / React / TypeScript |
+| 依据 | `todo/7.md` §十四 |
+| 是否允许实现内部自由变化 | **是** |
 
-- `SystemBinding` batch 相关公开方法（以 Binding 方法名为准，落地时补全本表）
-- `downsample(points, maxPoints)`（已存在于 `trendBuffer.ts`，阶段 7 用 fixture 行为验收）
-- HTTP Engine API、进程与端口外部效果
+## STAGE8 — E2E scenario
+
+| 字段 | 内容 |
+|------|------|
+| 契约 ID | STAGE8-E2E-001 … 029 |
+| 阶段 | 8 |
+| 公共表面 | `tools/stage_verification/fixtures/e2e/stage_8_scenario.json` + 既有 HTTP/Binding/UI 公共表面组合 |
+| 类型 | JSON scenario + 外部进程效果 |
+| 依据 | `todo/7.md` §十五 |
+| 是否允许实现内部自由变化 | **是** |
 
 ---
 
@@ -144,3 +158,4 @@ Fixture 目录：`tools/stage_verification/fixtures/quality/*.json`
 | 日期 | 说明 |
 |------|------|
 | 2026-07-20 | 批次 5.1 初版：登记 stage 5～6 公共表面，剔除内部 helper 锁定 |
+| 2026-07-20 | 批次 6：登记 stage 7～8 Batch/E2E 公共表面 |

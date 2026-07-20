@@ -1,0 +1,13 @@
+{
+  "id": "downsample_duplicate_time",
+  "maxPoints": 4,
+  "points": [
+    {"cycleCount": 0, "simTime": 0.0, "values": {"tank_2.level": 0.1}},
+    {"cycleCount": 1, "simTime": 1.0, "values": {"tank_2.level": 0.2}},
+    {"cycleCount": 2, "simTime": 1.0, "values": {"tank_2.level": 0.25}},
+    {"cycleCount": 3, "simTime": null, "values": {"tank_2.level": 0.3}},
+    {"cycleCount": 4, "simTime": 4.0, "values": {"tank_2.level": 0.4}},
+    {"cycleCount": 5, "simTime": 5.0, "values": {"tank_2.level": 0.5}}
+  ],
+  "expect": { "timeOrderNonDecreasing": true, "deterministic": true }
+}

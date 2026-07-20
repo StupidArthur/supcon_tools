@@ -1,0 +1,10 @@
+{
+  "id": "downsample_small",
+  "maxPoints": 3000,
+  "points": [
+    {"cycleCount": 0, "simTime": 0.0, "values": {"tank_2.level": 0.1}},
+    {"cycleCount": 1, "simTime": 0.5, "values": {"tank_2.level": 0.2}},
+    {"cycleCount": 2, "simTime": 1.0, "values": {"tank_2.level": 0.3}}
+  ],
+  "expect": { "unchangedLength": 3 }
+}

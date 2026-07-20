@@ -1,0 +1,24 @@
+{
+  "id": "downsample_extrema",
+  "maxPoints": 8,
+  "points": [
+    {"cycleCount": 0, "simTime": 0.0, "values": {"tank_2.level": 0.1}},
+    {"cycleCount": 1, "simTime": 1.0, "values": {"tank_2.level": 0.2}},
+    {"cycleCount": 2, "simTime": 2.0, "values": {"tank_2.level": 0.9}},
+    {"cycleCount": 3, "simTime": 3.0, "values": {"tank_2.level": 0.3}},
+    {"cycleCount": 4, "simTime": 4.0, "values": {"tank_2.level": 0.05}},
+    {"cycleCount": 5, "simTime": 5.0, "values": {"tank_2.level": 0.4}},
+    {"cycleCount": 6, "simTime": 6.0, "values": {"tank_2.level": 0.41}},
+    {"cycleCount": 7, "simTime": 7.0, "values": {"tank_2.level": 0.42}},
+    {"cycleCount": 8, "simTime": 8.0, "values": {"tank_2.level": 0.43}},
+    {"cycleCount": 9, "simTime": 9.0, "values": {"tank_2.level": 0.44}},
+    {"cycleCount": 10, "simTime": 10.0, "values": {"tank_2.level": 0.45}},
+    {"cycleCount": 11, "simTime": 11.0, "values": {"tank_2.level": 0.5}}
+  ],
+  "expect": {
+    "maxLen": 3000,
+    "preserveFirstCycle": 0,
+    "preserveLastCycle": 11,
+    "mustIncludeSimTimes": [2.0, 4.0]
+  }
+}

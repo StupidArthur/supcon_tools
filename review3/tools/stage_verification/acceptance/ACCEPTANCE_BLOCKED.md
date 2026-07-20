@@ -56,6 +56,19 @@ npm run test:acceptance -- acceptance/stage_2/pid_diagram.acceptance.test.tsx -t
 
 ---
 
+## STAGE-7 / STAGE-8：Prospective 业务能力缺失（批次 6）
+
+| 类别 | 契约编号 | 当前行为 | 预期行为 |
+|------|----------|----------|----------|
+| Batch 唯一临时目录 | STAGE7-BATCH-003/004/008 | 无 `AllocateBatchWorkDir` | 每任务唯一路径、并发不覆盖、清理 |
+| 实时/Batch 互斥 | STAGE7-STATE-001…005 | 无 `CanRunBatch` / `batchState` | dirty/校验/运行态互斥 |
+| Batch UI | STAGE7-BATCH / CSV | 无 BatchPanel / dialog 模块 | 同页入口、CSV 导出、失败不空成功 |
+| E2E 闭环 | STAGE8-E2E-001…029 | 多数步骤能力未就绪 | 场景 JSON 全步骤可自动执行并清理 |
+
+阻塞 baseline：**是**
+
+---
+
 ## 登记规则
 
 1. 新增阻塞时追加一节，ID 格式 `STAGE-N-NNN` 或契约编号 `STAGE5-*/STAGE6-*`。
