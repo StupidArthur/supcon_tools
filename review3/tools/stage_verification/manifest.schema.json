@@ -11,13 +11,17 @@
     "schema_version": {"const": 1},
     "stage": {"type": "integer", "minimum": 0, "maximum": 8},
     "name": {"type": "string", "minLength": 1},
-    "required_documents": {"type": "array", "items": {"type": "string"}},
-    "allowed_paths": {"type": "array", "items": {"type": "string"}},
-    "forbidden_paths": {"type": "array", "items": {"type": "string"}},
-    "preserved_paths": {"type": "array", "items": {"type": "string"}},
-    "required_paths": {"type": "array", "items": {"type": "string"}},
-    "locked_paths": {"type": "array", "items": {"type": "string"}},
-    "locked_acceptance_paths": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "required_documents": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "allowed_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "forbidden_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "preserved_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "required_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "locked_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "locked_acceptance_paths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1
+    },
     "git_diff_check": {"type": "boolean"},
     "forbidden_symbols": {
       "type": "array",
@@ -25,11 +29,13 @@
         "type": "object",
         "required": ["id", "path_globs", "pattern"],
         "properties": {
-          "id": {"type": "string"},
-          "path_globs": {"type": "array", "items": {"type": "string"}},
-          "pattern": {"type": "string"},
-          "scope": {"enum": ["changed", "repository"]}
-        }
+          "id": {"type": "string", "minLength": 1},
+          "path_globs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "pattern": {"type": "string", "minLength": 1},
+          "scope": {"enum": ["changed", "repository"]},
+          "max_bytes": {"type": "integer", "exclusiveMinimum": 0}
+        },
+        "additionalProperties": false
       }
     },
     "commands": {
@@ -38,13 +44,14 @@
         "type": "object",
         "required": ["id", "cwd", "argv", "timeout_seconds"],
         "properties": {
-          "id": {"type": "string"},
-          "cwd": {"type": "string"},
+          "id": {"type": "string", "minLength": 1},
+          "cwd": {"type": "string", "minLength": 1},
           "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
           "windows_argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
           "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
           "env": {"type": "object", "additionalProperties": {"type": "string"}}
-        }
+        },
+        "additionalProperties": false
       }
     },
     "gates": {
@@ -53,11 +60,12 @@
         "type": "object",
         "required": ["id", "mode", "description"],
         "properties": {
-          "id": {"type": "string"},
+          "id": {"type": "string", "minLength": 1},
           "mode": {"enum": ["automated", "manual"]},
-          "description": {"type": "string"},
-          "checks": {"type": "array", "items": {"type": "string"}}
-        }
+          "description": {"type": "string", "minLength": 1},
+          "checks": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        },
+        "additionalProperties": false
       }
     }
   },

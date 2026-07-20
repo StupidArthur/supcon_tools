@@ -2,6 +2,16 @@
 
 本目录把阶段 0–8 的施工边界和退出门禁变成机器可读规则。实现 agent 不再用文字回报证明完成，而是反复运行统一验证命令。
 
+## 0. 根目录约定
+
+```text
+Git root:      仓库 `.git` 所在目录（本 monorepo 为 supcon_tools/）
+Project root:  review3/（含 tools/stage_verification、playbook、config-tool）
+Verifier root: review3/tools/stage_verification/
+```
+
+`--repo-root` 始终指向 **Project root**，不是 Git root。快照与命令 cwd 只覆盖 project root，不会把同仓库 sibling 项目纳入范围。
+
 ## 1. 验收者先准备 acceptance suite 和 baseline
 
 派发阶段前，验收者必须先创建 manifest 中列出的 `locked_acceptance_paths`。阶段 5–8 的 reviewer suite 路径分别位于：
@@ -19,10 +29,12 @@ tools/stage_verification/acceptance/stage_8/
 
 ```powershell
 $env:STAGE_VERIFICATION_REVIEW_KEY = '<long-random-reviewer-secret>'
-python tools/stage_verification/verify_stage.py 5 --record-baseline
+python tools/stage_verification/verify_stage.py 5 `
+  --record-baseline `
+  --acceptance-mode prospective
 ```
 
-默认 baseline 位于 `.git/stage_verification/`。在当前 Codex 工作区中，验收者可获批写入 `.git`，实现 agent 只能读取，因此适用于未提交且累计脏的仓库。实现 agent 不得使用 `--record-baseline`、`--force-baseline` 或 `--state-dir`。
+阶段 0–4 使用 `--acceptance-mode retrospective`；阶段 5–8 使用 `prospective`。默认 baseline 位于 **Git root** 下的 `.git/stage_verification/`。在当前 Codex 工作区中，验收者可获批写入 `.git`，实现 agent 只能读取，因此适用于未提交且累计脏的仓库。实现 agent 不得使用 `--record-baseline`、`--force-baseline` 或 `--state-dir`。
 
 也可以显式使用验收者拥有的仓库外目录；非默认 `--state-dir` 在验证时必须提供与 baseline 信任锚一致的 reviewer key。需要通过代码评审管理 baseline 的团队，可以把 `--state-dir` 指向仓库内目录并先提交文件。
 
@@ -63,6 +75,17 @@ python tools/stage_verification/verify_stage.py 2
 ```
 
 attestation 绑定 baseline、manifest、签署时的最终文件树和自动检查状态摘要。签署后任何被纳入快照的文件变化都会使它失效；`--evidence` 若指向文件，还会绑定该文件的 SHA-256。只有验收者最终运行时提供 reviewer key；实现 agent 不持有该 key，因此只能得到 `NEEDS_MANUAL`。
+
+全部自动门禁与人工签署通过后，验收者封存阶段：
+
+```powershell
+python tools/stage_verification/verify_stage.py 4 `
+  --finalize `
+  --reviewer '<name>'
+python tools/stage_verification/verify_stage.py 4 --verify-accepted
+python tools/stage_verification/verify_all.py --check-config
+python tools/stage_verification/verify_all.py --accepted-through 4
+```
 
 ## 信任边界
 

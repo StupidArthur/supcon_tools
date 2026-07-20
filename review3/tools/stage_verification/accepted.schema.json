@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Second-order tank stage accepted checkpoint",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "stage",
+    "stage_name",
+    "acceptance_mode",
+    "baseline_fingerprint",
+    "manifest_sha256",
+    "entry_git_head",
+    "final_git_head",
+    "final_tree_sha256",
+    "locked_acceptance_sha256",
+    "automated_checks_sha256",
+    "manual_attestations_sha256",
+    "commands",
+    "reviewer",
+    "accepted_at",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "stage": {"type": "integer", "minimum": 0, "maximum": 8},
+    "stage_name": {"type": "string", "minLength": 1},
+    "acceptance_mode": {"enum": ["retrospective", "prospective"]},
+    "baseline_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
+    "manifest_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "entry_git_head": {"type": ["string", "null"]},
+    "final_git_head": {"type": ["string", "null"]},
+    "final_tree_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "locked_acceptance_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "automated_checks_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "manual_attestations_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"type": "string"},
+          "summary": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "reviewer": {"type": "string", "minLength": 1},
+    "accepted_at": {"type": "string", "minLength": 1},
+    "signature": {"type": "string", "minLength": 64, "maxLength": 64}
+  },
+  "additionalProperties": false
+}
