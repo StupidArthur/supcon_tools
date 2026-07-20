@@ -1,0 +1,9 @@
+{
+  "instance_name": "stage4_acceptance_fixture",
+  "mode": "REALTIME",
+  "cycle_count": 12,
+  "sim_time": 0.6,
+  "cycle_time": 0.05,
+  "safe_state": false,
+  "consecutive_failures": 0
+}

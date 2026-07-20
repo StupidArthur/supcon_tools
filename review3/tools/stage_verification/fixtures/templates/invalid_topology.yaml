@@ -1,0 +1,10 @@
+# Intentionally invalid topology for acceptance negative tests.
+# Missing required tank_2 and uses an unknown program type.
+clock:
+  mode: REALTIME
+  cycle_time: 0.5
+
+program:
+  - name: broken_source
+    type: NOT_A_REAL_PROGRAM
+    value: 1

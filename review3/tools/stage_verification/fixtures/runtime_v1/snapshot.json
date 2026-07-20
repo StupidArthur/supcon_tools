@@ -1,0 +1,33 @@
+{
+  "cycle_count": 12,
+  "sim_time": 0.6,
+  "source_flow": 0.0012,
+  "valve_1": {
+    "target_opening": 66.0,
+    "current_opening": 65.5,
+    "inlet_flow": 0.0012,
+    "outlet_flow": 0.00118
+  },
+  "tank_1": {
+    "level": 0.512,
+    "inlet_flow": 0.00118,
+    "outlet_flow": 0.00115
+  },
+  "tank_2": {
+    "level": 0.8,
+    "inlet_flow": 0.00115,
+    "outlet_flow": 0.00115
+  },
+  "pid2": {
+    "PV": 0.8,
+    "SV": 0.8,
+    "CSV": 0.8,
+    "MV": 66.0,
+    "PB": 30.0,
+    "TI": 90.0,
+    "TD": 20.0,
+    "KD": 10.0,
+    "MODE": 5,
+    "SWPN": 1
+  }
+}

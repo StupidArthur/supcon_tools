@@ -1,0 +1,77 @@
+# Fixture with unknown keys and comments that round-trips must preserve.
+clock:
+  mode: REALTIME
+  cycle_time: 0.5
+  # keep this comment
+  experimental_flag: true
+
+program:
+  - name: source_flow
+    type: Variable
+    value: 0.0012
+    undocumented_key: keep-me
+    display_args: []
+
+  - name: valve_1
+    type: VALVE
+    params:
+      full_travel_time: 12.0
+      initial_opening: 0.0
+      mystery_param: 42
+    display_args: []
+    inputs:
+      target_opening: pid2.MV
+      inlet_flow: source_flow
+
+  - name: tank_1
+    type: CYLINDRICAL_TANK
+    params:
+      height: 1.2
+      radius: 0.15
+      outlet_area: 0.00025
+      initial_level: 0.15
+    display_args:
+      - "level[1.2]"
+    inputs:
+      inlet_flow: valve_1.outlet_flow
+
+  - name: tank_2
+    type: CYLINDRICAL_TANK
+    params:
+      height: 1.2
+      radius: 0.15
+      outlet_area: 0.0002
+      initial_level: 0.10
+    display_args:
+      - "level[1.2]"
+    inputs:
+      inlet_flow: tank_1.outlet_flow
+
+  - name: pid2
+    type: PID
+    execute_first: true
+    params:
+      PB: 30.0
+      TI: 90.0
+      TD: 20.0
+      KD: 10.0
+      MODE: 5
+      SWPN: 1
+      SVSCL: 0.0
+      SVSCH: 1.2
+      SVL: 0.0
+      SVH: 1.2
+      MVSCL: 0.0
+      MVSCH: 100.0
+      MVL: 0.0
+      MVH: 100.0
+      PV: 0.10
+      SV: 0.8
+      MV: 0.0
+    display_args:
+      - "MV[100]"
+      - "PV[1.2]"
+      - "SV[1.2]"
+      - "MODE"
+    inputs:
+      PV: tank_2.level

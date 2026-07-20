@@ -1,0 +1,5 @@
+{
+  "runtime_name": "stage4_acceptance_fixture",
+  "schema": "runtime_v1",
+  "programs": ["source_flow", "valve_1", "tank_1", "tank_2", "pid2"]
+}

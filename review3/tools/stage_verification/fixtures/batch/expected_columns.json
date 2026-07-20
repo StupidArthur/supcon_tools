@@ -1,0 +1,16 @@
+{
+  "required_columns": [
+    "cycle",
+    "sim_time",
+    "tank_1.level",
+    "tank_2.level",
+    "valve_1.current_opening",
+    "pid2.PV",
+    "pid2.SV",
+    "pid2.MV",
+    "pid2.PB",
+    "pid2.TI",
+    "pid2.TD",
+    "pid2.MODE"
+  ]
+}
