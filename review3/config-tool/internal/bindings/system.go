@@ -98,6 +98,7 @@ type SystemBinding struct {
 	ctx             context.Context
 	mu              sync.Mutex
 	proc            *managedProcess // 当前进程
+	activeBatches   int             // 当前进行中的批量任务数（受 mu 保护）
 	dataFactoryPath string
 	lastError       string // 最近一次退出的错误（proc=nil 时仍可返回）
 
@@ -256,6 +257,25 @@ func BuildArgs(params StartParams) []string {
 	return args
 }
 
+// beginBatch 获取批量任务 lease：实时进程运行中则拒绝，否则 activeBatches++。
+// 调用方必须用 defer endBatch()，失败路径也要释放。
+func (b *SystemBinding) beginBatch() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.proc != nil {
+		return fmt.Errorf("实时仿真正在运行，无法执行批量任务")
+	}
+	b.activeBatches++
+	return nil
+}
+
+// endBatch 释放批量任务 lease。
+func (b *SystemBinding) endBatch() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.activeBatches--
+}
+
 // Start 启动 DataFactory 并等待 API ready
 // 只有在 API 真正 ready 且 instance_name 匹配后才返回成功
 func (b *SystemBinding) Start(params StartParams) error {
@@ -267,6 +287,10 @@ func (b *SystemBinding) Start(params StartParams) error {
 	if b.dataFactoryPath == "" {
 		b.mu.Unlock()
 		return fmt.Errorf("未设置 DataFactory 路径，请先选择 DataFactory.exe")
+	}
+	if b.activeBatches > 0 {
+		b.mu.Unlock()
+		return fmt.Errorf("批量任务正在运行，无法启动实时仿真")
 	}
 
 	// 从检查到 cmd.Start/proc 注册始终持锁。这样并发 Start 不能越过检查，
@@ -672,6 +696,17 @@ func (b *SystemBinding) SaveYAMLFile() (string, error) {
 	})
 }
 
+// SaveCSVFile 保存 CSV 文件对话框（独立于 YAML，不复用 YAML 过滤器）
+func (b *SystemBinding) SaveCSVFile() (string, error) {
+	return runtime.SaveFileDialog(b.ctx, runtime.SaveDialogOptions{
+		Title:           "保存 CSV 文件",
+		DefaultFilename: "result.csv",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "CSV 文件", Pattern: "*.csv"},
+		},
+	})
+}
+
 // RunBatch 运行批量仿真
 func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, error) {
 	if b.dataFactoryPath == "" {
@@ -680,11 +715,19 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 	if cycles <= 0 {
 		return BatchResult{}, fmt.Errorf("周期数必须大于 0")
 	}
+	if err := b.beginBatch(); err != nil {
+		return BatchResult{}, err
+	}
+	defer b.endBatch()
 
-	tmpFile := filepath.Join(filepath.Dir(b.dataFactoryPath), "_batch_export.csv")
-	defer os.Remove(tmpFile)
+	workDir, err := os.MkdirTemp("", "review3-batch-*")
+	if err != nil {
+		return BatchResult{}, fmt.Errorf("创建批量临时目录失败: %w", err)
+	}
+	defer os.RemoveAll(workDir)
+	csvPath := filepath.Join(workDir, "result.csv")
 
-	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", tmpFile}
+	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", csvPath}
 	cmd := b.commandFactory(b.dataFactoryPath, args...)
 	cmd.Dir = filepath.Dir(b.dataFactoryPath)
 	output, err := cmd.CombinedOutput()
@@ -692,7 +735,10 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 		return BatchResult{}, fmt.Errorf("DataFactory 运行失败: %w\n%s", err, string(output))
 	}
 
-	return parseCSV(tmpFile)
+	if err := validateBatchCSV(csvPath); err != nil {
+		return BatchResult{}, err
+	}
+	return parseCSV(csvPath)
 }
 
 // ExportBatch 导出批量仿真结果
@@ -700,9 +746,16 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 	if b.dataFactoryPath == "" {
 		return fmt.Errorf("未设置 DataFactory 路径")
 	}
+	if exportPath == "" {
+		return fmt.Errorf("导出路径不能为空")
+	}
 	if cycles <= 0 {
 		return fmt.Errorf("周期数必须大于 0")
 	}
+	if err := b.beginBatch(); err != nil {
+		return err
+	}
+	defer b.endBatch()
 
 	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", exportPath}
 	cmd := b.commandFactory(b.dataFactoryPath, args...)
@@ -710,6 +763,34 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("DataFactory 运行失败: %w\n%s", err, string(output))
+	}
+	return validateBatchCSV(exportPath)
+}
+
+// validateBatchCSV 确认目标 CSV 存在、非空、且至少有一行数据（不只表头）。
+func validateBatchCSV(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("CSV 不存在: %w", err)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf("CSV 文件为空")
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("读取 CSV 失败: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	if _, err := reader.Read(); err != nil {
+		return fmt.Errorf("解析 CSV 表头失败: %w", err)
+	}
+	if _, err := reader.Read(); err == io.EOF {
+		return fmt.Errorf("CSV 无数据行")
+	} else if err != nil {
+		return fmt.Errorf("解析 CSV 失败: %w", err)
 	}
 	return nil
 }
@@ -735,7 +816,7 @@ func parseCSV(path string) (BatchResult, error) {
 			break
 		}
 		if err != nil {
-			break
+			return BatchResult{}, fmt.Errorf("解析 CSV 失败: %w", err)
 		}
 		row := map[string]any{"_cycle": rowIdx}
 		for i, value := range record {
@@ -750,6 +831,10 @@ func parseCSV(path string) (BatchResult, error) {
 		}
 		rows = append(rows, row)
 		rowIdx++
+	}
+
+	if len(rows) == 0 {
+		return BatchResult{}, fmt.Errorf("CSV 无数据行")
 	}
 
 	return BatchResult{

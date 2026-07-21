@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from 'react'
 import type { SelectedObjectId, DraftConfig } from '../types'
 import { useTemplateStore } from '../useTemplateStore'
 import { useRuntimeStore } from '../../runtime/useRuntimeStore'
@@ -33,6 +34,18 @@ const LAYOUT = {
   // 排水
   drain: { x: 700, y: 450 },
 } as const
+
+/** Shared keyboard activation for selectable P&ID symbols (Enter + Space). */
+function handleSelectableKeyDown(
+  event: KeyboardEvent,
+  onActivate: () => void,
+): void {
+  const key = event.key
+  if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+    event.preventDefault()
+    onActivate()
+  }
+}
 
 interface DiagramProps {
   draft: DraftConfig
@@ -389,7 +402,7 @@ function SourceSymbol({
       data-testid="source-flow"
       data-object-id="source_flow"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => handleSelectableKeyDown(e, onClick)}
     >
       {/* 水源圆圈 */}
       <circle
@@ -453,7 +466,7 @@ function ValveSymbol({
       data-testid="valve-1"
       data-object-id="valve_1"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => handleSelectableKeyDown(e, onClick)}
     >
       {/* 阀体（菱形） */}
       <polygon
@@ -531,7 +544,7 @@ function TankSymbol({
       data-testid={label.toLowerCase().replace(' ', '-')}
       data-object-id={objectId}
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => handleSelectableKeyDown(e, onClick)}
     >
       {/* 水箱外壳 */}
       <rect
@@ -641,7 +654,7 @@ function LTSymbol({
       data-testid="lt-201"
       data-object-id="lt_201"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => handleSelectableKeyDown(e, onClick)}
     >
       {/* 圆圈 */}
       <circle
@@ -681,7 +694,7 @@ function PIDSymbol({
       data-testid="pid2"
       data-object-id="pid2"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => handleSelectableKeyDown(e, onClick)}
     >
       {/* 圆角矩形 */}
       <rect

@@ -28,6 +28,7 @@ export function RuntimeToolbar() {
   const runtimeApiPort = useRuntimeStore((s) => s.apiPort)
   const runtimeConnect = useRuntimeStore((s) => s.connect)
   const runtimeDisconnect = useRuntimeStore((s) => s.disconnect)
+  const rotatePreviousRun = useRuntimeStore((s) => s.rotatePreviousRun)
 
   const [startError, setStartError] = useState<string | null>(null)
   // operation token：Stop 开始时递增，使正在等待的 Start 操作失效
@@ -98,6 +99,9 @@ export function RuntimeToolbar() {
     setRuntimeState('STARTING')
 
     try {
+      // 新一次运行：归档上一轮趋势，避免普通 rerender 清空。
+      rotatePreviousRun()
+
       // 后端 Start 会同步等待 API ready
       await systemApi.start({
         configPath: currentSourcePath,

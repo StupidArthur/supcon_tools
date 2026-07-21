@@ -18,6 +18,10 @@ export function SaveTemplate(arg1) {
   return window['go']['bindings']['TemplateConfigBinding']['SaveTemplate'](arg1);
 }
 
+export function ApplyRuntimeOverrides(arg1) {
+  return window['go']['bindings']['TemplateConfigBinding']['ApplyRuntimeOverrides'](arg1);
+}
+
 export function SetContext(arg1) {
   return window['go']['bindings']['TemplateConfigBinding']['SetContext'](arg1);
 }

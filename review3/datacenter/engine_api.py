@@ -17,15 +17,20 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from components.utils.logger import get_logger
+from controller.engine import AtomicWrite
 
 
 logger = get_logger("engine_api")
+
+_WRITE_CONFIRM_ABS_TOL = 1e-6
+_DEFAULT_CONFIRM_TIMEOUT_S = 3.0
 
 
 # --------------------------------------------------------------------------- #
@@ -42,9 +47,31 @@ class OverrideRequest(BaseModel):
     value: float = Field(..., description="新值")
 
 
+class AtomicWriteItem(BaseModel):
+    tag: str
+    value: float
+
+
+class AtomicWritesRequest(BaseModel):
+    writes: List[AtomicWriteItem]
+    confirm_timeout_s: Optional[float] = None
+
+
 class ExportRequest(BaseModel):
     path: str = Field(..., description="CSV 输出路径")
     cycles: Optional[int] = Field(default=None, description="导出最近 N 个 cycle；None=导出全部缓冲")
+
+
+@dataclass
+class WriteBatchRecord:
+    batch_id: str
+    writes: List[Dict[str, Any]]
+    status: str
+    accepted_cycle_count: Optional[int]
+    confirmed_cycle_count: Optional[int]
+    accepted_monotonic: float
+    confirm_timeout_s: float
+    error: Optional[str] = None
 
 
 class StatusResponse(BaseModel):
@@ -136,6 +163,7 @@ class EngineBinding:
       - 在 ``_latest_snapshot_lock`` 锁内写入；status 和 /snapshot 必须从同一份读取，
         保证 cycle_count/sim_time 与真实 Engine 推进一致。
       - ``snapshot_buffer`` 保留最近 N 个周期供 export。
+      - ``_batches`` 维护原子写 pending/applied/failed 生命周期。
     """
 
     instance_name: str
@@ -151,6 +179,8 @@ class EngineBinding:
     # 任何缺字段（含 cycle_count / sim_time）必须显式缺失，不替换为 0。
     _latest_snapshot: Optional[Dict[str, Any]] = None
     _latest_snapshot_lock: threading.Lock = field(default_factory=threading.Lock)
+    _batch_lock: threading.Lock = field(default_factory=threading.Lock)
+    _batches: Dict[str, WriteBatchRecord] = field(default_factory=dict)
 
     def push_snapshot(self, snapshot: Dict[str, Any]) -> None:
         """由 standalone_main 的引擎线程每周期调用一次。
@@ -172,6 +202,9 @@ class EngineBinding:
                 # 砍掉前 1/4
                 del self.snapshot_buffer[: self._buffer_max // 4]
 
+        # 4) 原子写 batch 确认 / 超时
+        self._update_write_batches(snapshot)
+
     def get_recent_snapshots(self, n: Optional[int]) -> List[Dict[str, Any]]:
         with self._buffer_lock:
             buf = list(self.snapshot_buffer)
@@ -186,6 +219,91 @@ class EngineBinding:
             if self._latest_snapshot is None:
                 return None
             return dict(self._latest_snapshot)
+
+    def submit_atomic_writes(
+        self,
+        writes: List[Dict[str, Any]],
+        confirm_timeout_s: Optional[float] = None,
+    ) -> WriteBatchRecord:
+        timeout = (
+            float(confirm_timeout_s)
+            if confirm_timeout_s is not None
+            else _DEFAULT_CONFIRM_TIMEOUT_S
+        )
+        if not (timeout > 0) or timeout != timeout or timeout == float("inf"):
+            raise ValueError("confirm_timeout_s must be a finite positive number")
+        atomic_items = [
+            AtomicWrite(tag=str(w["tag"]), value=float(w["value"])) for w in writes
+        ]
+        self.engine.queue_atomic_writes(atomic_items)
+        snap = self.get_latest_snapshot() or {}
+        accepted_cycle = snap.get("cycle_count")
+        batch_id = str(uuid4())
+        record = WriteBatchRecord(
+            batch_id=batch_id,
+            writes=[{"tag": w.tag, "value": w.value} for w in atomic_items],
+            status="pending",
+            accepted_cycle_count=accepted_cycle if isinstance(accepted_cycle, int) else None,
+            confirmed_cycle_count=None,
+            accepted_monotonic=time.monotonic(),
+            confirm_timeout_s=timeout,
+            error=None,
+        )
+        with self._batch_lock:
+            self._batches[batch_id] = record
+        return record
+
+    def get_batch(self, batch_id: str) -> Optional[WriteBatchRecord]:
+        with self._batch_lock:
+            rec = self._batches.get(batch_id)
+            if rec is None:
+                return None
+            self._expire_if_needed(rec, time.monotonic())
+            return rec
+
+    def list_batches(self) -> List[WriteBatchRecord]:
+        now = time.monotonic()
+        with self._batch_lock:
+            for rec in self._batches.values():
+                self._expire_if_needed(rec, now)
+            return list(self._batches.values())
+
+    def _expire_if_needed(self, rec: WriteBatchRecord, now: float) -> None:
+        if rec.status != "pending":
+            return
+        if now - rec.accepted_monotonic >= rec.confirm_timeout_s:
+            rec.status = "failed"
+            rec.error = "confirm_timeout"
+
+    def _update_write_batches(self, snapshot: Dict[str, Any]) -> None:
+        now = time.monotonic()
+        cycle = snapshot.get("cycle_count")
+        with self._batch_lock:
+            for rec in self._batches.values():
+                if rec.status != "pending":
+                    continue
+                self._expire_if_needed(rec, now)
+                if rec.status != "pending":
+                    continue
+                if self._batch_fully_matched(rec, snapshot):
+                    rec.status = "applied"
+                    rec.confirmed_cycle_count = cycle if isinstance(cycle, int) else None
+                    rec.error = None
+
+    @staticmethod
+    def _batch_fully_matched(rec: WriteBatchRecord, snapshot: Dict[str, Any]) -> bool:
+        for item in rec.writes:
+            tag = item["tag"]
+            expected = float(item["value"])
+            if tag not in snapshot:
+                return False
+            try:
+                actual_f = float(snapshot[tag])
+            except (TypeError, ValueError):
+                return False
+            if abs(actual_f - expected) > _WRITE_CONFIRM_ABS_TOL:
+                return False
+        return True
 
 
 # --------------------------------------------------------------------------- #
@@ -321,6 +439,64 @@ def api_override(name: str, req: OverrideRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
     b.engine.override_variable(req.tag, req.value)
     return {"ok": True, "queued": {"tag": req.tag, "value": req.value}}
+
+
+def _batch_to_dict(rec: WriteBatchRecord) -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "batch_id": rec.batch_id,
+        "status": rec.status,
+        "writes": rec.writes,
+        "accepted_cycle_count": rec.accepted_cycle_count,
+        "confirmed_cycle_count": rec.confirmed_cycle_count,
+        "error": rec.error,
+    }
+
+
+@app.post("/api/instances/{runtimeName}/writes")
+def api_atomic_writes(runtimeName: str, req: AtomicWritesRequest) -> Dict[str, Any]:
+    """原子在线写：整批校验入队，成功仅返回 pending。"""
+    b = get_binding()
+    if runtimeName != b.instance_name:
+        raise HTTPException(status_code=404, detail=f"实例不存在: {runtimeName}")
+    if not req.writes:
+        raise HTTPException(status_code=400, detail="writes must not be empty")
+    try:
+        record = b.submit_atomic_writes(
+            [{"tag": w.tag, "value": w.value} for w in req.writes],
+            confirm_timeout_s=req.confirm_timeout_s,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"atomic write rejected: {exc}") from exc
+    return {
+        "ok": True,
+        "batch_id": record.batch_id,
+        "status": "pending",
+        "writes": record.writes,
+        "accepted_cycle_count": record.accepted_cycle_count,
+    }
+
+
+@app.get("/api/instances/{runtimeName}/writes")
+def api_list_writes(runtimeName: str) -> Dict[str, Any]:
+    b = get_binding()
+    if runtimeName != b.instance_name:
+        raise HTTPException(status_code=404, detail=f"实例不存在: {runtimeName}")
+    batches = [_batch_to_dict(rec) for rec in b.list_batches()]
+    return {"ok": True, "batches": batches}
+
+
+@app.get("/api/instances/{runtimeName}/writes/{batchId}")
+def api_get_write_batch(runtimeName: str, batchId: str) -> Dict[str, Any]:
+    b = get_binding()
+    if runtimeName != b.instance_name:
+        raise HTTPException(status_code=404, detail=f"实例不存在: {runtimeName}")
+    rec = b.get_batch(batchId)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"batch 不存在: {batchId}")
+    return _batch_to_dict(rec)
 
 
 @app.post("/api/instances/{name}/export")

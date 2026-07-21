@@ -34,6 +34,24 @@ logger = get_logger()
 # 连续失败多少次后切入 SAFE STATE（算法节点持续抛异常时触发）
 _SAFE_STATE_FAILURE_THRESHOLD = 5
 
+# 原子在线写：默认可写属性（MV 另受 MODE 约束）
+_ATOMIC_WRITE_ATTRS = frozenset({"SV", "PB", "TI", "TD", "KD"})
+_ATOMIC_WRITE_MV_ATTR = "MV"
+# 与 components.programs.pid 手动类 MODE 对齐
+_ATOMIC_MV_ALLOWED_MODES = frozenset({2, 3, 4, 8})
+_ATOMIC_REJECT_ATTRS = frozenset({
+    "PV", "AUTO", "CAS", "level", "current_opening",
+    "inlet_flow", "outlet_flow", "source_flow",
+})
+
+
+@dataclass(frozen=True)
+class AtomicWrite:
+    """单条原子写目标（tag 为完整位号，如 pid2.SV）。"""
+
+    tag: str
+    value: float
+
 
 @dataclass
 class EngineConfig:
@@ -95,6 +113,9 @@ class UnifiedEngine:
 
         # 外部覆写值队列（来自 OPCUA 等外部系统的写值命令，在每个周期开始时应用）
         self._external_overrides: List[Tuple[str, float]] = []
+
+        # 原子批次队列：每项为已校验的 (instance_name, attr, value) 列表；整批同周期应用
+        self._pending_atomic_batches: List[List[Tuple[str, str, float]]] = []
 
         # 节点异常连续失败计数 & SAFE STATE 标志
         # 工业语义：算法节点持续抛异常时不应"继续算错误的值"，而是切到 SAFE STATE
@@ -399,6 +420,51 @@ class UnifiedEngine:
         with self._lock:
             self._pending_param_updates.append((instance_name, param_name, value))
 
+    def queue_atomic_writes(self, writes: List[AtomicWrite]) -> None:
+        """整批校验并入队；任一非法则抛 ValueError，且零部分入队。"""
+        if not writes:
+            raise ValueError("atomic writes batch must not be empty")
+        parsed: List[Tuple[str, str, float]] = []
+        seen_tags: set[str] = set()
+        with self._lock:
+            for item in writes:
+                tag = str(item.tag).strip()
+                value = item.value
+                if tag in seen_tags:
+                    raise ValueError(f"duplicate tag in batch: {tag}")
+                seen_tags.add(tag)
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    raise ValueError(f"non-numeric value for tag {tag}")
+                fval = float(value)
+                if fval != fval or fval in (float("inf"), float("-inf")):
+                    raise ValueError(f"non-finite value for tag {tag}")
+                if "." not in tag:
+                    raise ValueError(f"unknown or derived tag rejected: {tag}")
+                inst_name, attr = tag.rsplit(".", 1)
+                if attr in _ATOMIC_REJECT_ATTRS or attr.upper() in {"AUTO", "CAS", "PV"}:
+                    raise ValueError(f"readonly or derived tag rejected: {tag}")
+                if attr == _ATOMIC_WRITE_MV_ATTR:
+                    inst = self._instances.get(inst_name)
+                    if inst is None:
+                        raise ValueError(f"unknown tag: {tag}")
+                    mode = getattr(inst, "MODE", None)
+                    try:
+                        mode_i = int(mode)
+                    except (TypeError, ValueError):
+                        raise ValueError(f"MV write rejected: invalid MODE on {inst_name}")
+                    if mode_i not in _ATOMIC_MV_ALLOWED_MODES:
+                        raise ValueError(
+                            f"MV write rejected under MODE={mode_i} (manual modes only)"
+                        )
+                elif attr not in _ATOMIC_WRITE_ATTRS:
+                    # 拒绝未知属性与现场过程量（level / opening / flow 等）
+                    raise ValueError(f"unknown or forbidden tag: {tag}")
+                inst = self._instances.get(inst_name)
+                if inst is None or not hasattr(inst, attr):
+                    raise ValueError(f"unknown tag: {tag}")
+                parsed.append((inst_name, attr, fval))
+            self._pending_atomic_batches.append(parsed)
+
     def queue_variable_update(
         self, name: str, new_expression: str | None = None, new_value: Any | None = None
     ) -> None:
@@ -540,6 +606,7 @@ class UnifiedEngine:
                 and not self._pending_add_items
                 and not self._pending_delete_instances
                 and not self._pending_delete_variables
+                and not self._pending_atomic_batches
             ):
                 return
 
@@ -584,6 +651,16 @@ class UnifiedEngine:
                 if inst is not None:
                     setattr(inst, param, value)
             self._pending_param_updates.clear()
+
+            # 原子批次：同一把锁内整批应用，保证同周期 snapshot 可见全部目标
+            for batch in self._pending_atomic_batches:
+                for inst_name, attr, value in batch:
+                    inst = self._instances.get(inst_name)
+                    if inst is None:
+                        continue
+                    setattr(inst, attr, value)
+                    self.vars.set(f"{inst_name}.{attr}", value)
+            self._pending_atomic_batches.clear()
 
             # 变量更新
             for var_name, new_expr, new_val in self._pending_variable_updates:

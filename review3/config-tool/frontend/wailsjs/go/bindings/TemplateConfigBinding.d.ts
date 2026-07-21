@@ -11,6 +11,13 @@ export function LoadTemplate(arg1:string):Promise<config.TemplateDocument>;
 
 export function SaveTemplate(arg1:config.SaveTemplateRequest):Promise<config.SaveTemplateResult>;
 
+export function ApplyRuntimeOverrides(arg1: {
+  targetPath: string
+  expectedHash: string
+  overrides: Record<string, number>
+  includeMV: boolean
+}): Promise<{ path: string; contentHash: string; appliedFields: string[] }>;
+
 export function SetContext(arg1:context.Context):Promise<void>;
 
 export function ValidateTemplateConfig(arg1:config.TemplateConfig):Promise<Array<config.ValidationIssue>>;

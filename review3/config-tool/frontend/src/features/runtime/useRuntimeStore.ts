@@ -31,8 +31,22 @@ import {
   computeStaleThresholdMs,
 } from './dataSelection'
 import { createRuntimeWs, type RuntimeWs } from './websocket'
-import type { TrendBuffer } from './trendBuffer'
+import type { TrendBuffer, TrendPoint } from './trendBuffer'
 import { TrendBuffer as TrendBufferClass } from './trendBuffer'
+import { computeControlQuality, type QualitySample } from './controlQuality'
+
+export interface RuntimeWriteEvent {
+  id: string
+  status: 'pending' | 'applied' | 'failed'
+  tag: string
+  oldValue: number | null
+  newValue: number | null
+  source: string
+  /** REST 接受时刻（仅表示 pending 创建） */
+  restReturnedAt: number
+  /** snapshot 全量确认时刻；applied 必须用此值 */
+  confirmedAt?: number
+}
 
 export interface RuntimeStoreState {
   // 连接状态
@@ -53,6 +67,14 @@ export interface RuntimeStoreState {
   // 趋势缓冲（仅真实 snapshot，不含心跳）
   trendBuffer: TrendBuffer
   trendTags: string[]
+  /** 上一次运行归档的趋势点 */
+  previousRunSeries: TrendPoint[]
+  /** Faceplate / 原子写事件（pending/applied/failed） */
+  writeEvents: RuntimeWriteEvent[]
+  /** 最近一次控制品质计算结果 */
+  quality: Record<string, unknown> | null
+  /** 曲线可见性 */
+  seriesVisibility: Record<string, boolean>
   // 最近一次错误信息（断线但有真实数据时仍保留 lastGoodSnapshot）
   lastError: string | null
   // 当前活跃的 connect generation；disconnect/重连递增
@@ -62,6 +84,15 @@ export interface RuntimeStoreState {
   setEndpoint: (host: string, port: number) => void
   setApiReady: (ready: boolean) => void
   setTrendTags: (tags: string[]) => void
+  setSeriesVisibility: (tag: string, visible: boolean) => void
+  /** 新一次运行开始时归档当前趋势 */
+  rotatePreviousRun: () => void
+  recordWriteEvent: (event: RuntimeWriteEvent) => void
+  updateWriteEvent: (
+    id: string,
+    patch: Partial<Pick<RuntimeWriteEvent, 'status' | 'confirmedAt'>>,
+  ) => void
+  recomputeQuality: () => void
   connect: () => Promise<void>
   disconnect: () => void
   // 每秒调用一次检查 stale
@@ -137,6 +168,15 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     staleThresholdMs: computeStaleThresholdMs(0.5),
     trendBuffer: new TrendBufferClass(),
     trendTags: ['tank_2.level', 'pid2.SV', 'pid2.MV', 'valve_1.current_opening'],
+    previousRunSeries: [],
+    writeEvents: [],
+    quality: null,
+    seriesVisibility: {
+      'tank_2.level': true,
+      'pid2.SV': true,
+      'pid2.MV': true,
+      'valve_1.current_opening': true,
+    },
     lastError: null,
     connectGeneration: 0,
 
@@ -144,6 +184,47 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     setApiReady: (ready) => set({ apiReady: ready }),
     setTrendTags: (tags) => {
       set({ trendTags: tags })
+    },
+    setSeriesVisibility: (tag, visible) => {
+      set((prev) => ({
+        seriesVisibility: { ...prev.seriesVisibility, [tag]: visible },
+      }))
+    },
+    rotatePreviousRun: () => {
+      const archived = get().trendBuffer.rotateOut()
+      set({ previousRunSeries: archived, quality: null })
+    },
+    recordWriteEvent: (event) => {
+      set((prev) => ({ writeEvents: [...prev.writeEvents, event] }))
+    },
+    updateWriteEvent: (id, patch) => {
+      set((prev) => ({
+        writeEvents: prev.writeEvents.map((ev) =>
+          ev.id === id ? { ...ev, ...patch } : ev,
+        ),
+      }))
+    },
+    recomputeQuality: () => {
+      const points = get().trendBuffer.toArray()
+      const samples: QualitySample[] = points.map((p) => ({
+        t: typeof p.simTime === 'number' ? p.simTime : 0,
+        pv: p.values['tank_2.level'] ?? p.values['pid2.PV'] ?? null,
+        sv: p.values['pid2.SV'] ?? null,
+        mv: p.values['pid2.MV'] ?? null,
+        level: p.values['tank_2.level'] ?? null,
+      }))
+      const quality = computeControlQuality(samples, {
+        errorBand: 0.02,
+        stableWindowSeconds: 60,
+        mvLow: 0,
+        mvHigh: 100,
+        levelLow: 0,
+        levelHigh: 1.2,
+        events: get().writeEvents.filter((e) => e.status === 'applied') as unknown as Array<
+          Record<string, unknown>
+        >,
+      })
+      set({ quality })
     },
 
     connect: async () => {
@@ -203,6 +284,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
           if (get().connectGeneration !== myGen) return
           if (msg.type === 'snapshot') {
             set((prev) => {
+              // 真实 snapshot 才追加；心跳不会进入此分支。
+              // stale 显示冻结由 UI 负责；收到新真实帧时更新并解除 stale。
               prev.trendBuffer.push(msg.snapshot, prev.trendTags)
               return {
                 latestSnapshot: msg.snapshot,
@@ -296,6 +379,15 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         staleThresholdMs: computeStaleThresholdMs(0.5),
         lastError: null,
         connectGeneration: 0,
+        previousRunSeries: [],
+        writeEvents: [],
+        quality: null,
+        seriesVisibility: {
+          'tank_2.level': true,
+          'pid2.SV': true,
+          'pid2.MV': true,
+          'valve_1.current_opening': true,
+        },
       })
       get().trendBuffer.clear()
       // generation 已归零，但同步保留 nextGen 让任何 in-flight connect 看到不一致

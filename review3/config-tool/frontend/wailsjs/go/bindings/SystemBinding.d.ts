@@ -19,6 +19,8 @@ export function OpenYAMLFile():Promise<string>;
 
 export function RunBatch(arg1:string,arg2:number):Promise<bindings.BatchResult>;
 
+export function SaveCSVFile():Promise<string>;
+
 export function SaveYAMLFile():Promise<string>;
 
 export function SetContext(arg1:context.Context):Promise<void>;

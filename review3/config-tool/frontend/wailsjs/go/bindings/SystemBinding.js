@@ -34,6 +34,10 @@ export function RunBatch(arg1, arg2) {
   return window['go']['bindings']['SystemBinding']['RunBatch'](arg1, arg2);
 }
 
+export function SaveCSVFile() {
+  return window['go']['bindings']['SystemBinding']['SaveCSVFile']();
+}
+
 export function SaveYAMLFile() {
   return window['go']['bindings']['SystemBinding']['SaveYAMLFile']();
 }
