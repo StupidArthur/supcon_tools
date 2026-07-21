@@ -8,7 +8,10 @@ import { PidFaceplateHost } from './PidFaceplateHost'
 import { RuntimeTrendPanel } from './RuntimeTrendPanel'
 import { BatchPanelHost } from './BatchPanelHost'
 import { bindWritebackRuntime } from './writeback'
-import { ApplyRuntimeOverrides } from '../../../wailsjs/go/bindings/TemplateConfigBinding'
+import { bindSaveAs } from './saveAs'
+import { bindValidateConfig } from './validation'
+import { validateConfig } from './validationRules'
+import { templateApi } from '../../../lib/api'
 
 // SecondOrderTankPage 是二阶水箱模板的主页面。
 // 阶段 2：固定 SVG P&ID + 右侧检查器。
@@ -35,7 +38,11 @@ export function SecondOrderTankPage() {
   useEffect(() => {
     bindWritebackRuntime({
       store: useTemplateStore,
-      applyRuntimeOverrides: ApplyRuntimeOverrides,
+      applyRuntimeOverrides: (req) => templateApi.applyRuntimeOverrides(req),
+    })
+    bindValidateConfig((doc) => validateConfig(doc as Parameters<typeof validateConfig>[0]))
+    bindSaveAs(async (path: string) => {
+      return useTemplateStore.getState().save({ targetPath: path, allowOverwrite: true })
     })
   }, [])
 

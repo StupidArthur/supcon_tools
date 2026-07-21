@@ -34,6 +34,12 @@ export const templateApi = {
   validate: (cfg: import('../features/templates/types').TemplateConfig) =>
     TemplateConfigBinding.ValidateTemplateConfig(cfg as any) as unknown as Promise<import('../features/templates/types').ValidationIssue[]>,
   isBuiltin: (path: string) => TemplateConfigBinding.IsBuiltinTemplate(path),
+  applyRuntimeOverrides: (req: {
+    targetPath: string
+    expectedHash: string
+    overrides: Record<string, number>
+    includeMV: boolean
+  }) => TemplateConfigBinding.ApplyRuntimeOverrides(req),
 }
 
 export const systemApi = {
@@ -49,4 +55,5 @@ export const systemApi = {
     SystemBinding.RunBatch(configPath, cycles),
   exportBatch: (configPath: string, cycles: number, exportPath: string) =>
     SystemBinding.ExportBatch(configPath, cycles, exportPath),
+  saveCSVFile: () => SystemBinding.SaveCSVFile(),
 }

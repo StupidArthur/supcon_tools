@@ -7,7 +7,6 @@ import { systemApi } from '../../../lib/api'
 import { canStartBatch } from '../batchState'
 import { BatchPanel } from './BatchPanel'
 import { downsample, type TrendPoint } from '../../runtime/trendBuffer'
-import { SaveCSVFile } from '../../../wailsjs/go/bindings/SystemBinding'
 
 const DEFAULT_BATCH_CYCLES = 2000
 const MAX_TREND_POINTS = 3000
@@ -63,7 +62,7 @@ export function BatchPanelHost() {
     setResultPoints([])
     setProgress(0.05)
     setStatus('running')
-    setRuntimeState('BATCH_RUNNING' as never)
+    setRuntimeState('BATCH_RUNNING')
     try {
       setProgress(0.2)
       const result = await systemApi.runBatch(sourcePath, cycles)
@@ -91,7 +90,7 @@ export function BatchPanelHost() {
   const onExport = useCallback(async () => {
     if (!sourcePath || status === 'failed') return
     try {
-      const path = await SaveCSVFile()
+      const path = await systemApi.saveCSVFile()
       if (!path) return
       await systemApi.exportBatch(sourcePath, cycles, path)
       setLastCsvHint(path)

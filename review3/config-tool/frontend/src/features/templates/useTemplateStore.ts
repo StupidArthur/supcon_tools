@@ -17,7 +17,8 @@ import {
   diffPaths,
   validateConfig,
   warningsForConfig,
-} from './secondOrderTank/validation'
+} from './secondOrderTank/validationRules'
+import { bindValidateConfig } from './secondOrderTank/validation'
 import { templateApi } from '../../lib/api'
 import type { SaveTemplateResult } from './types'
 
@@ -478,3 +479,6 @@ export function selectIsSavedEqualsRunning(state: TemplateStoreState): boolean {
 export function selectConfigsEqual(a: DraftConfig | null, b: DraftConfig | null): boolean {
   return configsEqual(a, b)
 }
+
+// Wire formal validateBeforeSave adapter to the same validateConfig rules.
+bindValidateConfig((doc) => validateConfig(doc as DraftConfig))

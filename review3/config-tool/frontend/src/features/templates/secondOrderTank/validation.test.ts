@@ -8,7 +8,7 @@ import {
   steadyStatePrecheck,
   validateConfig,
   warningsForConfig,
-} from './validation'
+} from './validationRules'
 
 const defaultCfg: DraftConfig = {
   cycleTime: 0.5,

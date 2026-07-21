@@ -4,6 +4,7 @@ import type { TemplateRuntimeState } from './types'
 import { systemApi, templateApi } from '../../lib/api'
 import { useCanvasStore } from '../../store/useCanvasStore'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
+import { canStartRealtime } from './batchState'
 
 // RuntimeToolbar 是模板工作区顶部的工具栏。
 // 包含模板名称、状态、保存、仿真等操作按钮。
@@ -39,6 +40,7 @@ export function RuntimeToolbar() {
   const isRunning = runtimeState === 'SIMULATION_RUNNING' || runtimeState === 'REALTIME_RUNNING'
   const isStarting = runtimeState === 'STARTING'
   const isStopping = runtimeState === 'STOPPING'
+  const isBatchRunning = runtimeState === 'BATCH_RUNNING'
 
   // 阶段 3 只支持 second_order_tank
   if (templateId !== 'second_order_tank' || !definition) {
@@ -74,6 +76,11 @@ export function RuntimeToolbar() {
 
   const handleStartSimulation = async () => {
     setStartError(null)
+
+    if (!canStartRealtime({ runtimeState })) {
+      setStartError('批量任务正在运行，无法启动实时仿真')
+      return
+    }
 
     // 如果有未保存的修改，先保存
     if (isDirty) {
@@ -292,12 +299,16 @@ export function RuntimeToolbar() {
       </button>
 
       {/* 启动仿真按钮 */}
-      {!isRunning && !isStarting && !isStopping && (
+      {!isRunning && !isStarting && !isStopping && !isBatchRunning && (
         <button
           onClick={handleStartSimulation}
-          disabled={hasErrors || !sourcePath}
+          disabled={
+            hasErrors ||
+            !sourcePath ||
+            !canStartRealtime({ runtimeState })
+          }
           className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            hasErrors || !sourcePath
+            hasErrors || !sourcePath || !canStartRealtime({ runtimeState })
               ? 'bg-secondary text-muted-foreground cursor-not-allowed'
               : 'bg-green-600 text-white hover:bg-green-700'
           }`}

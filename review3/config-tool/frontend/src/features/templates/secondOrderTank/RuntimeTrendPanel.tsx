@@ -127,7 +127,6 @@ export function RuntimeTrendPanel({
           width={640}
           height={180}
           data={currentData}
-          isAnimationActive={!isFrozen}
         >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="t" />
@@ -185,7 +184,7 @@ export function RuntimeTrendPanel({
       <div data-testid="trend-previous-run-secondary" className="space-y-1">
         <div className="text-muted-foreground">Previous run（次级样式）</div>
         <div className="h-24 w-full overflow-hidden" style={secondaryStyle}>
-          <LineChart width={640} height={90} data={previousData} isAnimationActive={false}>
+          <LineChart width={640} height={90} data={previousData}>
               <XAxis dataKey="t" hide />
               <YAxis yAxisId="left" hide />
               <YAxis yAxisId="right" orientation="right" hide />
