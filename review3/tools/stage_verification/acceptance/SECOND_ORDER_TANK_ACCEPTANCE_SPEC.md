@@ -113,7 +113,7 @@ POST 成功时 `status` **必须**为 `pending`，不得直接 `applied`。
 | STAGE5-ATOMIC-005～006 | 合法 batch：pending→同周期全部生效→applied |
 | STAGE5-ATOMIC-007～009 | unknown / PV / AUTO·CAS 拒绝且状态不变 |
 | STAGE5-ATOMIC-010 | runtimeName 先于 programName |
-| STAGE5-ATOMIC-011～013 | pending / applied / failed（超时） |
+| STAGE5-ATOMIC-011～013 | pending / applied / failed（`confirm_timeout_s` 后轮询 GET 至 failed；不要求 `/expire`） |
 | STAGE5-ATOMIC-014 | legacy `/params` 兼容存在 |
 | STAGE5-ATOMIC-015 | 并发 batch ID/内容/状态隔离 |
 
@@ -193,6 +193,9 @@ type ApplyRuntimeOverridesResult struct {
 
 - 默认可写：SV、PB、TI、TD、KD、有组态意义的白名单模式字段
 - 默认禁止：PV、实时 level、`current_opening`、实时流量、派生状态、MV（仅 `IncludeMV=true` 且规范允许时可写）
+- **`IncludeMV=false` 且 `Overrides` 含 `MV` / `pid2.MV`（或等价键）：整批拒绝，磁盘文件完全不变**（不得静默忽略 MV 后只写 SV）
+- 合法保存成功时：`AppliedFields` 非空，且包含实际写入的白名单字段名
+- Result DTO：`Path`/`ContentHash` 为 `string`；`AppliedFields` 为 `[]string`；第二返回值严格为 `error` 接口
 - ExpectedHash 防冲突；校验失败文件不变；原子替换；保存后可被 TemplateService / DSLParser 加载；不改变 running identity；不得直接覆盖内置模板
 
 **契约：** STAGE5-WRITEBACK-001…005  
@@ -314,3 +317,4 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 | 日期 | 说明 |
 |------|------|
 | 2026-07-21 | 提交 A：初版正式规范，替代未跟踪任务笔记作为验收依据 |
+| 2026-07-21 | 提交 A.1：timeout 仅轮询 GET；`IncludeMV=false`+MV 整批拒绝；Result DTO 类型收紧 |

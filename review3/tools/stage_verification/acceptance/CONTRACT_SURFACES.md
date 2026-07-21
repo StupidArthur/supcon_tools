@@ -87,7 +87,7 @@
 | 类型 | Go Binding |
 | 名称或路径 | `(*TemplateConfigBinding).ApplyRuntimeOverrides(ApplyRuntimeOverridesRequest) (ApplyRuntimeOverridesResult, error)` |
 | 输入 / 输出 DTO | 见 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.4（字段名正式锁定） |
-| 错误语义 | 禁止 PV/实时位；MV 默认不写回；ExpectedHash 冲突；校验失败不写盘；禁直接覆盖内置模板 |
+| 错误语义 | 禁止 PV/实时位；`IncludeMV=false` 且 Overrides 含 MV → **整批拒绝、文件不变**；ExpectedHash 冲突；校验失败不写盘；禁直接覆盖内置模板；成功时 AppliedFields 非空 |
 | 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.4 |
 | 是否允许实现内部自由变化 | **是** — 不得要求特定 `.go` 文件名 |
 
@@ -150,3 +150,4 @@
 |------|------|
 | 2026-07-20 | 批次 5.1 / 6 初版登记 |
 | 2026-07-21 | 提交 A：去除未跟踪任务笔记引用；依据改为 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md`；固化 Go DTO 与 `/writes` 查询表面 |
+| 2026-07-21 | 提交 A.1：`IncludeMV=false`+MV 整批拒绝；成功 AppliedFields 非空 |

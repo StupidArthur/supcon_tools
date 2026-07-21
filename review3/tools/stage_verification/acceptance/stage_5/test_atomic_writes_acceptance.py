@@ -6,10 +6,15 @@ See SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md §2.1 and CONTRACT_SURFACES.md.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
 import pytest
+
+# STAGE5-ATOMIC-013: poll GET /writes/{batchId} until failed (monotonic clock, short interval).
+_CONFIRM_TIMEOUT_POLL_INTERVAL_S = 0.01
+_CONFIRM_TIMEOUT_WAIT_BUDGET_S = 0.5
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -147,7 +152,17 @@ def test_stage5_atomic_002_004_invalid_batch_rejects_entirely(
     )
     if pb_before is not None:
         assert after.get("pid2.PB") == pb_before, "STAGE5-ATOMIC-004: PB must be unchanged"
-    assert after.get("cycle_count") != cycle_before or cycle_before is not None
+    assert cycle_before is not None, (
+        "STAGE5-ATOMIC-004: before snapshot must expose cycle_count"
+    )
+    cycle_after = after.get("cycle_count")
+    assert cycle_after is not None, (
+        "STAGE5-ATOMIC-004: after snapshot must expose cycle_count"
+    )
+    assert cycle_after > cycle_before, (
+        "STAGE5-ATOMIC-004: after Engine drive, cycle_count must advance "
+        f"(before={cycle_before}, after={cycle_after})"
+    )
 
     # No pending batch from the rejected POST.
     list_resp = client.get("/api/instances/acceptance_runtime/writes")
@@ -293,13 +308,24 @@ def test_stage5_atomic_011_013_pending_applied_failed_lifecycle(
     )
     tid = timed.json().get("batch_id")
     assert tid, "STAGE5-ATOMIC-013: batch_id required"
-    # Do not drive cycles — confirmation must time out.
-    expired = client.get(f"/api/instances/acceptance_runtime/writes/{tid}")
-    if expired.status_code < 300 and expired.json().get("status") == "failed":
-        return
-    expire = client.post(f"/api/instances/acceptance_runtime/writes/{tid}/expire")
-    assert expire.status_code < 300 and expire.json().get("status") == "failed", (
-        "STAGE5-ATOMIC-013: timed-out batch must become failed via query or expire surface"
+    # Do not drive cycles — confirmation must time out via confirm_timeout_s alone.
+    # Poll GET /writes/{batchId} with monotonic clock; do not call /expire.
+    deadline = time.monotonic() + _CONFIRM_TIMEOUT_WAIT_BUDGET_S
+    last_status: Any = None
+    last_code = None
+    while time.monotonic() < deadline:
+        expired = client.get(f"/api/instances/acceptance_runtime/writes/{tid}")
+        last_code = expired.status_code
+        if expired.status_code < 300:
+            last_status = expired.json().get("status")
+            if last_status == "failed":
+                return
+        time.sleep(_CONFIRM_TIMEOUT_POLL_INTERVAL_S)
+    assert last_status == "failed", (
+        "STAGE5-ATOMIC-013: within bounded wait after confirm_timeout_s, "
+        f"GET /writes/{{batchId}} must reach status=failed "
+        f"(last_code={last_code}, last_status={last_status}); "
+        "do not require /writes/{{batchId}}/expire"
     )
 
 

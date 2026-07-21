@@ -1,5 +1,10 @@
 # review3 阶段验证套件收口与可锁定化执行规范
 
+本文件是历史执行说明，不是验收契约真源。
+正式契约以：
+tools/stage_verification/acceptance/SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md
+和 CONTRACT_SURFACES.md 为准。
+
 **文档用途：** 直接交给验收基础设施 Agent 执行。  
 **适用仓库：** `StupidArthur/supcon_tools`  
 **Git 根：** `G:/github/supcon_tools`  
