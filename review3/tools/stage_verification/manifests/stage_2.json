@@ -2,23 +2,187 @@
   "schema_version": 1,
   "stage": 2,
   "name": "固定 SVG P&ID 和对象检查器",
-  "required_documents": ["todo/second_order_tank_agent_start_here.md", "todo/second_order_tank_visual_dsl_template_design.md", "todo/second_order_tank_repository_contracts.md", "todo/second_order_tank_implementation_playbook.md"],
-  "allowed_paths": ["config-tool/frontend/src/features/templates/**", "config-tool/frontend/src/style.css", "config-tool/frontend/src/App.tsx"],
-  "forbidden_paths": ["components/programs/pid.py", "components/programs/valve.py", "components/programs/cylindrical_tank.py", "components/programs/base.py", "datacenter/opcua_server.py", "config/单阀门二阶水箱.yaml", "debug_gui/**", "config-tool/frontend/src/features/runtime/**", "config-tool/internal/**", "controller/**", "datacenter/**"],
-  "preserved_paths": ["config-tool/frontend/src/components/Canvas.tsx", "config-tool/frontend/src/components/Palette.tsx", "config-tool/frontend/src/components/PropertyPanel.tsx", "config-tool/frontend/src/components/SimulationPanel.tsx", "config-tool/frontend/src/store/useCanvasStore.ts"],
-  "required_paths": ["config-tool/frontend/src/features/templates/RuntimeToolbar.tsx", "config-tool/frontend/src/features/templates/ObjectInspector.tsx", "config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankDiagram.tsx", "config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankInspector.tsx", "config-tool/frontend/src/features/templates/secondOrderTank/*.test.tsx"],
-  "forbidden_symbols": [{"id": "no_stage_3_managed_runtime", "path_globs": ["config-tool/frontend/src/features/templates/**"], "pattern": "apiReady|apiHost|apiPort|--api-host|STARTING"}],
-  "locked_paths": ["todo/second_order_tank_*.md", "tools/stage_verification/**"],
-  "locked_acceptance_paths": ["tests/test_*.py", "config-tool/frontend/src/**/*.test.ts", "config-tool/frontend/src/**/*.test.tsx", "config-tool/internal/**/*_test.go", "config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankDiagram.test.tsx", "config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankInspector.test.tsx"],
+  "required_documents": [
+    "todo/second_order_tank_agent_start_here.md",
+    "todo/second_order_tank_visual_dsl_template_design.md",
+    "todo/second_order_tank_repository_contracts.md",
+    "todo/second_order_tank_implementation_playbook.md"
+  ],
+  "allowed_paths": [
+    "config-tool/frontend/src/features/templates/**",
+    "config-tool/frontend/src/style.css",
+    "config-tool/frontend/src/App.tsx"
+  ],
+  "forbidden_paths": [
+    "components/programs/pid.py",
+    "components/programs/valve.py",
+    "components/programs/cylindrical_tank.py",
+    "components/programs/base.py",
+    "datacenter/opcua_server.py",
+    "config/单阀门二阶水箱.yaml",
+    "debug_gui/**",
+    "config-tool/frontend/src/features/runtime/**",
+    "config-tool/internal/**",
+    "controller/**",
+    "datacenter/**"
+  ],
+  "preserved_paths": [
+    "config-tool/frontend/src/components/Canvas.tsx",
+    "config-tool/frontend/src/components/Palette.tsx",
+    "config-tool/frontend/src/components/PropertyPanel.tsx",
+    "config-tool/frontend/src/components/SimulationPanel.tsx",
+    "config-tool/frontend/src/store/useCanvasStore.ts"
+  ],
+  "required_paths": [
+    "config-tool/frontend/src/features/templates/RuntimeToolbar.tsx",
+    "config-tool/frontend/src/features/templates/ObjectInspector.tsx",
+    "config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankDiagram.tsx",
+    "config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankInspector.tsx",
+    "config-tool/frontend/src/features/templates/secondOrderTank/*.test.tsx"
+  ],
+  "forbidden_symbols": [
+    {
+      "id": "no_stage_3_managed_runtime",
+      "path_globs": [
+        "config-tool/frontend/src/features/templates/**"
+      ],
+      "pattern": "apiReady|apiHost|apiPort|--api-host|STARTING"
+    }
+  ],
+  "locked_paths": [
+    "todo/second_order_tank_*.md",
+    "tools/stage_verification/**"
+  ],
+  "locked_acceptance_paths": [
+    "tools/stage_verification/acceptance/SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md",
+    "tools/stage_verification/acceptance/CONTRACT_SURFACES.md",
+    "tools/stage_verification/acceptance/stage_0/test_stage_0_acceptance.py",
+    "config-tool/frontend/acceptance/stage_0/api_wrapper.acceptance.test.ts",
+    "config-tool/frontend/acceptance/stage_0/legacy_views.acceptance.test.tsx",
+    "tools/stage_verification/acceptance/stage_1/test_stage_1_acceptance.py",
+    "config-tool/acceptance/stage_1/template_service_acceptance_test.go",
+    "config-tool/frontend/acceptance/stage_1/template_store.acceptance.test.ts",
+    "tools/stage_verification/acceptance/stage_2/test_stage_2_acceptance.py",
+    "config-tool/frontend/acceptance/stage_2/pid_diagram.acceptance.test.tsx",
+    "config-tool/frontend/acceptance/stage_2/inspector.acceptance.test.tsx",
+    "tools/stage_verification/evidence/stage_2/pid_visual_review.md",
+    "tools/stage_verification/evidence/stage_2/minimum_viewport_review.md"
+  ],
   "commands": [
-    {"id": "frontend_tests", "cwd": "config-tool/frontend", "argv": ["npm", "run", "test:run"], "windows_argv": ["npm.cmd", "run", "test:run"], "timeout_seconds": 300},
-    {"id": "frontend_build", "cwd": "config-tool/frontend", "argv": ["npm", "run", "build"], "windows_argv": ["npm.cmd", "run", "build"], "timeout_seconds": 300}
+    {
+      "id": "verifier_self_tests",
+      "cwd": ".",
+      "argv": [
+        "{python}",
+        "-m",
+        "pytest",
+        "tools/stage_verification/tests",
+        "-q"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "python_reviewer_acceptance",
+      "cwd": ".",
+      "argv": [
+        "{python}",
+        "-m",
+        "pytest",
+        "tools/stage_verification/acceptance/stage_2",
+        "-q"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "frontend_reviewer_acceptance",
+      "cwd": "config-tool/frontend",
+      "argv": [
+        "npm",
+        "run",
+        "test:acceptance",
+        "--",
+        "acceptance/stage_2"
+      ],
+      "windows_argv": [
+        "npm.cmd",
+        "run",
+        "test:acceptance",
+        "--",
+        "acceptance/stage_2"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "frontend_tests",
+      "cwd": "config-tool/frontend",
+      "argv": [
+        "npm",
+        "run",
+        "test:run"
+      ],
+      "windows_argv": [
+        "npm.cmd",
+        "run",
+        "test:run"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "frontend_build",
+      "cwd": "config-tool/frontend",
+      "argv": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "windows_argv": [
+        "npm.cmd",
+        "run",
+        "build"
+      ],
+      "timeout_seconds": 300
+    }
   ],
   "git_diff_check": true,
   "gates": [
-    {"id": "scope_and_stage_boundary", "mode": "automated", "description": "只修改模板呈现层，保留高级视图且未进入进程管理阶段。", "checks": ["required_documents", "required_paths", "preserved_paths", "manifest_locked", "locked_files", "locked_acceptance_files", "changed_paths_allowed", "forbidden_paths", "forbidden_symbols", "git_diff_check"]},
-    {"id": "component_contract", "mode": "automated", "description": "对象选择、draft 数据源、单位、dirty 和 inspector 交互测试及构建通过。", "checks": ["command:frontend_tests", "command:frontend_build"]},
-    {"id": "pid_visual_review", "mode": "manual", "description": "验收者确认主画面是简化工业 P&ID，而非节点方框图；无假流动动画。"},
-    {"id": "minimum_viewport_review", "mode": "manual", "description": "验收者在 1024×700 视口确认关键对象、检查器和操作均可见可用。"}
+    {
+      "id": "scope_and_stage_boundary",
+      "mode": "automated",
+      "description": "只修改模板呈现层，保留高级视图且未进入进程管理阶段。",
+      "checks": [
+        "required_documents",
+        "required_paths",
+        "preserved_paths",
+        "manifest_locked",
+        "locked_files",
+        "locked_acceptance_files",
+        "changed_paths_allowed",
+        "forbidden_paths",
+        "forbidden_symbols",
+        "git_diff_check"
+      ]
+    },
+    {
+      "id": "component_contract",
+      "mode": "automated",
+      "description": "对象选择、draft 数据源、单位、dirty 和 inspector 交互测试及构建通过。",
+      "checks": [
+        "command:verifier_self_tests",
+        "command:python_reviewer_acceptance",
+        "command:frontend_reviewer_acceptance",
+        "command:frontend_tests",
+        "command:frontend_build"
+      ]
+    },
+    {
+      "id": "pid_visual_review",
+      "mode": "manual",
+      "description": "验收者确认主画面是简化工业 P&ID，而非节点方框图；无假流动动画。"
+    },
+    {
+      "id": "minimum_viewport_review",
+      "mode": "manual",
+      "description": "验收者在 1024×700 视口确认关键对象、检查器和操作均可见可用。"
+    }
   ]
 }

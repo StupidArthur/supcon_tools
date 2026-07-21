@@ -14,7 +14,7 @@ Verifier root: review3/tools/stage_verification/
 
 ## 1. 验收者先准备 acceptance suite 和 baseline
 
-派发阶段前，验收者必须先创建 manifest 中列出的 `locked_acceptance_paths`。阶段 5–8 的 reviewer suite 路径分别位于：
+派发阶段前，验收者必须先创建并锁定 manifest 中列出的精确 `locked_acceptance_paths`（reviewer-owned 文件逐项列出；广泛 glob 不得替代）。阶段 5–8 的 reviewer suite 位于：
 
 ```text
 tools/stage_verification/acceptance/stage_5/
@@ -23,7 +23,7 @@ tools/stage_verification/acceptance/stage_7/
 tools/stage_verification/acceptance/stage_8/
 ```
 
-这些文件现在故意不存在：必须由验收者结合阶段契约编写，不能让实现 agent 自己定义验收标准。缺少任一路径时 `--record-baseline` 会拒绝执行，表示该阶段尚不可派发。广泛 glob 还会累计锁定 baseline 时已经存在的 Python、前端和 Go 测试；agent 可以新增普通自测，但不能删改已接受回归测试。
+这些路径必须存在于仓库中；缺少任一路径时 `--record-baseline` 会拒绝执行。广泛 glob 仅可作为 regression command，不能替代 reviewer acceptance。
 
 验收者随后记录基线：
 

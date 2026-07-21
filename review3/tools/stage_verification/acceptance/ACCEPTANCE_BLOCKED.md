@@ -52,20 +52,22 @@ npm run test:acceptance -- acceptance/stage_2/pid_diagram.acceptance.test.tsx -t
 | `computeControlQuality` | STAGE6-QUALITY-* | 模块不存在 | 数值 fixture 指标正确 |
 | `RuntimeTrendPanel` | STAGE6-TREND/EVENT-* | 组件不存在 | 双轴、事件、stale 冻结 |
 
-阻塞 baseline：**是**（prospective baseline 须等业务实现后全绿）。
+阻塞 baseline：**否（prospective）** — 可记录 `acceptance_mode=prospective` baseline；**不得** finalize / accepted。业务全绿并改为 retrospective 后方可 finalize。
 
 ---
 
-## STAGE-7 / STAGE-8：Prospective 业务能力缺失（批次 6）
+## STAGE-7 / STAGE-8：Prospective 业务能力缺失（最终收口）
 
 | 类别 | 契约编号 | 当前行为 | 预期行为 |
 |------|----------|----------|----------|
-| Batch 唯一临时目录 | STAGE7-BATCH-003/004/008 | 无 `AllocateBatchWorkDir` | 每任务唯一路径、并发不覆盖、清理 |
-| 实时/Batch 互斥 | STAGE7-STATE-001…005 | 无 `CanRunBatch` / `batchState` | dirty/校验/运行态互斥 |
-| Batch UI | STAGE7-BATCH / CSV | 无 BatchPanel / dialog 模块 | 同页入口、CSV 导出、失败不空成功 |
-| E2E 闭环 | STAGE8-E2E-001…029 | 多数步骤能力未就绪 | 场景 JSON 全步骤可自动执行并清理 |
+| RunBatch 并发隔离 | STAGE7-BATCH-003/004 | 共享 `_batch_export.csv`，并发结果可碰撞 | 每任务独立输出，A/B 不互相覆盖 |
+| 实时阻 Batch | STAGE7-STATE-004 | `Running=true` 时仍可 RunBatch/ExportBatch | 明确错误，不启第二个 DataFactory |
+| 空输出 | STAGE7-BATCH-007 | 空 CSV 可当成功 | 不得成功 |
+| Batch/Faceplate/Trend UI | STAGE7/5/6 前端 | 模块缺失 | 动态 import 后行为断言通过 |
+| `/writes` E2E | STAGE8-E2E-014…017 | 无 `/writes` | 原子写闭环 |
+| ApplyRuntimeOverrides | STAGE8-E2E-019 | 方法缺失 | 正式 DTO 写回 |
 
-阻塞 baseline：**是**
+阻塞 finalize：**是**（prospective 禁止 finalize；见 verifier 守卫）
 
 ---
 
@@ -74,3 +76,4 @@ npm run test:acceptance -- acceptance/stage_2/pid_diagram.acceptance.test.tsx -t
 1. 新增阻塞时追加一节，ID 格式 `STAGE-N-NNN` 或契约编号 `STAGE5-*/STAGE6-*`。
 2. 不得为跑通而删除、放宽或 skip 失败用例。
 3. 业务修复后由 reviewer 复跑 acceptance 并删除或标记已解决。
+4. Prospective baseline 与 BUSINESS_BLOCKED 可并存；不得把 prospective 宣称为业务通过。

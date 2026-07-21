@@ -100,6 +100,13 @@ class AcceptedCheckpointTests(unittest.TestCase):
         )
         self.assertEqual("retrospective", record["acceptance_mode"])
 
+    def test_finalize_rejects_prospective_baseline(self) -> None:
+        verifier = self._verifier(manual=False)
+        verifier.record_baseline(review_key="secret", acceptance_mode="prospective")
+        with self.assertRaises(VerificationConfigurationError) as ctx:
+            verifier.finalize(reviewer="alice", review_key="secret")
+        self.assertIn("prospective", str(ctx.exception).lower())
+
     def test_verify_accepted_detects_worktree_drift(self) -> None:
         verifier = self._verifier(manual=False)
         verifier.record_baseline(review_key="secret", acceptance_mode="retrospective")

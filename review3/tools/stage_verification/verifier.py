@@ -1121,6 +1121,12 @@ class StageVerifier:
                 f"Set {DEFAULT_REVIEW_KEY_ENV}; only the acceptance reviewer may finalize"
             )
         baseline = self._load_baseline()
+        if baseline.get("acceptance_mode") == "prospective":
+            raise VerificationConfigurationError(
+                "Cannot finalize a prospective baseline; prospective mode locks "
+                "acceptance assets only. Re-record as retrospective after business "
+                "gates are green, then finalize."
+            )
         key_hash = sha256_bytes(review_key.encode("utf-8"))
         if not baseline.get("review_key_sha256") or not hmac.compare_digest(
             key_hash, baseline["review_key_sha256"]

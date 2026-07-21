@@ -258,7 +258,7 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 | STAGE7-CSV-* | 表头、行数契约、时间单调、YAML/CSV 对话框分离 |
 | STAGE7-DOWNSAMPLE-* | ≤3000、首尾、局部极值、顺序、小数据不改写 |
 
-行数契约须在实现前固定为「恰好 2000」或「含初值 2001」之一。
+行数契约：**锁定为恰好 2000 行数据**（`fixtures/batch/row_count_contract.json`：`expected_data_rows=2000`；对应 `standalone_main` 每个 batch 周期一行，不含额外初始点）。不得使用 2000～2001 模糊范围。
 
 **测试：** `acceptance/stage_7/*`  
 **人工 gate（unsigned）：** `evidence/stage_7/single_page_batch_review.md`
@@ -318,3 +318,4 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 |------|------|
 | 2026-07-21 | 提交 A：初版正式规范，替代未跟踪任务笔记作为验收依据 |
 | 2026-07-21 | 提交 A.1：timeout 仅轮询 GET；`IncludeMV=false`+MV 整批拒绝；Result DTO 类型收紧 |
+| 2026-07-21 | 最终收口：阶段 7 外部行为化；CSV 行数锁定 2000；阶段 8 可实现后自然变绿 |

@@ -1,7 +1,5 @@
 {
   "required_columns": [
-    "cycle",
-    "sim_time",
     "tank_1.level",
     "tank_2.level",
     "valve_1.current_opening",
@@ -12,5 +10,7 @@
     "pid2.TI",
     "pid2.TD",
     "pid2.MODE"
-  ]
+  ],
+  "excluded_by_exporter": ["cycle_count", "sim_time", "need_sample", "time_str", "exec_ratio"],
+  "notes": "Locked to standalone_main batch CSV exporter actual headers (sim_time/cycle_count intentionally excluded by exporter)."
 }

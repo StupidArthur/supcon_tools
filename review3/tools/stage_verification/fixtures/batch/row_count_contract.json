@@ -1,0 +1,6 @@
+{
+  "cycles": 2000,
+  "expected_data_rows": 2000,
+  "policy": "exactly_one_row_per_batch_cycle_no_initial_point",
+  "notes": "DataFactory standalone_main appends one snapshot per cycle in range(batch); lock expected_data_rows=2000."
+}

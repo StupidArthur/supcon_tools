@@ -125,9 +125,9 @@
 |------|------|
 | 契约 ID | STAGE7-* |
 | 阶段 | 7 |
-| 公共表面 | `SystemBinding.RunBatch` / `ExportBatch`；`downsample`；Batch UI / 状态纯函数（若导出） |
+| 公共表面 | `SystemBinding.RunBatch` / `ExportBatch` / `Start` / `Stop` / `Status`；`downsample`；Batch UI / 状态纯函数（若导出） |
 | 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §4 |
-| 说明 | 并发/临时文件/互斥以**外部行为**验收，不强制内部分配器方法名 |
+| 说明 | 并发/临时文件/互斥以**外部行为**验收；**不得**要求 `AllocateBatchWorkDir` / `CanRunBatch`；CSV 行数锁定 2000（`fixtures/batch/row_count_contract.json`） |
 | 是否允许实现内部自由变化 | **是** |
 
 ---
@@ -151,3 +151,4 @@
 | 2026-07-20 | 批次 5.1 / 6 初版登记 |
 | 2026-07-21 | 提交 A：去除未跟踪任务笔记引用；依据改为 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md`；固化 Go DTO 与 `/writes` 查询表面 |
 | 2026-07-21 | 提交 A.1：`IncludeMV=false`+MV 整批拒绝；成功 AppliedFields 非空 |
+| 2026-07-21 | 最终收口：阶段 7 外部行为；阶段 8 implementation-passable；行数锁定 2000 |
