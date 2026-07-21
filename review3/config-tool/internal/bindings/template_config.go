@@ -145,15 +145,27 @@ func isFiniteFloat(v float64) bool {
 }
 
 func isBuiltinTemplatePath(targetAbs string) bool {
-	builtinAbs, err := config.ResolveBuiltinTemplatePath()
-	if err == nil && builtinAbs != "" {
-		if samePathOrFile(targetAbs, builtinAbs) {
+	targetAbs = filepath.Clean(targetAbs)
+	if builtinAbs, err := config.ResolveBuiltinTemplatePath(); err == nil && builtinAbs != "" {
+		return samePathOrFile(targetAbs, builtinAbs)
+	}
+	// ResolveBuiltin may fail under `go test` (exe in build cache). Discover the
+	// real builtin by walking ancestors: Join(ancestor, "config/单阀门二阶水箱.yaml")
+	// compared via Clean / EqualFold / SameFile — never basename-only.
+	// Copies named the same under other folders (e.g. tmp/验收/…) stay writable.
+	dir := filepath.Dir(targetAbs)
+	for i := 0; i < 8; i++ {
+		candidate := filepath.Clean(filepath.Join(dir, config.BuiltinTemplateRelativePath))
+		if samePathOrFile(targetAbs, candidate) {
 			return true
 		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
-	// Fallback: basename of the unique builtin template (never allow writing it via this API).
-	base := filepath.Base(targetAbs)
-	return base == filepath.Base(config.BuiltinTemplateRelativePath)
+	return false
 }
 
 func samePathOrFile(a, b string) bool {

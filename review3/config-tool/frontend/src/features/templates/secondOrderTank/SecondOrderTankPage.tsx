@@ -37,7 +37,10 @@ export function SecondOrderTankPage() {
 
   useEffect(() => {
     bindWritebackRuntime({
-      store: useTemplateStore,
+      store: {
+        getState: () => useTemplateStore.getState(),
+        setState: (partial) => useTemplateStore.setState(partial as never),
+      },
       applyRuntimeOverrides: (req) => templateApi.applyRuntimeOverrides(req),
     })
     bindValidateConfig((doc) => validateConfig(doc as Parameters<typeof validateConfig>[0]))

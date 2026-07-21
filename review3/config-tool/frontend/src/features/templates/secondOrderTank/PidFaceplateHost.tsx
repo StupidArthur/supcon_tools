@@ -6,7 +6,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRuntimeStore } from '../../runtime/useRuntimeStore'
 import { observeWriteBatch, submitAtomicWrites } from '../../runtime/runtimeWrites'
+import { applyRuntimeOverride } from './writeback'
 import { PidFaceplate, type WriteStatus } from './PidFaceplate'
+import { WritebackPanel } from './WritebackPanel'
 
 const CONFIRM_TIMEOUT_SECONDS = 5
 const CONFIRM_POLL_MS = 200
@@ -86,6 +88,10 @@ export function PidFaceplateHost() {
         const confirmedAt = Date.now()
         for (const id of p.eventIds) {
           updateWriteEvent(id, { status: 'applied', confirmedAt })
+        }
+        // Only after full-batch snapshot confirm: feed writeback buffer.
+        for (const [tag, value] of Object.entries(p.expected)) {
+          applyRuntimeOverride(tag, value)
         }
         pendingRef.current = null
         setWriteStatus('applied')
@@ -169,6 +175,7 @@ export function PidFaceplateHost() {
         writeError={writeError}
         onSubmit={onSubmit}
       />
+      <WritebackPanel />
     </div>
   )
 }

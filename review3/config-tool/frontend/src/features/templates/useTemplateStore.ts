@@ -300,13 +300,35 @@ latestSnapshot: null,
 
   loadFromPath: async (path: string) => {
     let doc: Awaited<ReturnType<typeof templateApi.load>>
+    const prev = get()
+    const keepRuntime =
+      prev.runtimeState === 'SIMULATION_RUNNING' ||
+      prev.runtimeState === 'REALTIME_RUNNING' ||
+      prev.runtimeState === 'BATCH_RUNNING'
     try {
       doc = await templateApi.load(path)
     } catch (err) {
       set(loadFailureState(err))
+      if (keepRuntime) {
+        set({
+          runtimeState: prev.runtimeState,
+          runningConfigIdentity: prev.runningConfigIdentity,
+          runningConfig: prev.runningConfig,
+        })
+      }
       return
     }
-    set(loadedDocumentState(doc))
+    const base = loadedDocumentState(doc)
+    if (keepRuntime) {
+      set({
+        ...base,
+        runtimeState: prev.runtimeState,
+        runningConfigIdentity: prev.runningConfigIdentity,
+        runningConfig: prev.runningConfig,
+      })
+    } else {
+      set(base)
+    }
   },
 
   selectObject: (id) => set({ selectedObjectId: id }),
