@@ -21,7 +21,7 @@
 | 阶段 | 2 |
 | 测试 | `stage 2 pid diagram acceptance > documents Space keyboard selection contract` |
 | 套件文件 | `config-tool/frontend/acceptance/stage_2/pid_diagram.acceptance.test.tsx` |
-| 期望 | `todo/7.md` §九：Enter **与 Space** 均可选择流程图对象（可访问性契约） |
+| 期望 | repository contracts / 阶段 2：Enter **与 Space** 均可选择流程图对象（可访问性契约） |
 | 当前行为 | 仅 `Enter` 触发 `onClick()`；`Space` 的 `keyDown` 不调用 `onSelect` |
 | 业务文件 | `config-tool/frontend/src/features/templates/secondOrderTank/SecondOrderTankDiagram.tsx` |
 | 代码位置 | 约 392、456、534、644、684 行：`onKeyDown={(e) => e.key === 'Enter' && onClick()}` |

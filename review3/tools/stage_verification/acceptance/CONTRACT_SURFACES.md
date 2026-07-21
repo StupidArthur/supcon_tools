@@ -3,12 +3,19 @@
 本文件登记**锁定验收**可精确引用的公共表面。  
 未登记名称不得作为 acceptance 完成条件。
 
+**正式契约依据：**
+
+- `tools/stage_verification/acceptance/SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md`
+- `todo/second_order_tank_repository_contracts.md`
+- `todo/second_order_tank_implementation_playbook.md`
+
 规则：
 
 1. repository contracts 已规定的名称可直接登记。
 2. implementation playbook 的“建议文件路径”**不**自动成为强制公共接口。
 3. 新 acceptance seam 必须在此标明“验收 API”。
 4. 内部 helper / manager / 私有文件名不得登记。
+5. **不得**引用未跟踪的本地任务提示笔记作为契约依据。
 
 ---
 
@@ -20,14 +27,14 @@
 | 阶段 | 5 |
 | 公共表面 | Atomic online write HTTP API |
 | 类型 | HTTP |
-| 名称或路径 | `POST /api/instances/{runtimeName}/writes` |
-| 输入 | JSON：`{"writes":[{"tag":string,"value":number}, ...]}`；路径参数 `runtimeName` 来自 `/api/status.instance_name` |
-| 输出 | 接受时：`{ "ok": true, "batch_id": string, "status": "pending" }`（字段名可等价扩展，但必须可查询 pending/applied/failed）；拒绝时：HTTP 4xx + 指出失败字段 |
-| 错误语义 | 整批验证失败 → 4xx，**零**部分入队；unknown/readonly/derived 字段拒绝；runtimeName 不匹配 → 404 |
-| 依据文档章节 | `todo/7.md` §十二；playbook 阶段 5 `/writes` 契约 |
-| 是否允许实现内部自由变化 | **是** — 不得锁定 `AtomicWriteBatch` / `WriteBatchManager` 等内部类型名 |
+| 名称或路径 | `POST /api/instances/{runtimeName}/writes`；`GET /api/instances/{runtimeName}/writes/{batchId}` |
+| 输入 | JSON：`{"writes":[{"tag":string,"value":number},...],"confirm_timeout_s"?:number}`；`runtimeName` 来自 `/api/status.instance_name` |
+| 输出 | 接受：`ok`、`batch_id`、`status:"pending"`；查询：`pending\|applied\|failed` + writes；拒绝：HTTP 4xx、无成功 batch_id |
+| 错误语义 | 整批验证失败 → 4xx，零部分入队；unknown/readonly/derived 拒绝；runtimeName 不匹配 → 404 |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.1；repository contracts / playbook 阶段 5 |
+| 是否允许实现内部自由变化 | **是** |
 
-兼容表面（不得当作新原子接口）：
+兼容表面：
 
 | 字段 | 内容 |
 |------|------|
@@ -35,7 +42,7 @@
 | 公共表面 | Legacy param update |
 | 类型 | HTTP |
 | 名称或路径 | `POST /api/instances/{name}/params` |
-| 说明 | 可继续存在；acceptance **不得**把 `/params` 当作原子写完成条件 |
+| 说明 | 可继续存在；**不得**当作原子写完成条件 |
 
 ---
 
@@ -45,14 +52,13 @@
 |------|------|
 | 契约 ID | STAGE5-MODE-001 … 006 |
 | 阶段 | 5 |
-| 公共表面 | `PidFaceplate` React component |
+| 公共表面 | `PidFaceplate` |
 | 类型 | React component |
-| 名称或路径 | `config-tool/frontend/src/features/templates/secondOrderTank/PidFaceplate.tsx`（验收组件；实现可移动但必须保留同名导出或在此更新登记） |
-| 输入（Props / Store） | 至少：`mode`（AUTO/MAN/CAS）、现场值 `PV/SV/CSV/MV/PB/TI/TD/KD/MODE/SWPN`、写状态 `pending\|applied\|failed\|idle`、`onSubmit(writes)` |
-| 输出 | 可访问表单控件：`data-testid` 建议 `faceplate-sv` / `faceplate-mv` / `faceplate-csv` / `faceplate-pv` 等；提交触发 `onSubmit` |
-| 错误语义 | 只读字段不可编辑；提交失败显示 failed 原因 |
-| 依据文档章节 | `todo/7.md` §十二 Faceplate |
-| 是否允许实现内部自由变化 | **是** — 不得要求 `FACEPLATE_MODE_POLICY` 等内部常量名 |
+| 名称或路径 | 导出 `PidFaceplate`（建议路径 `features/templates/secondOrderTank/PidFaceplate.tsx`，可移动但须保留同名导出或更新本表） |
+| 输入 | 正式 Props：见 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.2；须覆盖字段 **PV / SV / CSV / MV / PB / TI / TD / KD / MODE / SWPN**；模式 AUTO / MAN / CAS |
+| 输出 | 可访问控件（建议 testid：`faceplate-sv` / `faceplate-mv` / `faceplate-csv` / `faceplate-pv` / `faceplate-write-status` 等）；writeStatus：`pending` / `applied` / `failed` |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.2 |
+| 是否允许实现内部自由变化 | **是** — 不得要求内部常量名 |
 
 ---
 
@@ -60,15 +66,13 @@
 
 | 字段 | 内容 |
 |------|------|
-| 契约 ID | STAGE5-ATOMIC-001 … 013（前端侧） |
+| 契约 ID | STAGE5-ATOMIC-*（前端侧） |
 | 阶段 | 5 |
 | 公共表面 | `submitAtomicWrites` |
 | 类型 | TypeScript module |
-| 名称或路径 | `config-tool/frontend/src/features/runtime/runtimeWrites.ts` → `submitAtomicWrites` |
-| 输入 | `{ apiHost, apiPort, runtimeName, writes: {tag,value}[], signal? }` |
-| 输出 | `{ batchId: string, status: "pending" }`；后续由 snapshot 观察升为 applied / 超时 failed |
-| 错误语义 | 客户端预校验失败不发 fetch；HTTP 4xx 抛错且不标记 applied |
-| 依据文档章节 | `todo/7.md` §十二 |
+| 名称或路径 | `features/runtime/runtimeWrites.ts` → `submitAtomicWrites`（可移动，须保留导出名或更新本表） |
+| 输入 / 输出 | 见 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.3 |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.3 |
 | 是否允许实现内部自由变化 | **是** |
 
 ---
@@ -81,14 +85,11 @@
 | 阶段 | 5 |
 | 公共表面 | `TemplateConfigBinding.ApplyRuntimeOverrides` |
 | 类型 | Go Binding |
-| 名称或路径 | `config-tool/internal/bindings` → `(*TemplateConfigBinding).ApplyRuntimeOverrides` |
-| 输入 | 结构化请求：目标 YAML 路径、expected hash、runtime override 字段集、写回勾选白名单 |
-| 输出 | 保存结果（新 hash / 路径）；校验失败不写盘 |
-| 错误语义 | 禁止 PV、实时液位、实时阀位；MV 默认不写回；校验失败 → error 且文件不变 |
-| 依据文档章节 | `todo/7.md` §十二 写回 DSL |
-| 是否允许实现内部自由变化 | **是** — **不得**要求特定 `writeback.go` 文件名或源码字符串扫描 |
-
-前端对应行为通过 Template Store / 写回 UI 验证，不锁定内部 reducer 名。
+| 名称或路径 | `(*TemplateConfigBinding).ApplyRuntimeOverrides(ApplyRuntimeOverridesRequest) (ApplyRuntimeOverridesResult, error)` |
+| 输入 / 输出 DTO | 见 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.4（字段名正式锁定） |
+| 错误语义 | 禁止 PV/实时位；MV 默认不写回；ExpectedHash 冲突；校验失败不写盘；禁直接覆盖内置模板 |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §2.4 |
+| 是否允许实现内部自由变化 | **是** — 不得要求特定 `.go` 文件名 |
 
 ---
 
@@ -96,59 +97,49 @@
 
 | 字段 | 内容 |
 |------|------|
-| 契约 ID | STAGE6-QUALITY-001 … 006 |
+| 契约 ID | STAGE6-QUALITY-* |
 | 阶段 | 6 |
 | 公共表面 | `computeControlQuality` |
 | 类型 | TypeScript module |
-| 名称或路径 | `config-tool/frontend/src/features/runtime/controlQuality.ts` → `computeControlQuality` |
-| 输入 | 时间序列 samples：`{ t: number, pv: number\|null, sv: number\|null, mv: number\|null }[]` + 选项（误差带、液位上下限、参数事件时刻） |
-| 输出 | 数值指标：稳态误差、超调、稳定时间（秒）、MV 饱和时间、高低限触碰次数、分段归档等；**禁止**用 NaN 作为成功指标 |
-| 错误语义 | 非有限样本跳过/计入 invalid，不得污染其余指标为 NaN |
-| 依据文档章节 | `todo/7.md` §十三 |
-| 是否允许实现内部自由变化 | **是** — 不得仅检查常量/函数存在 |
-
-Fixture 目录：`tools/stage_verification/fixtures/quality/*.json`
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §3.1 |
+| Fixture | `tools/stage_verification/fixtures/quality/*.json` |
+| 是否允许实现内部自由变化 | **是** |
 
 ---
 
-## STAGE6-TREND — RuntimeTrendPanel / events
+## STAGE6-TREND — RuntimeTrendPanel / TrendBuffer
 
 | 字段 | 内容 |
 |------|------|
 | 契约 ID | STAGE6-TREND-* / STAGE6-EVENT-* |
 | 阶段 | 6 |
-| 公共表面 | `RuntimeTrendPanel`；趋势事件列表 UI/Store 可读状态 |
-| 类型 | React component / Store 可观察状态 |
-| 名称或路径 | `RuntimeTrendPanel` 组件；事件以 UI/`data-testid` 或公开 store 选择器暴露 |
-| 输入 | series、previousRunSeries、events、stale |
-| 输出 | 双轴图、曲线开关、PV 绑定说明、事件 pending/applied/failed 可见 |
-| 依据文档章节 | `todo/7.md` §十三 |
-| 是否允许实现内部自由变化 | **是** — 不得要求 `trendPolicy` / reducer 内部名，除非另行登记为公共纯函数 |
-
-已有可复用公共表面：`TrendBuffer`（容量 1200、FIFO）— 阶段 4 已存在，阶段 6 可继续行为断言。
+| 公共表面 | `RuntimeTrendPanel`；`TrendBuffer`（已有） |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §3.2 |
+| 是否允许实现内部自由变化 | **是** |
 
 ---
 
-## STAGE7 — Batch / downsample / dialogs
+## STAGE7 — Batch / downsample
 
 | 字段 | 内容 |
 |------|------|
-| 契约 ID | STAGE7-BATCH-* / STAGE7-STATE-* / STAGE7-CSV-* / STAGE7-DOWNSAMPLE-* |
+| 契约 ID | STAGE7-* |
 | 阶段 | 7 |
-| 公共表面 | `SystemBinding.RunBatch` / `ExportBatch` / `AllocateBatchWorkDir` / `CanRunBatch`；前端 `BatchPanel`、`canStartBatch`/`canStartRealtime`；`downsample`；`batchExportDialogOptions` |
-| 类型 | Go Binding / React / TypeScript |
-| 依据 | `todo/7.md` §十四 |
+| 公共表面 | `SystemBinding.RunBatch` / `ExportBatch`；`downsample`；Batch UI / 状态纯函数（若导出） |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §4 |
+| 说明 | 并发/临时文件/互斥以**外部行为**验收，不强制内部分配器方法名 |
 | 是否允许实现内部自由变化 | **是** |
 
-## STAGE8 — E2E scenario
+---
+
+## STAGE8 — 分层 E2E
 
 | 字段 | 内容 |
 |------|------|
 | 契约 ID | STAGE8-E2E-001 … 029 |
 | 阶段 | 8 |
-| 公共表面 | `tools/stage_verification/fixtures/e2e/stage_8_scenario.json` + 既有 HTTP/Binding/UI 公共表面组合 |
-| 类型 | JSON scenario + 外部进程效果 |
-| 依据 | `todo/7.md` §十五 |
+| 公共表面 | `fixtures/e2e/stage_8_scenario.json` + 阶段 0～7 已登记公共表面组合 |
+| 依据文档章节 | `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md` §5 |
 | 是否允许实现内部自由变化 | **是** |
 
 ---
@@ -157,5 +148,5 @@ Fixture 目录：`tools/stage_verification/fixtures/quality/*.json`
 
 | 日期 | 说明 |
 |------|------|
-| 2026-07-20 | 批次 5.1 初版：登记 stage 5～6 公共表面，剔除内部 helper 锁定 |
-| 2026-07-20 | 批次 6：登记 stage 7～8 Batch/E2E 公共表面 |
+| 2026-07-20 | 批次 5.1 / 6 初版登记 |
+| 2026-07-21 | 提交 A：去除未跟踪任务笔记引用；依据改为 `SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md`；固化 Go DTO 与 `/writes` 查询表面 |

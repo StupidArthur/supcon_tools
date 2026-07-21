@@ -1,14 +1,15 @@
 package stage5_acceptance_test
 
 // Prospective behavioral acceptance for TemplateConfigBinding.ApplyRuntimeOverrides.
-// Method absence → contract assertion failure (reflect), never a compile error.
-// See CONTRACT_SURFACES.md → STAGE5-WRITEBACK.
+// Reflect-safe: never panic; mismatched signatures → STAGE5-WRITEBACK-* failures.
+// See SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md §2.4.
 
 import (
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"config-tool/internal/bindings"
@@ -26,30 +27,131 @@ func projectRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
-func requireApplyMethod(t *testing.T) reflect.Value {
+// resolveApplyMethod returns the bound method value after validating the formal signature.
+func resolveApplyMethod(t *testing.T) (binding *bindings.TemplateConfigBinding, method reflect.Value) {
 	t.Helper()
-	binding := bindings.NewTemplateConfigBinding()
-	method := reflect.ValueOf(binding).MethodByName(applyRuntimeOverridesMethod)
+	binding = bindings.NewTemplateConfigBinding()
+	method = reflect.ValueOf(binding).MethodByName(applyRuntimeOverridesMethod)
 	if !method.IsValid() {
 		t.Fatalf(
 			"STAGE5-WRITEBACK-001: public method TemplateConfigBinding.%s required "+
-				"(registered in CONTRACT_SURFACES.md); internal writeback.go filename is not a completion criterion",
+				"(SECOND_ORDER_TANK_ACCEPTANCE_SPEC.md §2.4)",
 			applyRuntimeOverridesMethod,
 		)
 	}
-	return method
+	mt := method.Type()
+	if mt.NumIn() != 1 {
+		t.Fatalf("STAGE5-WRITEBACK-001: %s must take exactly 1 argument (request DTO), NumIn=%d",
+			applyRuntimeOverridesMethod, mt.NumIn())
+	}
+	if mt.NumOut() != 2 {
+		t.Fatalf("STAGE5-WRITEBACK-001: %s must return (Result, error), NumOut=%d",
+			applyRuntimeOverridesMethod, mt.NumOut())
+	}
+	reqType := mt.In(0)
+	if reqType.Kind() == reflect.Ptr {
+		reqType = reqType.Elem()
+	}
+	if reqType.Kind() != reflect.Struct {
+		t.Fatalf("STAGE5-WRITEBACK-001: request parameter must be struct, got %s", reqType.Kind())
+	}
+	assertField := func(name string, kind reflect.Kind, assignableTo reflect.Type) {
+		f, ok := reqType.FieldByName(name)
+		if !ok {
+			t.Fatalf("STAGE5-WRITEBACK-002: ApplyRuntimeOverridesRequest missing field %s", name)
+		}
+		ft := f.Type
+		if kind == reflect.Map {
+			if ft.Kind() != reflect.Map || ft.Key().Kind() != reflect.String || ft.Elem().Kind() != reflect.Float64 {
+				t.Fatalf("STAGE5-WRITEBACK-002: field %s must be map[string]float64, got %s", name, ft)
+			}
+			return
+		}
+		if ft.Kind() != kind {
+			t.Fatalf("STAGE5-WRITEBACK-002: field %s must be %s, got %s", name, kind, ft.Kind())
+		}
+		_ = assignableTo
+	}
+	assertField("TargetPath", reflect.String, nil)
+	assertField("ExpectedHash", reflect.String, nil)
+	assertField("Overrides", reflect.Map, nil)
+	assertField("IncludeMV", reflect.Bool, nil)
+
+	out0 := mt.Out(0)
+	if out0.Kind() == reflect.Ptr {
+		out0 = out0.Elem()
+	}
+	if out0.Kind() != reflect.Struct {
+		t.Fatalf("STAGE5-WRITEBACK-001: first return must be Result struct, got %s", out0.Kind())
+	}
+	for _, name := range []string{"Path", "ContentHash", "AppliedFields"} {
+		if _, ok := out0.FieldByName(name); !ok {
+			t.Fatalf("STAGE5-WRITEBACK-001: ApplyRuntimeOverridesResult missing field %s", name)
+		}
+	}
+	errType := mt.Out(1)
+	if errType != reflect.TypeOf((*error)(nil)).Elem() {
+		// Accept any type that implements error interface.
+		if !errType.Implements(reflect.TypeOf((*error)(nil)).Elem()) && errType.Kind() != reflect.Interface {
+			t.Fatalf("STAGE5-WRITEBACK-001: second return must implement error, got %s", errType)
+		}
+	}
+	return binding, method
 }
 
-func TestAcceptanceApplyRuntimeOverridesMethodExists(t *testing.T) {
-	requireApplyMethod(t)
+func buildRequest(t *testing.T, method reflect.Value, fill func(reflect.Value)) reflect.Value {
+	t.Helper()
+	inType := method.Type().In(0)
+	if inType.Kind() == reflect.Ptr {
+		ptr := reflect.New(inType.Elem())
+		fill(ptr.Elem())
+		return ptr
+	}
+	val := reflect.New(inType).Elem()
+	fill(val)
+	return val
 }
 
-func TestAcceptanceApplyRuntimeOverridesWhitelistBehavior(t *testing.T) {
-	method := requireApplyMethod(t)
+func setStructField(t *testing.T, dest reflect.Value, name string, value any) {
+	t.Helper()
+	f := dest.FieldByName(name)
+	if !f.IsValid() || !f.CanSet() {
+		t.Fatalf("STAGE5-WRITEBACK-002: cannot set field %s", name)
+	}
+	v := reflect.ValueOf(value)
+	if !v.Type().AssignableTo(f.Type()) {
+		t.Fatalf("STAGE5-WRITEBACK-002: field %s type mismatch: have %s want %s",
+			name, v.Type(), f.Type())
+	}
+	f.Set(v)
+}
+
+func callApply(t *testing.T, method reflect.Value, arg reflect.Value) (result reflect.Value, err error) {
+	t.Helper()
+	outs := method.Call([]reflect.Value{arg})
+	if len(outs) != 2 {
+		t.Fatalf("STAGE5-WRITEBACK-001: expected 2 return values, got %d", len(outs))
+	}
+	result = outs[0]
+	if outs[1].IsNil() {
+		return result, nil
+	}
+	errObj, ok := outs[1].Interface().(error)
+	if !ok {
+		t.Fatalf("STAGE5-WRITEBACK-001: second return is not error: %T", outs[1].Interface())
+	}
+	return result, errObj
+}
+
+func TestAcceptanceApplyRuntimeOverridesSignature(t *testing.T) {
+	resolveApplyMethod(t)
+}
+
+func TestAcceptanceApplyRuntimeOverridesRejectsForbiddenFields(t *testing.T) {
+	_, method := resolveApplyMethod(t)
 	root := projectRoot(t)
 	src := filepath.Join(root, "config", "单阀门二阶水箱.yaml")
-	dstDir := t.TempDir()
-	dst := filepath.Join(dstDir, "override_target.yaml")
+	dst := filepath.Join(t.TempDir(), "override_target.yaml")
 	data, err := os.ReadFile(src)
 	if err != nil {
 		t.Fatalf("read builtin fixture: %v", err)
@@ -57,98 +159,85 @@ func TestAcceptanceApplyRuntimeOverridesWhitelistBehavior(t *testing.T) {
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
 		t.Fatalf("copy target: %v", err)
 	}
+	doc, err := config.NewTemplateService().LoadTemplate(dst)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
 
-	// Call signature is implementation-defined but must accept a request-like value.
-	// We probe with a map-shaped request via a dedicated DTO if present; otherwise fail with contract ID.
-	reqType := method.Type().In(0)
-	req := reflect.New(reqType).Elem()
-	setField := func(name string, value any) bool {
-		f := req.FieldByName(name)
-		if !f.IsValid() || !f.CanSet() {
-			return false
-		}
-		v := reflect.ValueOf(value)
-		if v.Type().AssignableTo(f.Type()) {
-			f.Set(v)
-			return true
-		}
-		if f.Kind() == reflect.String && v.Kind() == reflect.String {
-			f.SetString(v.String())
-			return true
-		}
-		return false
-	}
-	if !setField("TargetPath", dst) && !setField("Path", dst) {
-		t.Fatal("STAGE5-WRITEBACK-002: request must expose TargetPath (or Path) for YAML writeback")
-	}
-	// Forbidden overrides must be rejected.
-	_ = setField("Overrides", map[string]float64{
-		"PV":                    1,
-		"tank_2.level":          0.9,
-		"valve_1.current_opening": 10,
+	arg := buildRequest(t, method, func(req reflect.Value) {
+		setStructField(t, req, "TargetPath", dst)
+		setStructField(t, req, "ExpectedHash", doc.ContentHash)
+		setStructField(t, req, "Overrides", map[string]float64{
+			"PV":                      1,
+			"tank_2.level":            0.9,
+			"valve_1.current_opening": 10,
+		})
+		setStructField(t, req, "IncludeMV", false)
 	})
-	_ = setField("IncludeMV", false)
-
-	out := method.Call([]reflect.Value{req})
-	if len(out) >= 1 {
-		errVal := out[len(out)-1]
-		if errVal.IsNil() {
-			t.Fatal("STAGE5-WRITEBACK-003: PV/realtime level/valve opening must be rejected")
-		}
+	_, callErr := callApply(t, method, arg)
+	if callErr == nil {
+		t.Fatal("STAGE5-WRITEBACK-003: PV/realtime level/valve opening must be rejected")
 	}
-
 	after, _ := os.ReadFile(dst)
 	if string(after) != string(data) {
 		t.Fatal("STAGE5-WRITEBACK-003: rejected writeback must not modify YAML on disk")
 	}
 }
 
-func TestAcceptanceApplyRuntimeOverridesWhitelistSaveAndParse(t *testing.T) {
-	method := requireApplyMethod(t)
+func TestAcceptanceApplyRuntimeOverridesExpectedHashConflict(t *testing.T) {
+	_, method := resolveApplyMethod(t)
 	root := projectRoot(t)
 	src := filepath.Join(root, "config", "单阀门二阶水箱.yaml")
-	dstDir := t.TempDir()
-	dst := filepath.Join(dstDir, "ok.yaml")
+	dst := filepath.Join(t.TempDir(), "hash.yaml")
 	data, err := os.ReadFile(src)
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
-		t.Fatalf("write: %v", err)
+		t.Fatal(err)
 	}
+	arg := buildRequest(t, method, func(req reflect.Value) {
+		setStructField(t, req, "TargetPath", dst)
+		setStructField(t, req, "ExpectedHash", "not-the-real-hash")
+		setStructField(t, req, "Overrides", map[string]float64{"PB": 22})
+		setStructField(t, req, "IncludeMV", false)
+	})
+	_, callErr := callApply(t, method, arg)
+	if callErr == nil {
+		t.Fatal("STAGE5-WRITEBACK-004: ExpectedHash conflict must reject write")
+	}
+	after, _ := os.ReadFile(dst)
+	if string(after) != string(data) {
+		t.Fatal("STAGE5-WRITEBACK-004: hash conflict must leave file unchanged")
+	}
+}
 
+func TestAcceptanceApplyRuntimeOverridesWhitelistSave(t *testing.T) {
+	_, method := resolveApplyMethod(t)
+	root := projectRoot(t)
+	src := filepath.Join(root, "config", "单阀门二阶水箱.yaml")
+	dst := filepath.Join(t.TempDir(), "ok.yaml")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	doc, err := config.NewTemplateService().LoadTemplate(dst)
 	if err != nil {
-		t.Fatalf("load template: %v", err)
+		t.Fatal(err)
 	}
 
-	reqType := method.Type().In(0)
-	req := reflect.New(reqType).Elem()
-	setString := func(name, value string) {
-		f := req.FieldByName(name)
-		if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
-			f.SetString(value)
-		}
-	}
-	setString("TargetPath", dst)
-	setString("Path", dst)
-	setString("ExpectedHash", doc.ContentHash)
-
-	f := req.FieldByName("Overrides")
-	if f.IsValid() && f.CanSet() {
-		ov := map[string]float64{"PB": 22, "TI": 80, "SV": 0.75}
-		f.Set(reflect.ValueOf(ov))
-	} else {
-		t.Fatal("STAGE5-WRITEBACK-002: request must accept whitelist Overrides map")
-	}
-	if mv := req.FieldByName("IncludeMV"); mv.IsValid() && mv.CanSet() && mv.Kind() == reflect.Bool {
-		mv.SetBool(false)
-	}
-
-	out := method.Call([]reflect.Value{req})
-	errVal := out[len(out)-1]
-	if !errVal.IsNil() {
-		t.Fatalf("STAGE5-WRITEBACK-004: whitelist save should succeed after revalidation: %v", errVal.Interface())
+	arg := buildRequest(t, method, func(req reflect.Value) {
+		setStructField(t, req, "TargetPath", dst)
+		setStructField(t, req, "ExpectedHash", doc.ContentHash)
+		setStructField(t, req, "Overrides", map[string]float64{"PB": 22, "TI": 80, "SV": 0.75})
+		setStructField(t, req, "IncludeMV", false)
+	})
+	result, callErr := callApply(t, method, arg)
+	if callErr != nil {
+		t.Fatalf("STAGE5-WRITEBACK-004: whitelist save should succeed: %v", callErr)
 	}
 	after, err := os.ReadFile(dst)
 	if err != nil {
@@ -157,8 +246,55 @@ func TestAcceptanceApplyRuntimeOverridesWhitelistSaveAndParse(t *testing.T) {
 	if string(after) == string(data) {
 		t.Fatal("STAGE5-WRITEBACK-005: saved YAML must change when whitelist overrides apply")
 	}
-	// Running identity must not be rewritten by writeback — verified by caller; here ensure file still loads.
 	if _, err := config.NewTemplateService().LoadTemplate(dst); err != nil {
 		t.Fatalf("STAGE5-WRITEBACK-005: output YAML must remain loadable: %v", err)
+	}
+	// Result fields when struct value.
+	resVal := result
+	if resVal.Kind() == reflect.Ptr {
+		resVal = resVal.Elem()
+	}
+	if f := resVal.FieldByName("AppliedFields"); f.IsValid() && f.Kind() == reflect.Slice && f.Len() > 0 {
+		applied, ok := f.Interface().([]string)
+		if !ok {
+			t.Fatalf("STAGE5-WRITEBACK-001: AppliedFields must be []string, got %T", f.Interface())
+		}
+		for _, a := range applied {
+			upper := strings.ToUpper(a)
+			if upper == "MV" || strings.HasSuffix(upper, ".MV") {
+				t.Fatalf("STAGE5-WRITEBACK-003: MV must not be written when IncludeMV=false; applied=%v", applied)
+			}
+			if upper == "PV" || strings.HasSuffix(upper, ".PV") {
+				t.Fatalf("STAGE5-WRITEBACK-003: PV must not appear in AppliedFields; applied=%v", applied)
+			}
+		}
+	}
+}
+
+func TestAcceptanceApplyRuntimeOverridesRejectsBuiltinPath(t *testing.T) {
+	_, method := resolveApplyMethod(t)
+	root := projectRoot(t)
+	builtin := filepath.Join(root, "config", "单阀门二阶水箱.yaml")
+	before, err := os.ReadFile(builtin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := config.NewTemplateService().LoadTemplate(builtin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arg := buildRequest(t, method, func(req reflect.Value) {
+		setStructField(t, req, "TargetPath", builtin)
+		setStructField(t, req, "ExpectedHash", doc.ContentHash)
+		setStructField(t, req, "Overrides", map[string]float64{"PB": 33})
+		setStructField(t, req, "IncludeMV", false)
+	})
+	_, callErr := callApply(t, method, arg)
+	if callErr == nil {
+		t.Fatal("STAGE5-WRITEBACK-005: must not directly overwrite the builtin template")
+	}
+	after, _ := os.ReadFile(builtin)
+	if string(after) != string(before) {
+		t.Fatal("STAGE5-WRITEBACK-005: builtin template bytes must be unchanged")
 	}
 }
