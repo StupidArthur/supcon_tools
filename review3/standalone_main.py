@@ -330,6 +330,30 @@ def main() -> None:
         help="CSV export path for batch mode (e.g., output.csv)"
     )
     parser.add_argument(
+        "--format",
+        choices=["csv", "xlsx", "xls"],
+        default=None,
+        help="批量导出文件格式；指定后走引擎模板导出（时间列+表头），否则输出全列裸 CSV"
+    )
+    parser.add_argument(
+        "--columns",
+        type=str,
+        default=None,
+        help="导出列，英文逗号分隔；留空则用 DSL display_args（get_display_variables）"
+    )
+    parser.add_argument(
+        "--template",
+        type=str,
+        default="prediction",
+        help="导出模板名（决定表头行数/时间格式等），默认 prediction"
+    )
+    parser.add_argument(
+        "--sheet-name",
+        type=str,
+        default=None,
+        help="Excel 工作表名（仅 xlsx/xls），缺省「控制器」"
+    )
+    parser.add_argument(
         "--api",
         action="store_true",
         help="Enable FastAPI debug HTTP+WebSocket server (for Wails GUI tooling)"
@@ -393,6 +417,9 @@ def main() -> None:
         # 创建引擎
         parser = DSLParser()
         config = parser.parse_file(yaml_path)
+        # 模板导出（--format）需要每个周期都采样，导出器只取 need_sample=True 的行。
+        if args.format:
+            config.clock.sample_interval = None
         engine = UnifiedEngine.from_program_config(config)
 
         print(f"Batch mode: running {args.batch} cycles in GENERATOR mode...")
@@ -414,10 +441,34 @@ def main() -> None:
                 print(f"  Progress: {i + 1}/{args.batch} cycles")
         engine.clock.stop()
 
-        # 导出CSV
+        # 导出
         output_path = args.export or "output.csv"
         print(f"Exporting to {output_path}...")
 
+        if args.format:
+            # 模板导出：engine.export_snapshots（时间列 + 表头，csv/xlsx/xls）。
+            # 列由 --columns 指定，留空则用 DSL display_args。
+            from components.export_templates import TemplateManager
+            template = TemplateManager().load_template(args.template)
+            if args.columns:
+                export_columns = [c.strip() for c in args.columns.split(",") if c.strip()]
+            else:
+                export_columns = engine.get_display_variables()
+            engine.export_snapshots(
+                results,
+                output_path,
+                template,
+                file_format=args.format,
+                sheet_name=args.sheet_name,
+                selected_variables=export_columns,
+            )
+            print(
+                f"Done! Exported {len(results)} cycles to {output_path} "
+                f"({args.format}, {len(export_columns)} columns)"
+            )
+            sys.exit(0)
+
+        # 裸 CSV（供趋势图展示）：全部数据列 + display.json sidecar
         import csv
         if results:
             # 获取所有键
@@ -433,6 +484,13 @@ def main() -> None:
                 writer = csv.DictWriter(f, fieldnames=export_keys, extrasaction='ignore')
                 writer.writeheader()
                 writer.writerows(results)
+
+            # 默认绘图列：来自 DSL display_args（引擎权威实现 get_display_variables）。
+            # 写为 CSV 旁的 sidecar，供组态工具前端做默认选中，避免前端自行猜测。
+            import json
+            display_columns = engine.get_display_variables()
+            with open(output_path + ".display.json", "w", encoding="utf-8") as f:
+                json.dump({"display_columns": display_columns}, f, ensure_ascii=False)
 
         print(f"Done! Exported {len(results)} rows to {output_path}")
         sys.exit(0)

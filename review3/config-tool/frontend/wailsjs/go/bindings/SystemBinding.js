@@ -22,6 +22,10 @@ export function ExportBatch(arg1, arg2, arg3) {
   return window['go']['bindings']['SystemBinding']['ExportBatch'](arg1, arg2, arg3);
 }
 
+export function ExportBatchFormatted(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['bindings']['SystemBinding']['ExportBatchFormatted'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function ExportCSVRows(arg1, arg2, arg3) {
   return window['go']['bindings']['SystemBinding']['ExportCSVRows'](arg1, arg2, arg3);
 }
@@ -52,6 +56,10 @@ export function RunBatch(arg1, arg2) {
 
 export function SaveCSVFile() {
   return window['go']['bindings']['SystemBinding']['SaveCSVFile']();
+}
+
+export function SaveExportFile(arg1) {
+  return window['go']['bindings']['SystemBinding']['SaveExportFile'](arg1);
 }
 
 export function SaveYAMLFile() {

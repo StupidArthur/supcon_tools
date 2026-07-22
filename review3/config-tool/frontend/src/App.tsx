@@ -16,12 +16,21 @@ function App() {
   }, [init])
 
   useEffect(() => {
-    EventsOn('df:log', (log: string) => {
-      useCanvasStore.getState().addDfLog(log)
-    })
-    EventsOn('df:status', (status: any) => {
-      useCanvasStore.getState().setDfStatus(status)
-    })
+    // wails runtime 未注入时 EventsOn 会抛错，导致白屏；开发态/异常启动需容错。
+    if (!(window as any).runtime?.EventsOnMultiple) {
+      console.warn('wails runtime unavailable; skip df event subscriptions')
+      return
+    }
+    try {
+      EventsOn('df:log', (log: string) => {
+        useCanvasStore.getState().addDfLog(log)
+      })
+      EventsOn('df:status', (status: any) => {
+        useCanvasStore.getState().setDfStatus(status)
+      })
+    } catch (err) {
+      console.warn('EventsOn failed:', err)
+    }
   }, [])
 
   const primary = resolvePrimaryView(view)

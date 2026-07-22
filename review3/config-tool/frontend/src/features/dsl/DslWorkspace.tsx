@@ -1,15 +1,23 @@
 /**
- * DSL 工程工作区：模板 / YAML / 拓扑 + 仿真区
+ * DSL 工程工作区。
+ *
+ * - generic YAML 工程：左右分栏 —— 左 YAML 源码，右 仿真一体面板（可拖拽分隔条）。
+ * - template 工程（二阶水箱）：保持原有 模板/YAML/拓扑 三 Tab + 底部仿真区 布局。
  */
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { systemApi, templateApi } from '../../lib/api'
 import type { DslEditorTab } from '../app/navigation'
 import { SecondOrderTankPage } from '../templates/secondOrderTank/SecondOrderTankPage'
 import { useTemplateStore } from '../templates/useTemplateStore'
+import { GenericSimPanel } from './GenericSimPanel'
 import { SimWorkspace } from './SimWorkspace'
 import { TopologyDiagnosticsPanel } from './TopologyDiagnosticsPanel'
 import { useDslProjectStore } from './useDslProjectStore'
 import { YamlSourceEditor } from './YamlSourceEditor'
+
+const DEFAULT_LEFT_PCT = 38
+const MIN_LEFT_PCT = 20
+const MAX_LEFT_PCT = 70
 
 const EDITOR_TABS: Array<{ id: DslEditorTab; label: string }> = [
   { id: 'template', label: '模板视图' },
@@ -97,6 +105,26 @@ export function DslWorkspace() {
     setProjectFile(target)
   }
 
+  // generic 工程左右分栏的可拖拽分隔条
+  const [leftPct, setLeftPct] = useState(DEFAULT_LEFT_PCT)
+  const splitRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef(false)
+
+  const onDividerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = true
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onDividerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current || !splitRef.current) return
+    const rect = splitRef.current.getBoundingClientRect()
+    if (rect.width <= 0) return
+    const pct = ((e.clientX - rect.left) / rect.width) * 100
+    setLeftPct(Math.min(MAX_LEFT_PCT, Math.max(MIN_LEFT_PCT, pct)))
+  }
+  const onDividerUp = () => {
+    draggingRef.current = false
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col" data-testid="dsl-workspace">
       <header className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
@@ -153,42 +181,59 @@ export function DslWorkspace() {
         </button>
       </header>
 
-      <div className="flex items-center gap-1 border-b border-border px-2 py-1">
-        {EDITOR_TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setEditorTab(t.id)}
-            className={`rounded-md px-2.5 py-1 text-xs ${
-              editorTab === t.id
-                ? 'bg-secondary font-medium'
-                : 'text-muted-foreground hover:bg-secondary/60'
-            }`}
-            data-testid={`dsl-editor-tab-${t.id}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {projectKind === 'template' ? (
+        <>
+          <div className="flex items-center gap-1 border-b border-border px-2 py-1">
+            {EDITOR_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setEditorTab(t.id)}
+                className={`rounded-md px-2.5 py-1 text-xs ${
+                  editorTab === t.id
+                    ? 'bg-secondary font-medium'
+                    : 'text-muted-foreground hover:bg-secondary/60'
+                }`}
+                data-testid={`dsl-editor-tab-${t.id}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-[3] overflow-hidden">
-          {editorTab === 'template' ? (
-            projectKind === 'template' ? (
-              <SecondOrderTankPage embedded />
-            ) : (
-              <div className="flex h-full items-center justify-center p-6 text-xs text-muted-foreground" data-testid="no-template-view">
-                当前 DSL 没有专用可视化模板，请使用 YAML 源码。
-              </div>
-            )
-          ) : null}
-          {editorTab === 'yaml' ? <YamlSourceEditor /> : null}
-          {editorTab === 'topology' ? <TopologyDiagnosticsPanel /> : null}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-[3] overflow-hidden">
+              {editorTab === 'template' ? <SecondOrderTankPage embedded /> : null}
+              {editorTab === 'yaml' ? <YamlSourceEditor /> : null}
+              {editorTab === 'topology' ? <TopologyDiagnosticsPanel /> : null}
+            </div>
+            <div className="min-h-[220px] flex-[2] overflow-hidden">
+              <SimWorkspace />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div ref={splitRef} className="flex min-h-0 flex-1 overflow-hidden" data-testid="dsl-split">
+          <div style={{ width: `${leftPct}%` }} className="flex min-h-0 flex-col overflow-hidden">
+            <YamlSourceEditor />
+          </div>
+          <div
+            onPointerDown={onDividerDown}
+            onPointerMove={onDividerMove}
+            onPointerUp={onDividerUp}
+            onPointerCancel={onDividerUp}
+            className="relative w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/60"
+            role="separator"
+            aria-orientation="vertical"
+            data-testid="dsl-split-divider"
+          >
+            <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <GenericSimPanel />
+          </div>
         </div>
-        <div className="min-h-[220px] flex-[2] overflow-hidden">
-          <SimWorkspace />
-        </div>
-      </div>
+      )}
     </div>
   )
 }

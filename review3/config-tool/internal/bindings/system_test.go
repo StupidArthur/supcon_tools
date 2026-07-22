@@ -1007,3 +1007,77 @@ func TestHelperProcess(t *testing.T) {
 
 	os.Exit(exitCode)
 }
+
+func writeSidecar(t *testing.T, csvPath, body string) {
+	t.Helper()
+	if err := os.WriteFile(csvPath+".display.json", []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestReadDisplayColumnsFiltersToCSVColumns(t *testing.T) {
+	csvPath := filepath.Join(t.TempDir(), "result.csv")
+	writeSidecar(t, csvPath, `{"display_columns":["pid2.MV","pid2.SV","tank_2.level","not_in_csv"]}`)
+
+	valid := []string{"_cycle", "pid2.MV", "pid2.SV", "pid2.PV", "tank_2.level", "tank_1.level"}
+	got := readDisplayColumns(csvPath, valid)
+	want := []string{"pid2.MV", "pid2.SV", "tank_2.level"}
+	if !equalStrings(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestReadDisplayColumnsMissingSidecar(t *testing.T) {
+	csvPath := filepath.Join(t.TempDir(), "result.csv")
+	if got := readDisplayColumns(csvPath, []string{"a"}); got != nil {
+		t.Fatalf("expected nil for missing sidecar, got %v", got)
+	}
+}
+
+func TestReadDisplayColumnsMalformedSidecar(t *testing.T) {
+	csvPath := filepath.Join(t.TempDir(), "result.csv")
+	writeSidecar(t, csvPath, `{not json`)
+	if got := readDisplayColumns(csvPath, []string{"a"}); got != nil {
+		t.Fatalf("expected nil for malformed sidecar, got %v", got)
+	}
+}
+
+func TestBuildBatchExportArgs(t *testing.T) {
+	got := buildBatchExportArgs("cfg.yaml", 100, "out.xlsx", "XLSX", []string{"tank_2.level", "pid2.SV"}, "控制器")
+	want := []string{
+		"-c", "cfg.yaml",
+		"--batch", "100",
+		"--export", "out.xlsx",
+		"--format", "xlsx",
+		"--columns", "tank_2.level,pid2.SV",
+		"--sheet-name", "控制器",
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestBuildBatchExportArgsOmitsOptional(t *testing.T) {
+	got := buildBatchExportArgs("cfg.yaml", 50, "out.csv", "csv", nil, "")
+	want := []string{
+		"-c", "cfg.yaml",
+		"--batch", "50",
+		"--export", "out.csv",
+		"--format", "csv",
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}

@@ -13,6 +13,8 @@ export function CleanupTempYAML(arg1:string):Promise<void>;
 
 export function ExportBatch(arg1:string,arg2:number,arg3:string):Promise<void>;
 
+export function ExportBatchFormatted(arg1:string,arg2:number,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<void>;
+
 export function ExportCSVRows(arg1:Array<string>,arg2:Array<Record<string, any>>,arg3:string):Promise<void>;
 
 export function GetDataFactoryPath():Promise<string>;
@@ -28,6 +30,8 @@ export function ReadTextFile(arg1:string):Promise<string>;
 export function RunBatch(arg1:string,arg2:number):Promise<bindings.BatchResult>;
 
 export function SaveCSVFile():Promise<string>;
+
+export function SaveExportFile(arg1:string):Promise<string>;
 
 export function SaveYAMLFile():Promise<string>;
 

@@ -39,6 +39,8 @@ interface GenericSimState {
     completedCycles: number
     /** Hash of current project yamlText at completion time (compared to boundYamlHash). */
     currentYamlHash: string
+    /** DSL display_args 声明的默认绘图列（来自引擎），作为默认选中；YAML 未声明时为空。 */
+    displayColumns?: string[]
   }) => boolean
   fail: (payload: { projectId: string; runId: string; epoch: number; error: string }) => boolean
   markStale: () => void
@@ -47,11 +49,6 @@ interface GenericSimState {
   isRunning: () => boolean
   hasExportableResult: (projectId: string) => boolean
   hasDisplayResult: (projectId: string) => boolean
-}
-
-function pickDefaultColumns(columns: string[]): string[] {
-  const numericHints = columns.filter((c) => c !== '_cycle')
-  return numericHints.slice(0, Math.min(3, numericHints.length))
 }
 
 function newRunId(): string {
@@ -110,20 +107,24 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     return runId
   },
 
-  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles, currentYamlHash }) => {
+  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles, currentYamlHash, displayColumns }) => {
     const s = get()
     if (s.epoch !== epoch || s.boundProjectId !== projectId || s.boundRunId !== runId) {
       return false
     }
     // Completion hash compare is authoritative (not unconditional stale=false).
     const stale = currentYamlHash !== s.boundYamlHash
+    // 默认绘图列完全由 YAML 的 display_args 驱动（引擎 get_display_variables）；
+    // 仅保留 CSV 实际存在的列，YAML 未声明则为空（由用户手动勾选）。
+    const columnSet = new Set(columns)
+    const selectedColumns = (displayColumns ?? []).filter((c) => columnSet.has(c))
     set({
       status: 'success',
       columns,
       rows,
       completedCycles,
       error: null,
-      selectedColumns: pickDefaultColumns(columns),
+      selectedColumns,
       stale,
     })
     return true

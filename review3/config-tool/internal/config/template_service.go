@@ -83,47 +83,25 @@ var pythonValveDefaults = ValveConfig{
 	FlowCoefficient: 1.0,
 }
 
-// resolveBuiltinTemplatePath 按以下顺序定位内置模板的绝对路径：
-//  1. 环境变量 SUPCON_TOOL_REPO_ROOT（测试和 CI 优先使用）
-//  2. 从 os.Executable() 所在目录向上最多 8 层查找 config/单阀门二阶水箱.yaml
-//
-// 一律返回绝对路径，不依赖当前工作目录，也不依赖 basename 匹配。
+// ResolveBuiltinTemplatePath 定位内置模板的绝对路径（见 ResolveRepoRoot）。
 func ResolveBuiltinTemplatePath() (string, error) {
-	if root := strings.TrimSpace(os.Getenv("SUPCON_TOOL_REPO_ROOT")); root != "" {
-		abs, _ := filepath.Abs(root)
-		candidate := filepath.Join(abs, BuiltinTemplateRelativePath)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
-		}
-		return "", fmt.Errorf("SUPCON_TOOL_REPO_ROOT=%q 不包含 %s", abs, BuiltinTemplateRelativePath)
-	}
-	exe, err := os.Executable()
+	root, err := ResolveRepoRoot()
 	if err != nil {
-		return "", fmt.Errorf("获取可执行文件路径失败: %w", err)
+		return "", fmt.Errorf("无法定位内置模板 %s；%w", BuiltinTemplateRelativePath, err)
 	}
-	return resolveBuiltinTemplatePathFrom(filepath.Dir(exe))
+	abs, _ := filepath.Abs(filepath.Join(root, BuiltinTemplateRelativePath))
+	return abs, nil
 }
 
 // resolveBuiltinTemplatePathFrom is the testable executable-layout branch of
 // ResolveBuiltinTemplatePath. startDir is normally filepath.Dir(os.Executable()).
 func resolveBuiltinTemplatePathFrom(startDir string) (string, error) {
-	dir, err := filepath.Abs(startDir)
+	root, err := resolveRepoRootFrom(startDir)
 	if err != nil {
-		return "", fmt.Errorf("解析可执行文件目录失败: %w", err)
+		return "", fmt.Errorf("无法定位内置模板 %s；%w", BuiltinTemplateRelativePath, err)
 	}
-	for i := 0; i < 8; i++ {
-		candidate := filepath.Join(dir, BuiltinTemplateRelativePath)
-		if _, err := os.Stat(candidate); err == nil {
-			abs, _ := filepath.Abs(candidate)
-			return abs, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", fmt.Errorf("无法定位内置模板 %s；请设置 SUPCON_TOOL_REPO_ROOT", BuiltinTemplateRelativePath)
+	abs, _ := filepath.Abs(filepath.Join(root, BuiltinTemplateRelativePath))
+	return abs, nil
 }
 
 // LoadBuiltinTemplate 解析内置模板并返回 TemplateDocument。

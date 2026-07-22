@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"config-tool/internal/config"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -54,6 +56,9 @@ type SystemStatus struct {
 type BatchResult struct {
 	Columns []string         `json:"columns"`
 	Rows    []map[string]any `json:"rows"`
+	// DisplayColumns 是 DSL display_args 声明的默认绘图列（来自引擎 get_display_variables），
+	// 已过滤为 Columns 中实际存在的列；YAML 未写 display_args 时为空。
+	DisplayColumns []string `json:"displayColumns"`
 }
 
 // commandFactory 创建命令的工厂函数（用于测试注入）
@@ -100,6 +105,7 @@ type SystemBinding struct {
 	proc            *managedProcess // 当前进程
 	activeBatches   int             // 当前进行中的批量任务数（受 mu 保护）
 	dataFactoryPath string
+	dfLaunch        dataFactoryExec
 	lastError       string // 最近一次退出的错误（proc=nil 时仍可返回）
 
 	// 日志收集
@@ -116,8 +122,10 @@ type SystemBinding struct {
 
 // NewSystemBinding 创建系统绑定
 func NewSystemBinding() *SystemBinding {
+	launch, _ := resolveDataFactoryLaunch()
 	return &SystemBinding{
-		dataFactoryPath:   findDataFactory(),
+		dataFactoryPath:   launch.displayPath(),
+		dfLaunch:          launch,
 		maxLogLines:       100,
 		commandFactory:    func(name string, arg ...string) *exec.Cmd { return exec.Command(name, arg...) },
 		readinessChecker:  defaultReadinessChecker,
@@ -167,28 +175,42 @@ func (b *SystemBinding) SetContext(ctx context.Context) {
 }
 
 func findDataFactory() string {
-	exePath, err := os.Executable()
+	launch, err := resolveDataFactoryLaunch()
 	if err != nil {
 		return ""
 	}
-	exeDir := filepath.Dir(exePath)
-	candidates := []string{
-		filepath.Join(exeDir, "DataFactory.exe"),
-		filepath.Join(exeDir, "..", "DataFactory.exe"),
-		filepath.Join(exeDir, "..", "..", "DataFactory.exe"),
-		filepath.Join(exeDir, "..", "..", "..", "DataFactory.exe"),
+	return launch.displayPath()
+}
+
+func (b *SystemBinding) ensureDataFactory() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.ensureDataFactoryLocked()
+}
+
+func (b *SystemBinding) ensureDataFactoryLocked() error {
+	if b.dfLaunch.valid() {
+		return nil
 	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			abs, _ := filepath.Abs(p)
-			return abs
-		}
+	if strings.TrimSpace(b.dataFactoryPath) != "" {
+		exe := strings.Fields(b.dataFactoryPath)[0]
+		b.dfLaunch = dataFactoryExec{exe: exe, workDir: filepath.Dir(exe)}
+		return nil
 	}
-	return ""
+	launch, err := resolveDataFactoryLaunch()
+	if err != nil {
+		return err
+	}
+	b.dfLaunch = launch
+	b.dataFactoryPath = launch.displayPath()
+	return nil
 }
 
 // GetDataFactoryPath 获取 DataFactory 路径
 func (b *SystemBinding) GetDataFactoryPath() string {
+	if err := b.ensureDataFactory(); err == nil {
+		return b.dataFactoryPath
+	}
 	return b.dataFactoryPath
 }
 
@@ -204,15 +226,19 @@ func (b *SystemBinding) BrowseExe() (string, error) {
 		return b.dataFactoryPath, nil
 	}
 	b.dataFactoryPath = path
+	b.dfLaunch = dataFactoryExec{exe: path, workDir: filepath.Dir(path)}
 	return path, nil
 }
 
 // ListConfigs 列出配置文件
 func (b *SystemBinding) ListConfigs() ([]string, error) {
-	if b.dataFactoryPath == "" {
-		return nil, fmt.Errorf("未设置 DataFactory 路径")
+	if err := b.ensureDataFactory(); err != nil {
+		return nil, err
 	}
-	dir := filepath.Join(filepath.Dir(b.dataFactoryPath), "config")
+	dir, err := config.ResolveConfigDir()
+	if err != nil {
+		dir = filepath.Join(filepath.Dir(b.dfLaunch.exe), "config")
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("无法读取 config 目录: %w", err)
@@ -284,7 +310,7 @@ func (b *SystemBinding) Start(params StartParams) error {
 		b.mu.Unlock()
 		return fmt.Errorf("DataFactory 已在运行中")
 	}
-	if b.dataFactoryPath == "" {
+	if err := b.ensureDataFactoryLocked(); err != nil {
 		b.mu.Unlock()
 		return fmt.Errorf("未设置 DataFactory 路径，请先选择 DataFactory.exe")
 	}
@@ -304,10 +330,9 @@ func (b *SystemBinding) Start(params StartParams) error {
 	readinessChecker := b.readinessChecker
 	pollInterval := b.readyPollInterval
 	readyTimeout := b.readyTimeout
-	dataFactoryPath := b.dataFactoryPath
+	dfLaunch := b.dfLaunch
 	args := BuildArgs(params)
-	cmd := commandFactory(dataFactoryPath, args...)
-	cmd.Dir = filepath.Dir(dataFactoryPath)
+	cmd := dfLaunch.command(commandFactory, args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -838,12 +863,16 @@ func (b *SystemBinding) AllocateTempYAMLPath() (string, error) {
 
 // OpenYAMLFile 打开 YAML 文件对话框
 func (b *SystemBinding) OpenYAMLFile() (string, error) {
-	return runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
+	opts := runtime.OpenDialogOptions{
 		Title: "打开 YAML 配置文件",
 		Filters: []runtime.FileFilter{
 			{DisplayName: "YAML 文件", Pattern: "*.yaml;*.yml"},
 		},
-	})
+	}
+	if dir, err := config.ResolveConfigDir(); err == nil {
+		opts.DefaultDirectory = dir
+	}
+	return runtime.OpenFileDialog(b.ctx, opts)
 }
 
 // SaveYAMLFile 保存 YAML 文件对话框
@@ -868,10 +897,28 @@ func (b *SystemBinding) SaveCSVFile() (string, error) {
 	})
 }
 
+// SaveExportFile 按导出格式弹出保存对话框（csv/xlsx/xls）。
+func (b *SystemBinding) SaveExportFile(format string) (string, error) {
+	displayName, pattern, def := "CSV 文件", "*.csv", "result.csv"
+	switch strings.ToLower(format) {
+	case "xlsx":
+		displayName, pattern, def = "Excel 工作簿 (*.xlsx)", "*.xlsx", "result.xlsx"
+	case "xls":
+		displayName, pattern, def = "Excel 97-2003 (*.xls)", "*.xls", "result.xls"
+	}
+	return runtime.SaveFileDialog(b.ctx, runtime.SaveDialogOptions{
+		Title:           "导出仿真结果",
+		DefaultFilename: def,
+		Filters: []runtime.FileFilter{
+			{DisplayName: displayName, Pattern: pattern},
+		},
+	})
+}
+
 // RunBatch 运行批量仿真
 func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, error) {
-	if b.dataFactoryPath == "" {
-		return BatchResult{}, fmt.Errorf("未设置 DataFactory 路径")
+	if err := b.ensureDataFactory(); err != nil {
+		return BatchResult{}, err
 	}
 	if cycles <= 0 {
 		return BatchResult{}, fmt.Errorf("周期数必须大于 0")
@@ -889,8 +936,7 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 	csvPath := filepath.Join(workDir, "result.csv")
 
 	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", csvPath}
-	cmd := b.commandFactory(b.dataFactoryPath, args...)
-	cmd.Dir = filepath.Dir(b.dataFactoryPath)
+	cmd := b.dfLaunch.command(b.commandFactory, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return BatchResult{}, fmt.Errorf("DataFactory 运行失败: %w\n%s", err, string(output))
@@ -899,13 +945,45 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 	if err := validateBatchCSV(csvPath); err != nil {
 		return BatchResult{}, err
 	}
-	return parseCSV(csvPath)
+	result, err := parseCSV(csvPath)
+	if err != nil {
+		return BatchResult{}, err
+	}
+	result.DisplayColumns = readDisplayColumns(csvPath, result.Columns)
+	return result, nil
+}
+
+// readDisplayColumns 读取批量导出 CSV 旁的 sidecar（<csv>.display.json），
+// 取出 DSL display_args 声明的默认绘图列，并过滤为 CSV 实际存在的列。
+// sidecar 缺失或解析失败时返回 nil（不阻断批量结果）。
+func readDisplayColumns(csvPath string, validColumns []string) []string {
+	data, err := os.ReadFile(csvPath + ".display.json")
+	if err != nil {
+		return nil
+	}
+	var payload struct {
+		DisplayColumns []string `json:"display_columns"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil
+	}
+	valid := make(map[string]bool, len(validColumns))
+	for _, c := range validColumns {
+		valid[c] = true
+	}
+	var out []string
+	for _, c := range payload.DisplayColumns {
+		if valid[c] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // ExportBatch 导出批量仿真结果
 func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath string) error {
-	if b.dataFactoryPath == "" {
-		return fmt.Errorf("未设置 DataFactory 路径")
+	if err := b.ensureDataFactory(); err != nil {
+		return err
 	}
 	if exportPath == "" {
 		return fmt.Errorf("导出路径不能为空")
@@ -919,13 +997,68 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 	defer b.endBatch()
 
 	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", exportPath}
-	cmd := b.commandFactory(b.dataFactoryPath, args...)
-	cmd.Dir = filepath.Dir(b.dataFactoryPath)
+	cmd := b.dfLaunch.command(b.commandFactory, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("DataFactory 运行失败: %w\n%s", err, string(output))
 	}
 	return validateBatchCSV(exportPath)
+}
+
+// ExportBatchFormatted 重跑批量仿真并按引擎模板导出（时间列 + 表头，csv/xlsx/xls）。
+// columns 为空时用 DSL display_args；sheetName 仅对 Excel 生效。
+func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) error {
+	if err := b.ensureDataFactory(); err != nil {
+		return err
+	}
+	if exportPath == "" {
+		return fmt.Errorf("导出路径不能为空")
+	}
+	if cycles <= 0 {
+		return fmt.Errorf("周期数必须大于 0")
+	}
+	switch strings.ToLower(format) {
+	case "csv", "xlsx", "xls":
+	default:
+		return fmt.Errorf("不支持的导出格式: %s", format)
+	}
+	if err := b.beginBatch(); err != nil {
+		return err
+	}
+	defer b.endBatch()
+
+	args := buildBatchExportArgs(configPath, cycles, exportPath, format, columns, sheetName)
+	cmd := b.dfLaunch.command(b.commandFactory, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("DataFactory 导出失败: %w\n%s", err, string(output))
+	}
+
+	info, err := os.Stat(exportPath)
+	if err != nil {
+		return fmt.Errorf("导出文件未生成: %w", err)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf("导出文件为空")
+	}
+	return nil
+}
+
+// buildBatchExportArgs 构造模板导出的 CLI 参数（纯函数，便于测试）。
+func buildBatchExportArgs(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) []string {
+	args := []string{
+		"-c", configPath,
+		"--batch", fmt.Sprintf("%d", cycles),
+		"--export", exportPath,
+		"--format", strings.ToLower(format),
+	}
+	if len(columns) > 0 {
+		args = append(args, "--columns", strings.Join(columns, ","))
+	}
+	if sheetName != "" {
+		args = append(args, "--sheet-name", sheetName)
+	}
+	return args
 }
 
 // validateBatchCSV 确认目标 CSV 存在、非空、且至少有一行数据（不只表头）。

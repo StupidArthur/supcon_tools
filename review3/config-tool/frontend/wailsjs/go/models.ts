@@ -37,6 +37,7 @@ export namespace bindings {
 	export class BatchResult {
 	    columns: string[];
 	    rows: any[];
+	    displayColumns: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchResult(source);
@@ -46,6 +47,7 @@ export namespace bindings {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
 	        this.rows = source["rows"];
+	        this.displayColumns = source["displayColumns"];
 	    }
 	}
 	export class StartParams {

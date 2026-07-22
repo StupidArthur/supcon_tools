@@ -31,7 +31,15 @@
 5. 仿真控制：校验通过后将当前 draft 写入临时 YAML 启动，不覆盖用户文件
 6. 实时运行：仅已保存 DSL；未保存时提示先保存
 
-## 验证说明
+## 路径解析（2026-07-22）
+
+| 场景 | 行为 |
+|------|------|
+| 打开 YAML 对话框 | 默认目录 = 仓库根下 `config/`（通过 `SUPCON_TOOL_REPO_ROOT` 或从 exe 向上查找内置模板定位仓库根） |
+| DataFactory 可执行文件 | 优先 `SUPCON_DATAFACTORY_PATH` → 向上查找 `DataFactory.exe` → 仓库根 `DataFactory.exe` |
+| 开发态 `wails dev` | 若未找到 exe，自动回退为 `python standalone_main.py`（工作目录 = 仓库根；可用 `SUPCON_PYTHON` 指定解释器） |
+| 开始仿真 / RunBatch | 启动前 lazy 解析 DataFactory；不再仅依赖 exe 旁 3 层目录 |
+
 
 - `npm run build`：通过
 - `npm run test:acceptance`：除 stage_0 旧 Toolbar 文案（故意删除的一级入口）外通过
