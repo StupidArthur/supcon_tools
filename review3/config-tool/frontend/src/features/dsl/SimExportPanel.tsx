@@ -1,15 +1,19 @@
 /**
  * Export the current offline simulation result as CSV (no re-run).
+ * Only exports non-stale results owned by the current project.
  */
 import { useState } from 'react'
 import { systemApi } from '../../lib/api'
+import { useDslProjectStore } from './useDslProjectStore'
 import { useGenericSimStore } from './useGenericSimStore'
 
 export function SimExportPanel() {
-  const status = useGenericSimStore((s) => s.status)
+  const projectId = useDslProjectStore((s) => s.projectId)
   const columns = useGenericSimStore((s) => s.columns)
   const rows = useGenericSimStore((s) => s.rows)
-  const hasResult = status === 'success' && rows.length > 0
+  const stale = useGenericSimStore((s) => s.stale)
+  const exportable = useGenericSimStore((s) => s.hasExportableResult(projectId))
+  const hasDisplay = useGenericSimStore((s) => s.hasDisplayResult(projectId))
 
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -18,8 +22,8 @@ export function SimExportPanel() {
   const handleExport = async () => {
     setMessage(null)
     setError(null)
-    if (!hasResult) {
-      setError('未运行成功，禁止导出')
+    if (!exportable) {
+      setError(stale && hasDisplay ? '结果已过期，禁止导出为当前工程结果' : '未运行成功，禁止导出')
       return
     }
     setBusy(true)
@@ -27,6 +31,11 @@ export function SimExportPanel() {
       const path = await systemApi.saveCSVFile()
       if (!path) {
         setBusy(false)
+        return
+      }
+      // Re-check ownership after dialog (project may have switched).
+      if (!useGenericSimStore.getState().hasExportableResult(projectId)) {
+        setError('工程已切换或结果已失效，取消导出')
         return
       }
       await systemApi.exportCSVRows(columns, rows as Array<Record<string, any>>, path)
@@ -45,12 +54,16 @@ export function SimExportPanel() {
         导出当前这次仿真结果为 CSV，与结果趋势使用同一份数据，不会重新运行仿真。
       </p>
       <div>
-        {hasResult ? `当前结果：${rows.length} 行 · ${columns.length} 列` : '尚无可用结果'}
+        {exportable
+          ? `当前结果：${rows.length} 行 · ${columns.length} 列`
+          : hasDisplay && stale
+            ? '结果已过期，禁止导出'
+            : '尚无可用结果'}
       </div>
       <button
         type="button"
         onClick={() => void handleExport()}
-        disabled={!hasResult || busy}
+        disabled={!exportable || busy}
         className="rounded-md border border-border bg-card px-3 py-1.5 hover:bg-secondary disabled:opacity-40"
         data-testid="sim-export-button"
       >

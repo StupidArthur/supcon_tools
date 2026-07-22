@@ -34,13 +34,13 @@ logger = get_logger()
 # 连续失败多少次后切入 SAFE STATE（算法节点持续抛异常时触发）
 _SAFE_STATE_FAILURE_THRESHOLD = 5
 
-# 原子在线写：默认可写属性（MV 另受 MODE 约束）
-_ATOMIC_WRITE_ATTRS = frozenset({"SV", "PB", "TI", "TD", "KD"})
+# 原子在线写：默认可写属性（MV 另受 MODE 约束；模式切换用 SWAM/SWSV）
+_ATOMIC_WRITE_ATTRS = frozenset({"SV", "PB", "TI", "TD", "KD", "SWAM", "SWSV", "SWPN"})
 _ATOMIC_WRITE_MV_ATTR = "MV"
 # 与 components.programs.pid 手动类 MODE 对齐
 _ATOMIC_MV_ALLOWED_MODES = frozenset({2, 3, 4, 8})
 _ATOMIC_REJECT_ATTRS = frozenset({
-    "PV", "AUTO", "CAS", "level", "current_opening",
+    "PV", "AUTO", "CAS", "MODE", "level", "current_opening",
     "inlet_flow", "outlet_flow", "source_flow",
 })
 
@@ -441,8 +441,12 @@ class UnifiedEngine:
                 if "." not in tag:
                     raise ValueError(f"unknown or derived tag rejected: {tag}")
                 inst_name, attr = tag.rsplit(".", 1)
-                if attr in _ATOMIC_REJECT_ATTRS or attr.upper() in {"AUTO", "CAS", "PV"}:
+                if attr in _ATOMIC_REJECT_ATTRS or attr.upper() in {"AUTO", "CAS", "PV", "MODE"}:
                     raise ValueError(f"readonly or derived tag rejected: {tag}")
+                if attr in {"SWAM", "SWSV"}:
+                    # ON=1 / OFF=0；其它值拒绝
+                    if fval not in (0.0, 1.0):
+                        raise ValueError(f"{attr} must be 0(OFF) or 1(ON), got {fval}")
                 if attr == _ATOMIC_WRITE_MV_ATTR:
                     inst = self._instances.get(inst_name)
                     if inst is None:

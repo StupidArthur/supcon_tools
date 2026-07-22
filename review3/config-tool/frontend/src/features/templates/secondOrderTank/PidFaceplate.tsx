@@ -1,12 +1,23 @@
 /**
  * PID faceplate for second-order tank runtime (stage 5).
+ * MODE is status display only; MAN/AUTO/CAS switching uses SWAM/SWSV writes.
  */
 import { useRef, type FormEvent } from 'react'
+import {
+  effectiveSetpointSource,
+  isMvEditable,
+  isSvEditable,
+  type PidModeCommand,
+  type PidModeName,
+} from '../../runtime/pidMode'
 
-export type WriteStatus = 'idle' | 'pending' | 'applied' | 'failed'
+export type WriteStatus = 'idle' | 'pending' | 'applied' | 'failed' | 'switching'
 
 export interface PidFaceplateProps {
-  mode: 'AUTO' | 'MAN' | 'CAS'
+  /** Working mode for enablement (AUTO/MAN/CAS or full ECS name). */
+  mode: PidModeName | 'AUTO' | 'MAN' | 'CAS' | 'UNKNOWN' | string
+  /** Formal MODE label for display (e.g. AUTO or UNKNOWN(9)). */
+  modeLabel?: string
   values: {
     PV: number | null
     SV: number | null
@@ -22,12 +33,21 @@ export interface PidFaceplateProps {
   writeStatus: WriteStatus
   writeError?: string | null
   onSubmit: (writes: Array<{ tag: string; value: number }>) => void | Promise<void>
+  /** Issue MAN/AUTO/CAS via SWAM/SWSV (never writes MODE). */
+  onModeCommand?: (command: PidModeCommand) => void | Promise<void>
 }
 
 function fmt(v: number | string | null | undefined): string {
   if (v == null) return ''
   if (typeof v === 'number' && !Number.isFinite(v)) return ''
   return String(v)
+}
+
+function asModeName(mode: string): PidModeName | 'UNKNOWN' {
+  const known: PidModeName[] = ['OOS', 'IMAN', 'TR', 'MAN', 'AUTO', 'CAS', 'RCAS', 'ROUT']
+  if ((known as string[]).includes(mode)) return mode as PidModeName
+  if (mode === 'UNKNOWN' || mode.startsWith('UNKNOWN')) return 'UNKNOWN'
+  return 'UNKNOWN'
 }
 
 /**
@@ -49,18 +69,27 @@ function useIsolateAcceptanceDom() {
 
 export function PidFaceplate({
   mode,
+  modeLabel,
   values,
   writeStatus,
   writeError,
   onSubmit,
+  onModeCommand,
 }: PidFaceplateProps) {
   useIsolateAcceptanceDom()
 
-  const svEnabled = mode === 'AUTO'
-  const mvEnabled = mode === 'MAN'
-  const pending = writeStatus === 'pending'
+  const modeName = asModeName(String(mode))
+  const display = modeLabel || String(mode)
+  const svEnabled = isSvEditable(modeName) || mode === 'AUTO'
+  const mvEnabled = isMvEditable(modeName) || mode === 'MAN'
+  const pending = writeStatus === 'pending' || writeStatus === 'switching'
+  const src = effectiveSetpointSource(modeName)
   const effective =
-    mode === 'CAS' ? values.CSV : mode === 'MAN' ? values.MV : values.SV
+    src === 'CSV' || mode === 'CAS'
+      ? values.CSV
+      : src === 'MV' || mode === 'MAN'
+        ? values.MV
+        : values.SV
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -91,7 +120,7 @@ export function PidFaceplate({
 
   return (
     <form className="pid-faceplate space-y-2" onSubmit={handleSubmit} data-testid="pid-faceplate">
-      <div className="text-xs font-medium">PID Faceplate ({mode})</div>
+      <div className="text-xs font-medium">PID Faceplate ({display})</div>
       <label className="block text-xs">
         PV
         <input data-testid="faceplate-pv" name="PV" value={fmt(values.PV)} readOnly disabled />
@@ -134,12 +163,32 @@ export function PidFaceplate({
         KD
         <input data-testid="faceplate-kd" name="KD" defaultValue={fmt(values.KD)} disabled={pending} />
       </label>
-      <div data-testid="faceplate-mode">{fmt(values.MODE as number | null)}</div>
+      <div data-testid="faceplate-mode">
+        {display}
+        {values.MODE != null ? ` (${fmt(values.MODE as number | null)})` : ''}
+      </div>
       <div data-testid="faceplate-swpn">{fmt(values.SWPN as number | null)}</div>
       <div data-testid="faceplate-effective-setpoint">{fmt(effective as number | null)}</div>
+      {onModeCommand ? (
+        <div className="flex flex-wrap gap-1" data-testid="faceplate-mode-commands">
+          {(['MAN', 'AUTO', 'CAS'] as PidModeCommand[]).map((cmd) => (
+            <button
+              key={cmd}
+              type="button"
+              disabled={pending}
+              onClick={() => void onModeCommand(cmd)}
+              data-testid={`faceplate-mode-cmd-${cmd.toLowerCase()}`}
+            >
+              {cmd}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div data-testid="faceplate-write-status">
-        {writeStatus}
-        {writeStatus === 'failed' && writeError ? `: ${writeError}` : ''}
+        {writeStatus === 'switching' ? '切换中' : writeStatus}
+        {(writeStatus === 'failed' || writeStatus === 'switching') && writeError
+          ? `: ${writeError}`
+          : ''}
       </div>
       <button type="submit" disabled={pending}>
         Apply

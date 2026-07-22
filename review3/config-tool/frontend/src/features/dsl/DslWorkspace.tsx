@@ -27,7 +27,7 @@ export function DslWorkspace() {
   const setYamlText = useDslProjectStore((s) => s.setYamlText)
   const openHome = useDslProjectStore((s) => s.openHome)
   const pushRecent = useDslProjectStore((s) => s.pushRecent)
-  const openWorkspace = useDslProjectStore((s) => s.openWorkspace)
+  const setProjectFile = useDslProjectStore((s) => s.setProjectFile)
 
   const dirtyPaths = useTemplateStore((s) => s.dirtyPaths)
   const validationErrors = useTemplateStore((s) => s.validationErrors)
@@ -77,7 +77,7 @@ export function DslWorkspace() {
     await writeTextFile(path, text)
     setYamlText(text, false)
     pushRecent(path)
-    openWorkspace({ filePath: path, projectName: path.replace(/^.*[\\/]/, '') })
+    setProjectFile(path)
   }
 
   const handleSaveAs = async () => {
@@ -87,14 +87,14 @@ export function DslWorkspace() {
     if (projectKind === 'template') {
       await save({ targetPath: target, allowOverwrite: true })
       pushRecent(target)
-      openWorkspace({ filePath: target, projectName: target.replace(/^.*[\\/]/, '') })
+      setProjectFile(target)
       return
     }
     const text = useDslProjectStore.getState().yamlText
     await writeTextFile(target, text)
     setYamlText(text, false)
     pushRecent(target)
-    openWorkspace({ filePath: target, projectName: target.replace(/^.*[\\/]/, '') })
+    setProjectFile(target)
   }
 
   return (

@@ -85,13 +85,23 @@ export function SecondOrderTankDiagram({ draft, selectedObjectId, onSelect }: Di
   const modeLabel =
     pidMode === null
       ? 'M?'
-      : pidMode === 5
-        ? 'AUTO'
-        : pidMode === 4
-          ? 'MAN'
+      : pidMode === 1
+        ? 'OOS'
+        : pidMode === 2
+          ? 'IMAN'
           : pidMode === 3
-            ? 'CAS'
-            : `M${pidMode}`
+            ? 'TR'
+            : pidMode === 4
+              ? 'MAN'
+              : pidMode === 5
+                ? 'AUTO'
+                : pidMode === 6
+                  ? 'CAS'
+                  : pidMode === 7
+                    ? 'RCAS'
+                    : pidMode === 8
+                      ? 'ROUT'
+                      : `UNKNOWN(${pidMode})`
 
   const pidPvStop = getRuntimeNumber(
     ctx,

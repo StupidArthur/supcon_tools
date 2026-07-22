@@ -1,5 +1,5 @@
 /**
- * Unit tests for generic offline simulation store.
+ * Unit tests for generic offline simulation store (project-bound).
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useGenericSimStore } from './useGenericSimStore'
@@ -10,33 +10,69 @@ describe('useGenericSimStore', () => {
     useGenericSimStore.getState().setCycles(2000)
   })
 
-  it('tracks offline run lifecycle without template fields', () => {
-    const store = useGenericSimStore.getState()
-    store.beginRun(100)
-    expect(useGenericSimStore.getState().status).toBe('running')
-    expect(useGenericSimStore.getState().isRunning()).toBe(true)
-
-    store.succeed({
-      columns: ['_cycle', 'level', 'name'],
-      rows: [
-        { _cycle: 0, level: 1.2, name: 'a' },
-        { _cycle: 1, level: 1.3, name: 'b' },
-      ],
-      completedCycles: 2,
+  it('only commits results when project/run/epoch match', () => {
+    const epoch = useGenericSimStore.getState().epoch
+    const runId = useGenericSimStore.getState().beginRun({
+      projectId: 'p1',
+      yamlHash: 'h1',
+      cycles: 100,
+      epoch,
     })
-    const next = useGenericSimStore.getState()
-    expect(next.status).toBe('success')
-    expect(next.hasResult()).toBe(true)
-    expect(next.completedCycles).toBe(2)
-    expect(next.selectedColumns).toContain('level')
-    expect(next.selectedColumns).not.toContain('name')
+    expect(useGenericSimStore.getState().status).toBe('running')
+
+    const ok = useGenericSimStore.getState().succeed({
+      projectId: 'p1',
+      runId,
+      epoch,
+      columns: ['_cycle', 'level'],
+      rows: [{ _cycle: 0, level: 1.2 }],
+      completedCycles: 1,
+    })
+    expect(ok).toBe(true)
+    expect(useGenericSimStore.getState().hasExportableResult('p1')).toBe(true)
+    expect(useGenericSimStore.getState().hasExportableResult('p2')).toBe(false)
   })
 
-  it('records backend failure text', () => {
-    useGenericSimStore.getState().beginRun(10)
-    useGenericSimStore.getState().fail('DataFactory 运行失败: parse error')
-    expect(useGenericSimStore.getState().status).toBe('failed')
-    expect(useGenericSimStore.getState().error).toContain('parse error')
-    expect(useGenericSimStore.getState().hasResult()).toBe(false)
+  it('rejects stale late succeed after project switch clear', () => {
+    const epoch = useGenericSimStore.getState().epoch
+    const runId = useGenericSimStore.getState().beginRun({
+      projectId: 'p1',
+      yamlHash: 'h1',
+      cycles: 10,
+      epoch,
+    })
+    useGenericSimStore.getState().clearResults()
+    const ok = useGenericSimStore.getState().succeed({
+      projectId: 'p1',
+      runId,
+      epoch,
+      columns: ['_cycle'],
+      rows: [{ _cycle: 0 }],
+      completedCycles: 1,
+    })
+    expect(ok).toBe(false)
+    expect(useGenericSimStore.getState().rows).toEqual([])
+  })
+
+  it('marks success stale after YAML edit', () => {
+    const epoch = useGenericSimStore.getState().epoch
+    const runId = useGenericSimStore.getState().beginRun({
+      projectId: 'p1',
+      yamlHash: 'h1',
+      cycles: 10,
+      epoch,
+    })
+    useGenericSimStore.getState().succeed({
+      projectId: 'p1',
+      runId,
+      epoch,
+      columns: ['_cycle', 'x'],
+      rows: [{ _cycle: 0, x: 1 }],
+      completedCycles: 1,
+    })
+    useGenericSimStore.getState().markStale()
+    expect(useGenericSimStore.getState().stale).toBe(true)
+    expect(useGenericSimStore.getState().hasExportableResult('p1')).toBe(false)
+    expect(useGenericSimStore.getState().hasDisplayResult('p1')).toBe(true)
   })
 })

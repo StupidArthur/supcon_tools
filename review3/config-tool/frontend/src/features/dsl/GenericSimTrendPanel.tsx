@@ -1,5 +1,6 @@
 /**
  * Generic offline simulation trend — numeric columns only, no PID/tank assumptions.
+ * Only shows results owned by the current projectId.
  */
 import { useMemo } from 'react'
 import {
@@ -12,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useDslProjectStore } from './useDslProjectStore'
 import { useGenericSimStore } from './useGenericSimStore'
 
 const COLORS = ['#3b82f6', '#06b6d4', '#f97316', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#6366f1']
@@ -25,18 +27,25 @@ function isNumericColumn(rows: Array<Record<string, unknown>>, col: string): boo
 }
 
 export function GenericSimTrendPanel() {
+  const projectId = useDslProjectStore((s) => s.projectId)
   const status = useGenericSimStore((s) => s.status)
   const columns = useGenericSimStore((s) => s.columns)
   const rows = useGenericSimStore((s) => s.rows)
   const selectedColumns = useGenericSimStore((s) => s.selectedColumns)
+  const stale = useGenericSimStore((s) => s.stale)
+  const boundProjectId = useGenericSimStore((s) => s.boundProjectId)
   const toggleColumn = useGenericSimStore((s) => s.toggleColumn)
+  const hasDisplay = useGenericSimStore((s) => s.hasDisplayResult(projectId))
+
+  const owned = boundProjectId === projectId && hasDisplay
 
   const numericColumns = useMemo(
-    () => columns.filter((c) => c !== '_cycle' && isNumericColumn(rows, c)),
-    [columns, rows],
+    () => (owned ? columns.filter((c) => c !== '_cycle' && isNumericColumn(rows, c)) : []),
+    [columns, rows, owned],
   )
 
   const chartData = useMemo(() => {
+    if (!owned) return []
     return rows.map((row, idx) => {
       const point: Record<string, number | string> = {
         _cycle: typeof row._cycle === 'number' ? row._cycle : idx,
@@ -49,9 +58,9 @@ export function GenericSimTrendPanel() {
       }
       return point
     })
-  }, [rows, selectedColumns])
+  }, [rows, selectedColumns, owned])
 
-  if (status !== 'success' || rows.length === 0) {
+  if (!owned) {
     return (
       <div className="p-4 text-xs text-muted-foreground" data-testid="generic-sim-trend-empty">
         请先运行仿真
@@ -62,8 +71,13 @@ export function GenericSimTrendPanel() {
   return (
     <div className="space-y-3 p-3 text-xs" data-testid="generic-sim-trend">
       <div className="font-medium">结果趋势</div>
+      {stale ? (
+        <div className="rounded-md bg-amber-50 px-2 py-1 text-amber-900" data-testid="generic-sim-stale">
+          结果已过期（YAML 已修改）。可查看，但不得作为当前工程结果导出；请重新仿真。
+        </div>
+      ) : null}
       <div data-testid="generic-sim-meta">
-        结果行数：{rows.length} · 字段：{columns.join(', ') || '（无）'}
+        结果行数：{rows.length} · 字段：{columns.join(', ') || '（无）'} · 状态：{status}
       </div>
 
       <div className="flex flex-wrap gap-2">

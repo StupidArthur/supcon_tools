@@ -11,11 +11,18 @@ const KNOWN_WRITABLE = new Set([
   'pid2.KD',
   'pid2.MV',
   'pid2.CSV',
+  'pid2.SWAM',
+  'pid2.SWSV',
+  'pid2.SWPN',
 ])
 
 const FORBIDDEN = new Set([
   'pid2.PV',
+  'pid2.MODE',
+  'pid2.AUTO',
+  'pid2.CAS',
   'PV',
+  'MODE',
   'tank_1.level',
   'tank_2.level',
   'valve_1.current_opening',
@@ -143,4 +150,24 @@ export function observeWriteBatch(input: {
     }
   }
   return 'applied'
+}
+
+/**
+ * Confirm a mode-switch command by snapshot MODE (not by SWAM/SWSV values).
+ */
+export function observeModeSwitch(input: {
+  snapshotMode: number | null | undefined
+  expectedMode: number
+  timedOut?: boolean
+}): 'pending' | 'applied' | 'failed' {
+  if (input.timedOut) {
+    return 'failed'
+  }
+  if (typeof input.snapshotMode !== 'number' || !Number.isFinite(input.snapshotMode)) {
+    return 'pending'
+  }
+  if (Math.trunc(input.snapshotMode) === input.expectedMode) {
+    return 'applied'
+  }
+  return 'pending'
 }

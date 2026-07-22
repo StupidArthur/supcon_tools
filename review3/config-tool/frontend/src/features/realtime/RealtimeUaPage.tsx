@@ -1,6 +1,6 @@
 /**
- * 实时运行与 UA：仅已保存 DSL + 周期/UA 端口，无 exe/模式/配置路径文本框。
- * 与 DSL 离线仿真互斥；OPC UA 仅在此入口启动。
+ * 实时运行与 UA：仅已保存 DSL + 周期/UA 端口。
+ * DSL 路径唯一来源：useDslProjectStore.filePath（不保留独立 dslPath）。
  */
 import { useEffect, useRef, useState } from 'react'
 import { systemApi } from '../../lib/api'
@@ -29,11 +29,11 @@ export function RealtimeUaPage() {
   const [apiPort, setApiPort] = useState(8000)
   const [showAdvancedPorts, setShowAdvancedPorts] = useState(false)
   const [error, setError] = useState('')
-  const [dslPath, setDslPath] = useState('')
   const logEndRef = useRef<HTMLDivElement>(null)
 
-  const effectivePath = dslPath || filePath
   const isDirty = yamlDirty
+  const canStart =
+    Boolean(filePath) && !isDirty && !offlineRunning && !dfStatus.running
 
   useEffect(() => {
     systemApi.getDataFactoryPath().then((p) => {
@@ -41,10 +41,6 @@ export function RealtimeUaPage() {
     })
     refreshStatus()
   }, [refreshStatus, setDfPath])
-
-  useEffect(() => {
-    if (filePath) setDslPath(filePath)
-  }, [filePath])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -55,9 +51,7 @@ export function RealtimeUaPage() {
     if (!path) return
     try {
       const text = await systemApi.readTextFile(path)
-      setYamlText(text, false)
-      setDslPath(path)
-      pushRecent(path)
+      // Sync into project store only — no parallel long-lived path.
       openWorkspace({
         filePath: path,
         projectKind: 'generic',
@@ -65,6 +59,9 @@ export function RealtimeUaPage() {
         editorTab: 'yaml',
         simTab: 'run',
       })
+      setYamlText(text, false)
+      pushRecent(path)
+      setError('')
     } catch (err) {
       setError('打开失败: ' + String(err))
     }
@@ -76,7 +73,7 @@ export function RealtimeUaPage() {
       setError('离线仿真进行中，禁止启动实时运行')
       return
     }
-    if (!effectivePath) {
+    if (!filePath) {
       setError('请先打开已保存的 DSL 文件')
       return
     }
@@ -88,7 +85,7 @@ export function RealtimeUaPage() {
       const p = await systemApi.getDataFactoryPath()
       if (p) setDfPath(p)
       await systemApi.start({
-        configPath: effectivePath,
+        configPath: filePath,
         mode: 'REALTIME',
         cycleTime,
         port,
@@ -125,10 +122,10 @@ export function RealtimeUaPage() {
 
         <section className="space-y-2 rounded-md border border-border bg-card p-3">
           <div className="text-xs font-medium">当前 DSL</div>
-          {effectivePath ? (
-            <div className="truncate text-xs" title={effectivePath}>
-              {projectName || effectivePath}
-              <div className="text-muted-foreground">{effectivePath}</div>
+          {filePath ? (
+            <div className="truncate text-xs" title={filePath} data-testid="realtime-dsl-path">
+              {projectName || filePath}
+              <div className="text-muted-foreground">{filePath}</div>
             </div>
           ) : (
             <button
@@ -140,7 +137,7 @@ export function RealtimeUaPage() {
               打开 DSL 文件
             </button>
           )}
-          {effectivePath ? (
+          {filePath ? (
             <button
               type="button"
               onClick={() => void openDsl()}
@@ -148,6 +145,9 @@ export function RealtimeUaPage() {
             >
               更换文件
             </button>
+          ) : null}
+          {!filePath ? (
+            <div className="text-xs text-muted-foreground">没有已保存文件，无法启动实时运行。</div>
           ) : null}
           {isDirty ? (
             <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900" data-testid="realtime-unsaved-warn">
@@ -231,7 +231,7 @@ export function RealtimeUaPage() {
             <button
               type="button"
               onClick={() => void handleStart()}
-              disabled={offlineRunning || isDirty || !effectivePath}
+              disabled={!canStart}
               className="rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-40"
               data-testid="realtime-start"
             >

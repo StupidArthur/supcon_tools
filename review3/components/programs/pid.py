@@ -6,6 +6,7 @@
 - PB 是比例度（Kp = 100/PB），不是比例增益
 - ECS-700 MODE 1~8：OOS / IMAN / TR / MAN / AUTO / CAS / RCAS / ROUT
 - AUTO = MODE（兼容别名，非布尔），CAS = 1 if MODE==6 else 0（派生）
+- 模式切换开关：SWAM/SWSV（MAN: SWAM=OFF；AUTO: SWAM=ON+SWSV=OFF；CAS: SWAM=ON+SWSV=ON）
 - AUTO 用本地 SV，CAS/RCAS 用 CSV（同时镜像到对外 SV）
 - 工程量程换算（SVSCH/SVSCL、MVSCH/MVSCL）+ 操作限幅（SVH/SVL、MVH/MVL）
 - 正反作用 SWPN：0=正作用，1=反作用
@@ -140,6 +141,18 @@ class PID(BaseProgram):
 | 7 | RCAS | 远程外给定，使用 CSV |
 | 8 | ROUT | 远程手动模式 |
 
+## 模式切换开关（SWAM / SWSV）
+
+MODE 为状态显示；主动切换 MAN/AUTO/CAS 时写入开关（ON=1，OFF=0）：
+
+| 命令 | 写入 | 期望 MODE |
+| ---- | ---- | --------: |
+| MAN  | SWAM=OFF | 4 |
+| AUTO | SWAM=ON，SWSV=OFF | 5 |
+| CAS  | SWAM=ON，SWSV=ON | 6 |
+
+确认以运行时快照中的 MODE 为准，不得提前伪造成功。
+
 ## SV/CSV 来源
 
 - AUTO 模式使用本地 `SV`（保存在 `_local_sv`）。
@@ -209,6 +222,8 @@ class PID(BaseProgram):
         "AUTO",
         "CAS",
         "SWPN",
+        "SWAM",
+        "SWSV",
         "SVSCH",
         "SVSCL",
         "MVSCH",
@@ -240,6 +255,8 @@ class PID(BaseProgram):
         "AUTO": "MODE的兼容别名(派生)",
         "CAS": "串级状态(派生)，MODE=6时为1",
         "SWPN": "正反作用：0=正，1=反",
+        "SWAM": "手动/自动切换开关：0=OFF→MAN，1=ON→自动类",
+        "SWSV": "设定来源开关：0=OFF→AUTO，1=ON→CAS（需 SWAM=ON）",
         "SVSCH": "PV/SV工程量程上限",
         "SVSCL": "PV/SV工程量程下限",
         "MVSCH": "MV工程量程上限",
@@ -263,6 +280,9 @@ class PID(BaseProgram):
         "MODE": 5,
         # ECS-700：ON 为反作用，OFF 为正作用
         "SWPN": 1,
+        # 模式切换开关：与 MODE=5(AUTO) 对齐
+        "SWAM": 1,
+        "SWSV": 0,
         "SVSCH": 100.0,
         "SVSCL": 0.0,
         "MVSCH": 100.0,
@@ -291,7 +311,12 @@ class PID(BaseProgram):
 
         # 规范化 MODE 为整数
         self.MODE = _parse_mode(self.MODE)
+        if self.MODE is None:
+            self.MODE = 5
         self.AUTO = int(self.MODE)
+        self._sync_switches_from_mode(int(self.MODE), force=True)
+        self._last_swam = self._as_on_off(self.SWAM)
+        self._last_swsv = self._as_on_off(self.SWSV)
 
         # 内部状态（不暴露到 stored_attributes / OPC UA / YAML）
         self._prev_error_pct: float = 0.0
@@ -736,7 +761,61 @@ class PID(BaseProgram):
         """
         self.AUTO = mode
         self.CAS = 1 if mode == 6 else 0
+        self._sync_switches_from_mode(mode, force=False)
+        self._last_swam = self._as_on_off(self.SWAM)
+        self._last_swsv = self._as_on_off(self.SWSV)
         self._last_published_sv = float(self.SV)
+
+    @staticmethod
+    def _as_on_off(value: Any) -> Optional[int]:
+        """Parse ECS ON/OFF switch: 0=OFF, 1=ON. Invalid → None."""
+        if not _is_finite_number(value):
+            return None
+        number = float(value)
+        if number == 0.0:
+            return 0
+        if number == 1.0:
+            return 1
+        return 1 if number >= 0.5 else 0
+
+    def _sync_switches_from_mode(self, mode: int, force: bool = False) -> None:
+        """
+        Keep SWAM/SWSV consistent with MAN/AUTO/CAS.
+        Other MODEs leave switches unchanged unless force=True (init).
+        """
+        if mode == 4:
+            self.SWAM = 0.0
+            self.SWSV = 0.0
+        elif mode == 5:
+            self.SWAM = 1.0
+            self.SWSV = 0.0
+        elif mode == 6:
+            self.SWAM = 1.0
+            self.SWSV = 1.0
+        elif force:
+            # Unknown / other modes: default to AUTO switches
+            self.SWAM = 1.0
+            self.SWSV = 0.0
+
+    def _apply_swam_swsv_if_changed(self) -> None:
+        """
+        Mode switch commands write SWAM/SWSV; when they change, update MODE.
+        Never write MODE from the faceplate path.
+        """
+        swam = self._as_on_off(getattr(self, "SWAM", None))
+        swsv = self._as_on_off(getattr(self, "SWSV", None))
+        if swam is None:
+            return
+        if swam == self._last_swam and swsv == self._last_swsv:
+            return
+        if swam == 0:
+            self.MODE = 4  # MAN
+        elif swsv == 0 or swsv is None:
+            self.MODE = 5  # AUTO
+        else:
+            self.MODE = 6  # CAS
+        self._last_swam = swam
+        self._last_swsv = 0 if swsv is None else swsv
 
     # ------------------------------------------------------------------
     # 微分
@@ -843,6 +922,9 @@ class PID(BaseProgram):
         """
         # 1. 接收本周期输入（不含 SV）
         self._apply_inputs(PV=PV, CSV=CSV, MODE=MODE, SWPN=SWPN)
+
+        # 1b. 若外部写了 SWAM/SWSV，则按规格更新 MODE（不改 PID 公式）
+        self._apply_swam_swsv_if_changed()
 
         # 2. 捕获本地 SV（区分 execute 输入 / UA 外部写值 / 沿用原值）
         self._capture_local_sv(SV)

@@ -189,7 +189,7 @@ func normalizeRuntimeOverrideKey(raw string) (string, string, bool, error) {
 	upper := strings.ToUpper(key)
 	switch upper {
 	case "PV", "TANK_2.LEVEL", "TANK_1.LEVEL", "VALVE_1.CURRENT_OPENING",
-		"SOURCE_FLOW", "AUTO", "CAS":
+		"SOURCE_FLOW", "AUTO", "CAS", "MODE":
 		return "", "", false, fmt.Errorf("禁止写回字段: %s", raw)
 	}
 
@@ -212,7 +212,7 @@ func normalizeRuntimeOverrideKey(raw string) (string, string, bool, error) {
 		return "pid2.KD", "pid.KD", false, nil
 	case "MV":
 		return "pid2.MV", "pid.MV", true, nil
-	case "PV", "LEVEL", "CURRENT_OPENING", "AUTO", "CAS":
+	case "PV", "LEVEL", "CURRENT_OPENING", "AUTO", "CAS", "MODE":
 		return "", "", false, fmt.Errorf("禁止写回字段: %s", raw)
 	default:
 		return "", "", false, fmt.Errorf("未知或非白名单字段: %s", raw)

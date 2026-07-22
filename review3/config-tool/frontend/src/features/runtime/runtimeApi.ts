@@ -113,6 +113,8 @@ export function mapApiSnapshot(raw: ApiSnapshot, receivedAt: number): RuntimeSna
       KD: num('pid2.KD'),
       MODE: num('pid2.MODE'),
       SWPN: num('pid2.SWPN'),
+      SWAM: num('pid2.SWAM'),
+      SWSV: num('pid2.SWSV'),
     },
     _receivedAt: receivedAt,
   }

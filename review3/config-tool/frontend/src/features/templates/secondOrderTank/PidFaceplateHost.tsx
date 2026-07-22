@@ -1,11 +1,22 @@
 /**
  * Host that wires PidFaceplate to runtime snapshot + atomic /writes (stage 5/6).
  * Runtime values never write into template draft.
- * Write events use REST time for pending and snapshot confirm time for applied.
+ * Mode switches use SWAM/SWSV and confirm via snapshot MODE (never write MODE).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRuntimeStore } from '../../runtime/useRuntimeStore'
-import { observeWriteBatch, submitAtomicWrites } from '../../runtime/runtimeWrites'
+import {
+  observeModeSwitch,
+  observeWriteBatch,
+  submitAtomicWrites,
+} from '../../runtime/runtimeWrites'
+import {
+  buildModeSwitchWrites,
+  formatPidMode,
+  MODE_AFTER_COMMAND,
+  pidFaceplateMode,
+  type PidModeCommand,
+} from '../../runtime/pidMode'
 import { applyRuntimeOverride } from './writeback'
 import { PidFaceplate, type WriteStatus } from './PidFaceplate'
 import { WritebackPanel } from './WritebackPanel'
@@ -13,16 +24,26 @@ import { WritebackPanel } from './WritebackPanel'
 const CONFIRM_TIMEOUT_SECONDS = 5
 const CONFIRM_POLL_MS = 200
 
-function modeLabel(modeNum: number | null | undefined): 'AUTO' | 'MAN' | 'CAS' {
-  if (modeNum === 3) return 'CAS'
-  if (modeNum === 4 || modeNum === 2 || modeNum === 8) return 'MAN'
-  return 'AUTO'
-}
-
 function num(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
   return null
+}
+
+type PendingWrite = {
+  kind: 'values'
+  batchId: string
+  eventIds: string[]
+  expected: Record<string, number>
+  deadline: number
+}
+
+type PendingMode = {
+  kind: 'mode'
+  batchId: string
+  command: PidModeCommand
+  expectedMode: number
+  deadline: number
 }
 
 export function PidFaceplateHost() {
@@ -35,12 +56,7 @@ export function PidFaceplateHost() {
 
   const [writeStatus, setWriteStatus] = useState<WriteStatus>('idle')
   const [writeError, setWriteError] = useState<string | null>(null)
-  const pendingRef = useRef<{
-    batchId: string
-    eventIds: string[]
-    expected: Record<string, number>
-    deadline: number
-  } | null>(null)
+  const pendingRef = useRef<PendingWrite | PendingMode | null>(null)
 
   const pid = latestSnapshot?.pid
   const values = useMemo(
@@ -59,16 +75,45 @@ export function PidFaceplateHost() {
     [pid],
   )
 
-  const faceplateMode = modeLabel(num(values.MODE))
+  const modeNum = num(values.MODE)
+  const faceplateMode = pidFaceplateMode(modeNum)
+  const modeLabel = formatPidMode(modeNum)
 
   useEffect(() => {
     const pending = pendingRef.current
-    if (!pending || writeStatus !== 'pending') return
+    if (!pending) return
+    if (pending.kind === 'values' && writeStatus !== 'pending') return
+    if (pending.kind === 'mode' && writeStatus !== 'switching') return
 
     const tick = () => {
       const p = pendingRef.current
       if (!p) return
       const snap = useRuntimeStore.getState().latestSnapshot
+      const timedOut = Date.now() > p.deadline
+
+      if (p.kind === 'mode') {
+        const status = observeModeSwitch({
+          snapshotMode: num(snap?.pid?.MODE),
+          expectedMode: p.expectedMode,
+          timedOut,
+        })
+        if (status === 'applied') {
+          pendingRef.current = null
+          setWriteStatus('applied')
+          setWriteError(null)
+        } else if (status === 'failed') {
+          const actual = formatPidMode(num(snap?.pid?.MODE))
+          pendingRef.current = null
+          setWriteStatus('failed')
+          setWriteError(
+            timedOut
+              ? `模式切换超时，当前 ${actual}`
+              : `模式未确认，当前 ${actual}`,
+          )
+        }
+        return
+      }
+
       const flat: Record<string, number> = {}
       if (snap?.pid) {
         for (const [k, v] of Object.entries(snap.pid)) {
@@ -77,7 +122,6 @@ export function PidFaceplateHost() {
           }
         }
       }
-      const timedOut = Date.now() > p.deadline
       const status = observeWriteBatch({
         batchId: p.batchId,
         snapshot: flat,
@@ -89,7 +133,6 @@ export function PidFaceplateHost() {
         for (const id of p.eventIds) {
           updateWriteEvent(id, { status: 'applied', confirmedAt })
         }
-        // Only after full-batch snapshot confirm: feed writeback buffer.
         for (const [tag, value] of Object.entries(p.expected)) {
           applyRuntimeOverride(tag, value)
         }
@@ -118,6 +161,12 @@ export function PidFaceplateHost() {
         setWriteError('runtimeName missing')
         return
       }
+      // Reject any attempt to write MODE from the faceplate path.
+      if (writes.some((w) => /\.MODE$/i.test(w.tag) || w.tag.toUpperCase() === 'MODE')) {
+        setWriteStatus('failed')
+        setWriteError('禁止写 MODE；请使用 MAN/AUTO/CAS 命令（SWAM/SWSV）')
+        return
+      }
       setWriteError(null)
       setWriteStatus('pending')
       const expected: Record<string, number> = {}
@@ -135,7 +184,8 @@ export function PidFaceplateHost() {
         for (const w of writes) {
           const id = `${accepted.batchId}:${w.tag}`
           eventIds.push(id)
-          const oldRaw = latestSnapshot?.pid?.[w.tag.replace(/^pid2\./, '') as keyof NonNullable<typeof latestSnapshot>['pid']]
+          const oldRaw =
+            latestSnapshot?.pid?.[w.tag.replace(/^pid2\./, '') as keyof NonNullable<typeof latestSnapshot>['pid']]
           recordWriteEvent({
             id,
             status: 'pending',
@@ -147,6 +197,7 @@ export function PidFaceplateHost() {
           })
         }
         pendingRef.current = {
+          kind: 'values',
           batchId: accepted.batchId,
           eventIds,
           expected,
@@ -162,6 +213,41 @@ export function PidFaceplateHost() {
     [apiHost, apiPort, runtimeName, latestSnapshot, recordWriteEvent],
   )
 
+  const onModeCommand = useCallback(
+    async (command: PidModeCommand) => {
+      if (!runtimeName) {
+        setWriteStatus('failed')
+        setWriteError('runtimeName missing')
+        return
+      }
+      const writes = buildModeSwitchWrites(command)
+      const expectedMode = MODE_AFTER_COMMAND[command]
+      setWriteError(null)
+      setWriteStatus('switching')
+      try {
+        const accepted = await submitAtomicWrites({
+          apiHost,
+          apiPort,
+          runtimeName,
+          writes,
+          confirmTimeoutSeconds: CONFIRM_TIMEOUT_SECONDS,
+        })
+        pendingRef.current = {
+          kind: 'mode',
+          batchId: accepted.batchId,
+          command,
+          expectedMode,
+          deadline: Date.now() + CONFIRM_TIMEOUT_SECONDS * 1000,
+        }
+      } catch (err) {
+        pendingRef.current = null
+        setWriteStatus('failed')
+        setWriteError(err instanceof Error ? err.message : String(err))
+      }
+    },
+    [apiHost, apiPort, runtimeName],
+  )
+
   if (!runtimeName) {
     return null
   }
@@ -169,11 +255,13 @@ export function PidFaceplateHost() {
   return (
     <div className="border-t border-border p-2" data-testid="pid-faceplate-host">
       <PidFaceplate
-        mode={faceplateMode}
+        mode={faceplateMode === 'UNKNOWN' ? 'UNKNOWN' : faceplateMode}
+        modeLabel={modeLabel}
         values={values}
         writeStatus={writeStatus}
         writeError={writeError}
         onSubmit={onSubmit}
+        onModeCommand={onModeCommand}
       />
       <WritebackPanel />
     </div>

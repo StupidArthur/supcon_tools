@@ -52,6 +52,8 @@ export interface RuntimeSnapshot {
     KD?: number
     MODE?: number
     SWPN?: number
+    SWAM?: number
+    SWSV?: number
   }
 
   // 内部元数据，便于 stale 计算与时间显示
