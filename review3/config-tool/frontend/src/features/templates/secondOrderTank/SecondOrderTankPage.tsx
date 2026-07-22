@@ -7,6 +7,10 @@ import { SecondOrderTankDiagram } from './SecondOrderTankDiagram'
 import { PidFaceplateHost } from './PidFaceplateHost'
 import { RuntimeTrendPanel } from './RuntimeTrendPanel'
 import { BatchPanelHost } from './BatchPanelHost'
+import {
+  SelectedObjectMessage,
+  shouldShowPidControlPanel,
+} from './SelectedObjectPanel'
 import { bindWritebackRuntime } from './writeback'
 import { bindSaveAs } from './saveAs'
 import { bindValidateConfig } from './validation'
@@ -102,11 +106,17 @@ export function SecondOrderTankPage() {
         <aside
           className="w-80 shrink-0 border-l border-border bg-card overflow-hidden flex flex-col"
           data-testid="inspector-panel"
+          style={{ background: '#FFFFFF' }}
         >
-          <div className="min-h-0 flex-1 overflow-auto">
+          <SelectedObjectMessage selectedObjectId={selectedObjectId} />
+          <div className="min-h-0 flex-1 overflow-auto" data-testid="object-property-panel">
             <ObjectInspector />
+            {shouldShowPidControlPanel(selectedObjectId) ? (
+              <div className="border-t border-border" data-testid="pid-control-panel">
+                <PidFaceplateHost />
+              </div>
+            ) : null}
           </div>
-          <PidFaceplateHost />
           <BatchPanelHost />
         </aside>
       </div>
