@@ -1,18 +1,19 @@
 /**
- * Materialize current YAML editor text to a temp file for offline simulation.
- * Does not touch user files or second-order tank template store.
+ * Materialize a fixed YAML snapshot to a temp file for offline simulation.
+ * Does not read from the DSL store — caller must pass the snapshot explicitly.
  */
 import { systemApi } from '../../lib/api'
 import { useDslProjectStore } from './useDslProjectStore'
 import { useGenericSimStore } from './useGenericSimStore'
 
-/** Returns absolute path of a temp YAML written from the current editor buffer. */
-export async function materializeYamlTextToTemp(): Promise<string> {
-  const text = useDslProjectStore.getState().yamlText
-  if (!text.trim()) {
+/**
+ * Writes `yamlSnapshot` to a unique temp YAML and returns its absolute path.
+ */
+export async function materializeYamlTextToTemp(yamlSnapshot: string): Promise<string> {
+  if (!yamlSnapshot.trim()) {
     throw new Error('YAML 内容为空，无法启动仿真')
   }
-  const path = await systemApi.writeTempYAML(text)
+  const path = await systemApi.writeTempYAML(yamlSnapshot)
   useDslProjectStore.getState().setLastDraftSimPath(path)
   useGenericSimStore.setState({ lastTempPath: path })
   return path

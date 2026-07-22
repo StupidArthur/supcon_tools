@@ -1,6 +1,6 @@
 /**
  * Offline simulation runner panel — yamlText → temp YAML → RunBatch.
- * Results are bound to the current projectId / runId.
+ * Results are bound to the current projectId / runId and a fixed YAML snapshot.
  */
 import { useState } from 'react'
 import { systemApi } from '../../lib/api'
@@ -42,14 +42,17 @@ export function SimControlPanel() {
       setPreflightError('实时运行进行中，禁止启动离线仿真')
       return
     }
-    if (!yamlText.trim()) {
+
+    // Freeze YAML at click time — later editor edits must not affect this run.
+    const yamlSnapshot = useDslProjectStore.getState().yamlText
+    if (!yamlSnapshot.trim()) {
       setPreflightError('YAML 内容为空，无法启动仿真')
       return
     }
 
     const n = cycles > 0 ? cycles : DEFAULT_OFFLINE_SIM_CYCLES
     const epoch = useGenericSimStore.getState().epoch
-    const yamlHash = hashYamlText(yamlText)
+    const yamlHash = hashYamlText(yamlSnapshot)
     const runId = beginRun({ projectId, yamlHash, cycles: n, epoch })
 
     let tempPath: string | null = null
@@ -59,10 +62,11 @@ export function SimControlPanel() {
         useCanvasStore.getState().setDfPath(exe)
       }
 
-      tempPath = await materializeYamlTextToTemp()
+      tempPath = await materializeYamlTextToTemp(yamlSnapshot)
       const result = await systemApi.runBatch(tempPath, n)
       const columns = (result as any).columns || []
       const rows = ((result as any).rows || []) as Array<Record<string, unknown>>
+      const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
       succeed({
         projectId,
         runId,
@@ -70,6 +74,7 @@ export function SimControlPanel() {
         columns,
         rows,
         completedCycles: rows.length,
+        currentYamlHash,
       })
     } catch (err: any) {
       fail({
@@ -88,8 +93,8 @@ export function SimControlPanel() {
     <div className="space-y-3 p-3 text-xs" data-testid="sim-control-panel">
       <div className="font-medium">仿真运行</div>
       <p className="text-muted-foreground">
-        离线数据生成：将当前 YAML 草稿写入临时文件并调用 Batch，不启动 OPC UA / 实时实例，不覆盖用户文件。
-        cycle_time 使用 YAML 内配置。结果绑定当前工程会话。
+        离线数据生成：点击开始时冻结当前 YAML 快照写入临时文件并调用 Batch；运行中编辑不影响本次结果。
+        完成后与当前草稿 hash 比较，不一致则标记过期并禁止导出。
       </p>
 
       <div className="flex flex-wrap items-end gap-3">

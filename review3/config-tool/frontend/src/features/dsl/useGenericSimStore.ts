@@ -37,6 +37,8 @@ interface GenericSimState {
     columns: string[]
     rows: Array<Record<string, unknown>>
     completedCycles: number
+    /** Hash of current project yamlText at completion time (compared to boundYamlHash). */
+    currentYamlHash: string
   }) => boolean
   fail: (payload: { projectId: string; runId: string; epoch: number; error: string }) => boolean
   markStale: () => void
@@ -108,11 +110,13 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     return runId
   },
 
-  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles }) => {
+  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles, currentYamlHash }) => {
     const s = get()
     if (s.epoch !== epoch || s.boundProjectId !== projectId || s.boundRunId !== runId) {
       return false
     }
+    // Completion hash compare is authoritative (not unconditional stale=false).
+    const stale = currentYamlHash !== s.boundYamlHash
     set({
       status: 'success',
       columns,
@@ -120,7 +124,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       completedCycles,
       error: null,
       selectedColumns: pickDefaultColumns(columns),
-      stale: false,
+      stale,
     })
     return true
   },
@@ -140,7 +144,9 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
 
   markStale: () => {
     const s = get()
-    if (s.status === 'success' && s.rows.length > 0) {
+    // Running: record that this run is already outdated when it finishes.
+    // Success: mark display/export as expired after post-run edits.
+    if (s.status === 'running' || (s.status === 'success' && s.rows.length > 0)) {
       set({ stale: true })
     }
   },

@@ -27,8 +27,10 @@ describe('useGenericSimStore', () => {
       columns: ['_cycle', 'level'],
       rows: [{ _cycle: 0, level: 1.2 }],
       completedCycles: 1,
+      currentYamlHash: 'h1',
     })
     expect(ok).toBe(true)
+    expect(useGenericSimStore.getState().stale).toBe(false)
     expect(useGenericSimStore.getState().hasExportableResult('p1')).toBe(true)
     expect(useGenericSimStore.getState().hasExportableResult('p2')).toBe(false)
   })
@@ -49,9 +51,32 @@ describe('useGenericSimStore', () => {
       columns: ['_cycle'],
       rows: [{ _cycle: 0 }],
       completedCycles: 1,
+      currentYamlHash: 'h1',
     })
     expect(ok).toBe(false)
     expect(useGenericSimStore.getState().rows).toEqual([])
+  })
+
+  it('marks success stale when completion hash differs', () => {
+    const epoch = useGenericSimStore.getState().epoch
+    const runId = useGenericSimStore.getState().beginRun({
+      projectId: 'p1',
+      yamlHash: 'h1',
+      cycles: 10,
+      epoch,
+    })
+    useGenericSimStore.getState().succeed({
+      projectId: 'p1',
+      runId,
+      epoch,
+      columns: ['_cycle', 'x'],
+      rows: [{ _cycle: 0, x: 1 }],
+      completedCycles: 1,
+      currentYamlHash: 'h-changed',
+    })
+    expect(useGenericSimStore.getState().stale).toBe(true)
+    expect(useGenericSimStore.getState().hasExportableResult('p1')).toBe(false)
+    expect(useGenericSimStore.getState().hasDisplayResult('p1')).toBe(true)
   })
 
   it('marks success stale after YAML edit', () => {
@@ -69,6 +94,7 @@ describe('useGenericSimStore', () => {
       columns: ['_cycle', 'x'],
       rows: [{ _cycle: 0, x: 1 }],
       completedCycles: 1,
+      currentYamlHash: 'h1',
     })
     useGenericSimStore.getState().markStale()
     expect(useGenericSimStore.getState().stale).toBe(true)
