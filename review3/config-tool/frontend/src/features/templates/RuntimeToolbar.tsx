@@ -107,7 +107,7 @@ export function RuntimeToolbar() {
 
     try {
       // 新一次运行：归档上一轮趋势，避免普通 rerender 清空。
-      rotatePreviousRun()
+      rotatePreviousRun?.()
 
       // 后端 Start 会同步等待 API ready
       await systemApi.start({
@@ -205,7 +205,7 @@ export function RuntimeToolbar() {
     // 阶段 4：确保 WS / 定时器 / 重连任务在离开页面时关闭
     runtimeDisconnect()
     reset()
-    setView('system')
+    setView('dsl')
   }
 
   return (

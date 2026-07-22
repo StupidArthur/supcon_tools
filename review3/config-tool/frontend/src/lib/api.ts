@@ -56,4 +56,8 @@ export const systemApi = {
   exportBatch: (configPath: string, cycles: number, exportPath: string) =>
     SystemBinding.ExportBatch(configPath, cycles, exportPath),
   saveCSVFile: () => SystemBinding.SaveCSVFile(),
+  readTextFile: (path: string) => SystemBinding.ReadTextFile(path),
+  writeTempYAML: (content: string) => SystemBinding.WriteTempYAML(content),
+  allocateTempYAMLPath: () => SystemBinding.AllocateTempYAMLPath(),
+  writeTextFile: (path: string, content: string) => SystemBinding.WriteTextFile(path, content),
 }

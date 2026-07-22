@@ -12,6 +12,8 @@ import {
 import { config } from '../../wailsjs/go/models'
 import { componentApi, systemApi } from '../lib/api'
 import type { BlockNodeData } from '../types/canvas'
+import { legacyRedirect } from '../features/app/navigation'
+import { useDslProjectStore } from '../features/dsl/useDslProjectStore'
 
 type BlockNode = Node<BlockNodeData, 'block'>
 
@@ -25,11 +27,11 @@ interface CanvasStore {
   cycleTime: number
   loading: boolean
 
-  // 系统管理
-  view: 'config' | 'system' | 'simulation' | 'template'
+  // 顶层导航：dsl / realtime 为主；旧值保留并在 setView 中重定向
+  view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime'
   dfPath: string
   configs: string[]
-  dfStatus: { running: boolean; pid: number; configPath: string; mode: string; cycleTime: number; port: number }
+  dfStatus: { running: boolean; pid: number; configPath: string; mode: string; cycleTime: number; port: number; apiHost?: string; apiPort?: number; runtimeName?: string; apiReady?: boolean }
   dfLogs: string[]
 
   init: () => void
@@ -43,7 +45,7 @@ interface CanvasStore {
   loadCanvasState: (state: config.CanvasState) => void
   getCanvasState: () => config.CanvasState
 
-  setView: (view: 'config' | 'system' | 'simulation' | 'template') => void
+  setView: (view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime') => void
   setDfPath: (path: string) => void
   setConfigs: (configs: string[]) => void
   setDfStatus: (status: any) => void
@@ -82,7 +84,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   cycleTime: 0.5,
   loading: true,
 
-  view: 'template',
+  view: 'dsl',
   dfPath: '',
   configs: [],
   dfStatus: { running: false, pid: 0, configPath: '', mode: '', cycleTime: 0, port: 0 },
@@ -226,7 +228,24 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     } as config.CanvasState
   },
 
-  setView: (view) => set({ view }),
+  setView: (view) => {
+    // Legacy redirects → primary surfaces (no blank pages).
+    if (view === 'system') {
+      set({ view: 'realtime' })
+      return
+    }
+    if (view === 'template' || view === 'simulation' || view === 'config') {
+      const hint = legacyRedirect(view)
+      useDslProjectStore.getState().openWorkspace({
+        editorTab: hint.editorTab,
+        simTab: hint.simTab,
+        projectKind: view === 'template' ? 'template' : useDslProjectStore.getState().projectKind || 'template',
+      })
+      set({ view: 'dsl' })
+      return
+    }
+    set({ view })
+  },
 
   setDfPath: (path) => set({ dfPath: path }),
 

@@ -2,17 +2,14 @@ import { useEffect } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useCanvasStore } from './store/useCanvasStore'
-import { Toolbar } from './components/Toolbar'
-import { Palette } from './components/Palette'
-import { Canvas } from './components/Canvas'
-import { PropertyPanel } from './components/PropertyPanel'
-import { SystemPanel } from './components/SystemPanel'
-import { SimulationPanel } from './components/SimulationPanel'
-import { TemplateWorkspace } from './features/templates/TemplateWorkspace'
+import { AppNav } from './features/app/AppNav'
+import { DslShell } from './features/dsl/DslShell'
+import { RealtimeUaPage } from './features/realtime/RealtimeUaPage'
+import { resolvePrimaryView, type AppView } from './features/app/navigation'
 
 function App() {
   const init = useCanvasStore((s) => s.init)
-  const view = useCanvasStore((s) => s.view)
+  const view = useCanvasStore((s) => s.view) as AppView
 
   useEffect(() => {
     init()
@@ -27,24 +24,14 @@ function App() {
     })
   }, [])
 
+  const primary = resolvePrimaryView(view)
+
   return (
     <ReactFlowProvider>
       <div className="flex h-screen flex-col">
-        <Toolbar />
+        <AppNav />
         <div className="flex flex-1 overflow-hidden">
-          {view === 'system' ? (
-            <SystemPanel />
-          ) : view === 'simulation' ? (
-            <SimulationPanel />
-          ) : view === 'config' ? (
-            <>
-              <Palette />
-              <Canvas />
-              <PropertyPanel />
-            </>
-          ) : (
-            <TemplateWorkspace />
-          )}
+          {primary === 'realtime' ? <RealtimeUaPage /> : <DslShell />}
         </div>
       </div>
     </ReactFlowProvider>

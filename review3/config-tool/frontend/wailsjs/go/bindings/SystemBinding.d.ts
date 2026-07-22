@@ -3,6 +3,8 @@
 import {bindings} from '../models';
 import {context} from '../models';
 
+export function AllocateTempYAMLPath():Promise<string>;
+
 export function BrowseExe():Promise<string>;
 
 export function Cleanup():Promise<void>;
@@ -17,6 +19,8 @@ export function ListConfigs():Promise<Array<string>>;
 
 export function OpenYAMLFile():Promise<string>;
 
+export function ReadTextFile(arg1:string):Promise<string>;
+
 export function RunBatch(arg1:string,arg2:number):Promise<bindings.BatchResult>;
 
 export function SaveCSVFile():Promise<string>;
@@ -30,3 +34,7 @@ export function Start(arg1:bindings.StartParams):Promise<void>;
 export function Status():Promise<bindings.SystemStatus>;
 
 export function Stop():Promise<void>;
+
+export function WriteTempYAML(arg1:string):Promise<string>;
+
+export function WriteTextFile(arg1:string,arg2:string):Promise<void>;

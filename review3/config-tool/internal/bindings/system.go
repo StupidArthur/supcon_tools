@@ -675,6 +675,84 @@ func (b *SystemBinding) Cleanup() {
 	b.mu.Unlock()
 }
 
+// WriteTextFile 将 UTF-8 文本写入指定路径（通用 YAML 保存）。
+func (b *SystemBinding) WriteTextFile(path string, content string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("路径不能为空")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(abs), ".dsl-write-*.tmp")
+	if err != nil {
+		return fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		if _, statErr := os.Stat(tmpPath); statErr == nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write([]byte(content)); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, abs)
+}
+
+// ReadTextFile 读取 UTF-8 文本文件（YAML 源码编辑器用）。
+func (b *SystemBinding) ReadTextFile(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("路径不能为空")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// WriteTempYAML 将内容写入唯一临时 YAML，返回绝对路径。
+// 供「当前 draft 仿真」使用：不覆盖用户文件。
+func (b *SystemBinding) WriteTempYAML(content string) (string, error) {
+	dir, err := os.MkdirTemp("", "review3-draft-sim-*")
+	if err != nil {
+		return "", fmt.Errorf("创建临时目录失败: %w", err)
+	}
+	path := filepath.Join(dir, "draft.yaml")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("写入临时 YAML 失败: %w", err)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path, nil
+	}
+	return abs, nil
+}
+
+// AllocateTempYAMLPath 分配一个尚不存在的临时 YAML 路径（目录已创建）。
+// 供模板 SaveTemplate 物化 draft 到临时文件时使用。
+func (b *SystemBinding) AllocateTempYAMLPath() (string, error) {
+	dir, err := os.MkdirTemp("", "review3-draft-sim-*")
+	if err != nil {
+		return "", fmt.Errorf("创建临时目录失败: %w", err)
+	}
+	path := filepath.Join(dir, "draft.yaml")
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path, nil
+	}
+	return abs, nil
+}
+
 // OpenYAMLFile 打开 YAML 文件对话框
 func (b *SystemBinding) OpenYAMLFile() (string, error) {
 	return runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
