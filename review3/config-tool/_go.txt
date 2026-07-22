@@ -1,0 +1,1 @@
+﻿ok  	config-tool/internal/bindings	1.699s

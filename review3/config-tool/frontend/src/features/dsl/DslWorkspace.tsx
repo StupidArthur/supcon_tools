@@ -34,7 +34,8 @@ export function DslWorkspace() {
   const sourcePath = useTemplateStore((s) => s.sourcePath)
   const save = useTemplateStore((s) => s.save)
 
-  const isDirty = projectKind === 'generic' ? yamlDirty : dirtyPaths.size > 0
+  const isDirty = projectKind === 'generic' ? yamlDirty : dirtyPaths.size > 0 || yamlDirty
+  // Generic YAML: do not block save/workspace on tank template validation rules.
   const hasErrors = projectKind === 'template' && validationErrors.length > 0
 
   // Sync YAML buffer when entering YAML tab for template projects.

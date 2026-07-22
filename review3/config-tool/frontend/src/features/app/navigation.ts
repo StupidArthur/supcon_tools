@@ -10,7 +10,7 @@ export type AppView = PrimaryView | LegacyView
 
 export type DslPhase = 'home' | 'workspace'
 export type DslEditorTab = 'template' | 'yaml' | 'topology'
-export type DslSimTab = 'control' | 'trend' | 'batch' | 'export'
+export type DslSimTab = 'run' | 'trend' | 'export' | 'control' | 'batch'
 
 export function resolvePrimaryView(view: AppView): PrimaryView {
   if (view === 'realtime' || view === 'system') return 'realtime'
@@ -29,7 +29,7 @@ export function legacyRedirect(view: AppView): {
     case 'realtime':
       return { primary: 'realtime' }
     case 'simulation':
-      return { primary: 'dsl', phase: 'workspace', simTab: 'batch' }
+      return { primary: 'dsl', phase: 'workspace', simTab: 'run' }
     case 'config':
       return { primary: 'dsl', phase: 'workspace', editorTab: 'topology' }
     case 'template':

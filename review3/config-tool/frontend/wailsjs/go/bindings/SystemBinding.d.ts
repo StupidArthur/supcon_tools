@@ -9,7 +9,11 @@ export function BrowseExe():Promise<string>;
 
 export function Cleanup():Promise<void>;
 
+export function CleanupTempYAML(arg1:string):Promise<void>;
+
 export function ExportBatch(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function ExportCSVRows(arg1:Array<string>,arg2:Array<Record<string, any>>,arg3:string):Promise<void>;
 
 export function GetDataFactoryPath():Promise<string>;
 

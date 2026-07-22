@@ -1,0 +1,31 @@
+﻿
+ RUN  v2.1.9 G:/github/supcon_tools/review3/config-tool/frontend
+
+ 鉂?src/features/dsl/useGenericSimStore.test.ts (2 tests | 1 failed) 5ms
+   脳 useGenericSimStore > tracks offline run lifecycle without template fields 5ms
+     鈫?expected [ 'level', 'name' ] to not include 'name'
+
+npx.cmd : 鈳幆鈳幆鈳幆鈳?Failed Tests 1 鈳幆鈳幆鈳幆鈳?
+所在位置 C:\Users\Administrator\AppData\Local\Temp\ps-script-ea5a882d-eee4-4bdb-8247-ddcf9eb07cfe.ps1:88 字符: 346
++ ... d frontend; npx.cmd vitest run src/features/dsl/useGenericSimStore.te ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (鈳幆鈳幆鈳幆鈳?Failed Tests 1 鈳幆鈳幆鈳幆鈳?:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ FAIL  src/features/dsl/useGenericSimStore.test.ts > useGenericSimStore > tracks offline run lifecycle without template
+ fields
+AssertionError: expected [ 'level', 'name' ] to not include 'name'
+ 鉂?src/features/dsl/useGenericSimStore.test.ts:32:38
+     30|     expect(next.completedCycles).toBe(2)
+     31|     expect(next.selectedColumns).toContain('level')
+     32|     expect(next.selectedColumns).not.toContain('name')
+       |                                      ^
+     33|   })
+     34| 
+
+鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆[1/1]鈳?
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  15:42:05
+   Duration  701ms (transform 28ms, setup 0ms, collect 88ms, tests 5ms, environment 359ms, prepare 80ms)
+

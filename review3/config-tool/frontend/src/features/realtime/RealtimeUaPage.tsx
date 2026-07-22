@@ -1,11 +1,12 @@
 /**
  * 实时运行与 UA：仅已保存 DSL + 周期/UA 端口，无 exe/模式/配置路径文本框。
+ * 与 DSL 离线仿真互斥；OPC UA 仅在此入口启动。
  */
 import { useEffect, useRef, useState } from 'react'
 import { systemApi } from '../../lib/api'
 import { useCanvasStore } from '../../store/useCanvasStore'
 import { useDslProjectStore } from '../dsl/useDslProjectStore'
-import { useTemplateStore } from '../templates/useTemplateStore'
+import { useGenericSimStore } from '../dsl/useGenericSimStore'
 
 export function RealtimeUaPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
@@ -20,10 +21,7 @@ export function RealtimeUaPage() {
   const pushRecent = useDslProjectStore((s) => s.pushRecent)
   const setYamlText = useDslProjectStore((s) => s.setYamlText)
 
-  const sourcePath = useTemplateStore((s) => s.sourcePath)
-  const dirtyPaths = useTemplateStore((s) => s.dirtyPaths)
-  const loadFromPath = useTemplateStore((s) => s.loadFromPath)
-  const reset = useTemplateStore((s) => s.reset)
+  const offlineRunning = useGenericSimStore((s) => s.status === 'running')
 
   const [cycleTime, setCycleTime] = useState(0.5)
   const [port, setPort] = useState(18951)
@@ -34,11 +32,10 @@ export function RealtimeUaPage() {
   const [dslPath, setDslPath] = useState('')
   const logEndRef = useRef<HTMLDivElement>(null)
 
-  const effectivePath = dslPath || sourcePath || filePath
-  const isDirty = dirtyPaths.size > 0 || yamlDirty
+  const effectivePath = dslPath || filePath
+  const isDirty = yamlDirty
 
   useEffect(() => {
-    // Resolve DataFactory.exe internally — do not expose path UI.
     systemApi.getDataFactoryPath().then((p) => {
       if (p) setDfPath(p)
     })
@@ -46,10 +43,8 @@ export function RealtimeUaPage() {
   }, [refreshStatus, setDfPath])
 
   useEffect(() => {
-    if (sourcePath || filePath) {
-      setDslPath(sourcePath || filePath)
-    }
-  }, [sourcePath, filePath])
+    if (filePath) setDslPath(filePath)
+  }, [filePath])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -59,35 +54,28 @@ export function RealtimeUaPage() {
     const path = await systemApi.openYAMLFile()
     if (!path) return
     try {
-      await loadFromPath(path)
+      const text = await systemApi.readTextFile(path)
+      setYamlText(text, false)
       setDslPath(path)
       pushRecent(path)
       openWorkspace({
         filePath: path,
-        projectKind: 'template',
+        projectKind: 'generic',
         projectName: path.replace(/^.*[\\/]/, ''),
+        editorTab: 'yaml',
+        simTab: 'run',
       })
-    } catch {
-      try {
-        const text = await systemApi.readTextFile(path)
-        reset()
-        setYamlText(text, false)
-        setDslPath(path)
-        pushRecent(path)
-        openWorkspace({
-          filePath: path,
-          projectKind: 'generic',
-          projectName: path.replace(/^.*[\\/]/, ''),
-          editorTab: 'yaml',
-        })
-      } catch (err) {
-        setError('打开失败: ' + String(err))
-      }
+    } catch (err) {
+      setError('打开失败: ' + String(err))
     }
   }
 
   const handleStart = async () => {
     setError('')
+    if (offlineRunning) {
+      setError('离线仿真进行中，禁止启动实时运行')
+      return
+    }
     if (!effectivePath) {
       setError('请先打开已保存的 DSL 文件')
       return
@@ -97,7 +85,6 @@ export function RealtimeUaPage() {
       return
     }
     try {
-      // Ensure exe path resolved
       const p = await systemApi.getDataFactoryPath()
       if (p) setDfPath(p)
       await systemApi.start({
@@ -132,7 +119,7 @@ export function RealtimeUaPage() {
         <div>
           <h2 className="text-lg font-medium">实时运行与 UA</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            基于已保存 DSL 启动实时实例并提供 OPC UA Server。UA 写入只影响当前运行实例。
+            基于已保存 DSL 启动实时实例并提供 OPC UA Server。与 DSL 离线仿真互斥。
           </p>
         </div>
 
@@ -165,6 +152,11 @@ export function RealtimeUaPage() {
           {isDirty ? (
             <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900" data-testid="realtime-unsaved-warn">
               实时运行使用已保存的 DSL，请先保存。
+            </div>
+          ) : null}
+          {offlineRunning ? (
+            <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+              离线仿真进行中，禁止启动实时运行。
             </div>
           ) : null}
         </section>
@@ -239,7 +231,8 @@ export function RealtimeUaPage() {
             <button
               type="button"
               onClick={() => void handleStart()}
-              className="rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground"
+              disabled={offlineRunning || isDirty || !effectivePath}
+              className="rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-40"
               data-testid="realtime-start"
             >
               启动实时运行

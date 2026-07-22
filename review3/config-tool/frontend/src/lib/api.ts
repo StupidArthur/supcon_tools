@@ -60,4 +60,7 @@ export const systemApi = {
   writeTempYAML: (content: string) => SystemBinding.WriteTempYAML(content),
   allocateTempYAMLPath: () => SystemBinding.AllocateTempYAMLPath(),
   writeTextFile: (path: string, content: string) => SystemBinding.WriteTextFile(path, content),
+  cleanupTempYAML: (path: string) => SystemBinding.CleanupTempYAML(path),
+  exportCSVRows: (columns: string[], rows: Array<Record<string, any>>, exportPath: string) =>
+    SystemBinding.ExportCSVRows(columns, rows, exportPath),
 }

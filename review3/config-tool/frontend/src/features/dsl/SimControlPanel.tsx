@@ -1,163 +1,123 @@
 /**
- * DSL 仿真控制：用当前有效 draft 物化到临时 YAML 后启动（不覆盖用户文件）。
+ * Offline simulation runner panel — yamlText → temp YAML → RunBatch.
  */
-import { useRef, useState } from 'react'
 import { systemApi } from '../../lib/api'
-import { useRuntimeStore } from '../runtime/useRuntimeStore'
-import { canStartRealtime } from '../templates/batchState'
-import { useTemplateStore } from '../templates/useTemplateStore'
-import { materializeDraftToTemp } from './materializeDraft'
+import { useCanvasStore } from '../../store/useCanvasStore'
+import { cleanupTempYAML, materializeYamlTextToTemp } from './materializeYamlDraft'
 import { useDslProjectStore } from './useDslProjectStore'
+import { DEFAULT_OFFLINE_SIM_CYCLES, useGenericSimStore } from './useGenericSimStore'
 
 export function SimControlPanel() {
-  const projectKind = useDslProjectStore((s) => s.projectKind)
-  const lastDraftSimPath = useDslProjectStore((s) => s.lastDraftSimPath)
-  const yamlError = useDslProjectStore((s) => s.yamlError)
-  const runtimeState = useTemplateStore((s) => s.runtimeState)
-  const validationErrors = useTemplateStore((s) => s.validationErrors)
-  const setRuntimeState = useTemplateStore((s) => s.setRuntimeState)
-  const setRunningIdentity = useTemplateStore((s) => s.setRunningIdentity)
-  const draft = useTemplateStore((s) => s.draft)
+  const yamlText = useDslProjectStore((s) => s.yamlText)
+  const dfRunning = useCanvasStore((s) => s.dfStatus.running)
 
-  const runtimeConnect = useRuntimeStore((s) => s.connect)
-  const runtimeDisconnect = useRuntimeStore((s) => s.disconnect)
-  const rotatePreviousRun = useRuntimeStore((s) => s.rotatePreviousRun)
-  const connectionState = useRuntimeStore((s) => s.connectionState)
-  const stale = useRuntimeStore((s) => s.stale)
+  const status = useGenericSimStore((s) => s.status)
+  const cycles = useGenericSimStore((s) => s.cycles)
+  const completedCycles = useGenericSimStore((s) => s.completedCycles)
+  const error = useGenericSimStore((s) => s.error)
+  const setCycles = useGenericSimStore((s) => s.setCycles)
+  const beginRun = useGenericSimStore((s) => s.beginRun)
+  const succeed = useGenericSimStore((s) => s.succeed)
+  const fail = useGenericSimStore((s) => s.fail)
 
-  const [error, setError] = useState<string | null>(null)
-  const [cycleTime, setCycleTime] = useState(0.5)
-  const operationIdRef = useRef(0)
-
-  const isRunning = runtimeState === 'SIMULATION_RUNNING' || runtimeState === 'REALTIME_RUNNING'
-  const isStarting = runtimeState === 'STARTING'
-  const isStopping = runtimeState === 'STOPPING'
-  const hasErrors =
-    (projectKind === 'template' && validationErrors.length > 0) ||
-    (projectKind === 'generic' && Boolean(yamlError))
+  const running = status === 'running'
+  const canStart = !running && !dfRunning && Boolean(yamlText.trim())
 
   const handleStart = async () => {
-    setError(null)
-    if (!canStartRealtime({ runtimeState })) {
-      setError('批量任务正在运行，无法启动仿真')
+    if (dfRunning) {
+      fail('实时运行进行中，禁止启动离线仿真')
       return
     }
-    if (hasErrors) {
-      setError('校验失败，禁止启动')
+    if (!yamlText.trim()) {
+      fail('YAML 内容为空，无法启动仿真')
       return
     }
-    const myOperationId = ++operationIdRef.current
-    setRuntimeState('STARTING')
-    try {
-      rotatePreviousRun?.()
-      const tempPath = await materializeDraftToTemp()
-      const ct = draft?.cycleTime || cycleTime || 0.5
-      await systemApi.start({
-        configPath: tempPath,
-        mode: 'REALTIME',
-        cycleTime: ct,
-        port: 18951,
-        apiHost: '127.0.0.1',
-        apiPort: 8000,
-        runtimeName: 'second_order_tank',
-        enableOpcUa: true,
-      })
-      if (myOperationId !== operationIdRef.current) return
-      const status = await systemApi.status()
-      if (myOperationId !== operationIdRef.current) return
-      if (!status.running || !status.apiReady || !status.configPath || !status.configHash || !status.startedAt) {
-        throw new Error('后端状态不完整')
-      }
-      setRunningIdentity({
-        path: status.configPath,
-        contentHash: status.configHash,
-        startedAt: status.startedAt,
-      })
-      try {
-        await runtimeConnect()
-      } catch (wsErr) {
-        console.warn('runtime connect failed:', wsErr)
-      }
-      setRuntimeState('SIMULATION_RUNNING')
-    } catch (err: any) {
-      if (myOperationId !== operationIdRef.current) return
-      setError(err?.message || String(err))
-      setRuntimeState('ERROR')
-      setRunningIdentity(null)
-    }
-  }
 
-  const handleStop = async () => {
-    if (isStopping) return
-    operationIdRef.current++
-    setRuntimeState('STOPPING')
+    const n = cycles > 0 ? cycles : DEFAULT_OFFLINE_SIM_CYCLES
+    beginRun(n)
+
+    let tempPath: string | null = null
     try {
-      runtimeDisconnect()
-      await systemApi.stop()
-      setRuntimeState('STOPPED_EDITING')
-      setRunningIdentity(null)
+      // Ensure DataFactory.exe is resolved (no UI for path).
+      const exe = await systemApi.getDataFactoryPath()
+      if (exe) {
+        useCanvasStore.getState().setDfPath(exe)
+      }
+
+      tempPath = await materializeYamlTextToTemp()
+      const result = await systemApi.runBatch(tempPath, n)
+      const columns = (result as any).columns || []
+      const rows = ((result as any).rows || []) as Array<Record<string, unknown>>
+      succeed({
+        columns,
+        rows,
+        completedCycles: rows.length,
+      })
     } catch (err: any) {
-      setError(err?.message || String(err))
-      setRuntimeState('ERROR')
+      fail(err?.message || String(err))
+    } finally {
+      await cleanupTempYAML(tempPath)
+      useGenericSimStore.setState({ lastTempPath: null })
     }
   }
 
   return (
     <div className="space-y-3 p-3 text-xs" data-testid="sim-control-panel">
-      <div className="font-medium">仿真控制</div>
+      <div className="font-medium">仿真运行</div>
       <p className="text-muted-foreground">
-        使用当前有效 draft 启动：校验通过后写入临时 YAML，不覆盖用户文件；继续编辑不影响已启动实例。
+        离线数据生成：将当前 YAML 草稿写入临时文件并调用 Batch，不启动 OPC UA / 实时实例，不覆盖用户文件。
+        cycle_time 使用 YAML 内配置。
       </p>
+
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1">
-          <span className="text-muted-foreground">周期 (秒)</span>
+          <span className="text-muted-foreground">仿真周期数</span>
           <input
             type="number"
-            step={0.1}
-            min={0.01}
-            value={draft?.cycleTime ?? cycleTime}
-            onChange={(e) => setCycleTime(Number(e.target.value))}
-            disabled={isRunning || isStarting}
-            className="block w-24 rounded-md border border-border bg-card px-2 py-1"
-            data-testid="sim-cycle-time"
+            min={1}
+            value={cycles}
+            disabled={running}
+            onChange={(e) => setCycles(Number(e.target.value))}
+            className="block w-28 rounded-md border border-border bg-card px-2 py-1"
+            data-testid="sim-cycles"
           />
         </label>
-        {!isRunning && !isStarting && !isStopping ? (
-          <button
-            type="button"
-            onClick={() => void handleStart()}
-            disabled={hasErrors || !canStartRealtime({ runtimeState })}
-            className="rounded-md bg-green-600 px-3 py-1.5 text-white disabled:opacity-40"
-            data-testid="sim-start-button"
-          >
-            启动仿真
-          </button>
-        ) : null}
-        {(isRunning || isStarting) && !isStopping ? (
-          <button
-            type="button"
-            onClick={() => void handleStop()}
-            className="rounded-md bg-destructive px-3 py-1.5 text-destructive-foreground"
-            data-testid="sim-stop-button"
-          >
-            停止
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => void handleStart()}
+          disabled={!canStart}
+          className="rounded-md bg-green-600 px-3 py-1.5 text-white disabled:opacity-40"
+          data-testid="sim-start-button"
+        >
+          {running ? '仿真中…' : '开始仿真'}
+        </button>
         <div data-testid="sim-status">
-          状态：{runtimeState}
-          {isRunning ? ` · 连接 ${connectionState}${stale ? ' (stale)' : ''}` : ''}
+          状态：{statusLabel(status)}
+          {status === 'success' ? ` · 完成 ${completedCycles} 周期` : ''}
+          {dfRunning ? ' · 实时运行占用中' : ''}
         </div>
       </div>
-      {lastDraftSimPath ? (
-        <div className="truncate text-muted-foreground" title={lastDraftSimPath}>
-          临时配置：{lastDraftSimPath}
-        </div>
-      ) : null}
+
       {error ? (
-        <div className="text-destructive" data-testid="sim-error">
+        <div className="whitespace-pre-wrap break-all text-destructive" data-testid="sim-error">
           {error}
         </div>
       ) : null}
     </div>
   )
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'idle':
+      return '空闲'
+    case 'running':
+      return '运行中'
+    case 'success':
+      return '成功'
+    case 'failed':
+      return '失败'
+    default:
+      return status
+  }
 }

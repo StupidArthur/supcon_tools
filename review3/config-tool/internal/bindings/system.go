@@ -707,6 +707,89 @@ func (b *SystemBinding) WriteTextFile(path string, content string) error {
 	return os.Rename(tmpPath, abs)
 }
 
+// CleanupTempYAML 清理 WriteTempYAML / AllocateTempYAMLPath 产生的临时目录。
+func (b *SystemBinding) CleanupTempYAML(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("路径不能为空")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(abs)
+	base := filepath.Base(dir)
+	if !strings.HasPrefix(base, "review3-draft-sim-") {
+		return fmt.Errorf("拒绝清理非 draft 临时目录: %s", base)
+	}
+	return os.RemoveAll(dir)
+}
+
+// ExportCSVRows 将内存中的仿真结果写入用户选择的 CSV（不重新跑 Batch）。
+func (b *SystemBinding) ExportCSVRows(columns []string, rows []map[string]any, exportPath string) error {
+	if strings.TrimSpace(exportPath) == "" {
+		return fmt.Errorf("导出路径不能为空")
+	}
+	if len(columns) == 0 {
+		return fmt.Errorf("列为空，无法导出")
+	}
+	abs, err := filepath.Abs(exportPath)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+	f, err := os.Create(abs)
+	if err != nil {
+		return fmt.Errorf("创建 CSV 失败: %w", err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	if err := w.Write(columns); err != nil {
+		return fmt.Errorf("写表头失败: %w", err)
+	}
+	for _, row := range rows {
+		record := make([]string, len(columns))
+		for i, col := range columns {
+			record[i] = formatCSVCell(row[col])
+		}
+		if err := w.Write(record); err != nil {
+			return fmt.Errorf("写数据行失败: %w", err)
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func formatCSVCell(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case float64:
+		return strconv.FormatFloat(t, 'g', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(t), 'g', -1, 32)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprint(t)
+	}
+}
+
 // ReadTextFile 读取 UTF-8 文本文件（YAML 源码编辑器用）。
 func (b *SystemBinding) ReadTextFile(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {

@@ -14,8 +14,16 @@ export function Cleanup() {
   return window['go']['bindings']['SystemBinding']['Cleanup']();
 }
 
+export function CleanupTempYAML(arg1) {
+  return window['go']['bindings']['SystemBinding']['CleanupTempYAML'](arg1);
+}
+
 export function ExportBatch(arg1, arg2, arg3) {
   return window['go']['bindings']['SystemBinding']['ExportBatch'](arg1, arg2, arg3);
+}
+
+export function ExportCSVRows(arg1, arg2, arg3) {
+  return window['go']['bindings']['SystemBinding']['ExportCSVRows'](arg1, arg2, arg3);
 }
 
 export function GetDataFactoryPath() {

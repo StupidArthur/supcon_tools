@@ -68,8 +68,8 @@ function basename(path: string): string {
 
 export const useDslProjectStore = create<DslProjectState>((set, get) => ({
   phase: 'home',
-  editorTab: 'template',
-  simTab: 'control',
+  editorTab: 'yaml',
+  simTab: 'run',
   projectKind: 'none',
   projectName: '',
   filePath: '',

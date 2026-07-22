@@ -1,19 +1,15 @@
 /**
- * DSL 工程仿真区：仿真控制 | 趋势 | Batch | 导出
+ * DSL 工程仿真区：仿真运行 | 结果趋势 | 导出
  */
-import { useMemo } from 'react'
-import { useRuntimeStore } from '../runtime/useRuntimeStore'
-import { BatchPanelHost } from '../templates/secondOrderTank/BatchPanelHost'
-import { RuntimeTrendPanel } from '../templates/secondOrderTank/RuntimeTrendPanel'
-import { SimulationPanel } from '../../components/SimulationPanel'
 import type { DslSimTab } from '../app/navigation'
-import { useDslProjectStore } from './useDslProjectStore'
+import { GenericSimTrendPanel } from './GenericSimTrendPanel'
 import { SimControlPanel } from './SimControlPanel'
+import { SimExportPanel } from './SimExportPanel'
+import { useDslProjectStore } from './useDslProjectStore'
 
 const SIM_TABS: Array<{ id: DslSimTab; label: string }> = [
-  { id: 'control', label: '仿真控制' },
-  { id: 'trend', label: '趋势' },
-  { id: 'batch', label: 'Batch' },
+  { id: 'run', label: '仿真运行' },
+  { id: 'trend', label: '结果趋势' },
   { id: 'export', label: '导出' },
 ]
 
@@ -21,14 +17,8 @@ export function SimWorkspace() {
   const simTab = useDslProjectStore((s) => s.simTab)
   const setSimTab = useDslProjectStore((s) => s.setSimTab)
 
-  const trendBuffer = useRuntimeStore((s) => s.trendBuffer)
-  const previousRunSeries = useRuntimeStore((s) => s.previousRunSeries)
-  const writeEvents = useRuntimeStore((s) => s.writeEvents)
-  const stale = useRuntimeStore((s) => s.stale)
-  const connectionState = useRuntimeStore((s) => s.connectionState)
-  const quality = useRuntimeStore((s) => s.quality)
-  const latestSnapshot = useRuntimeStore((s) => s.latestSnapshot)
-  const series = useMemo(() => trendBuffer.toArray(), [trendBuffer, latestSnapshot])
+  const active: DslSimTab =
+    simTab === 'control' || simTab === 'batch' ? 'run' : simTab === 'trend' || simTab === 'export' ? simTab : 'run'
 
   return (
     <div className="flex h-full min-h-0 flex-col border-t border-border" data-testid="sim-workspace">
@@ -39,7 +29,7 @@ export function SimWorkspace() {
             type="button"
             onClick={() => setSimTab(t.id)}
             className={`rounded-md px-2.5 py-1 text-xs ${
-              simTab === t.id
+              active === t.id
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-secondary'
             }`}
@@ -50,27 +40,9 @@ export function SimWorkspace() {
         ))}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {simTab === 'control' ? <SimControlPanel /> : null}
-        {simTab === 'trend' ? (
-          <RuntimeTrendPanel
-            series={series}
-            previousRunSeries={previousRunSeries}
-            events={writeEvents}
-            stale={stale}
-            connectionState={connectionState}
-            quality={quality}
-          />
-        ) : null}
-        {simTab === 'batch' ? (
-          <div className="p-2">
-            <BatchPanelHost />
-          </div>
-        ) : null}
-        {simTab === 'export' ? (
-          <div className="p-2" data-testid="sim-export-panel">
-            <SimulationPanel />
-          </div>
-        ) : null}
+        {active === 'run' ? <SimControlPanel /> : null}
+        {active === 'trend' ? <GenericSimTrendPanel /> : null}
+        {active === 'export' ? <SimExportPanel /> : null}
       </div>
     </div>
   )

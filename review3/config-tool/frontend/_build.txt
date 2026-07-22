@@ -1,0 +1,25 @@
+﻿
+> frontend@0.0.0 build
+> tsc && vite build
+
+vite v5.4.21 building for production...
+transforming...
+鉁?779 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB 鈹?gzip:   0.28 kB
+dist/assets/index-D10IBY4Q.css   34.84 kB 鈹?gzip:   6.80 kB
+dist/assets/index-BvLWWUnT.js   803.49 kB 鈹?gzip: 244.20 kB
+npm.cmd : 
+所在位置 C:\Users\Administrator\AppData\Local\Temp\ps-script-ea5a882d-eee4-4bdb-8247-ddcf9eb07cfe.ps1:88 字符: 57
++ ... on_tools\review3\config-tool\frontend; npm.cmd run build 2>&1 | Out-F ...
++                                            ~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-m
+anualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+鉁?built in 4.50s
