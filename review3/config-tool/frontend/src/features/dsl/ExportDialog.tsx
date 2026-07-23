@@ -8,7 +8,8 @@
  * xls 当前版本暂不支持（运行环境缺 xlwt），故不提供该选项。
  */
 import { useEffect, useState } from 'react'
-import { type ExportFormat, type ExportSession, sessionNumericColumns } from './exportSession'
+import { type ExportFormat } from '../../lib/exportTypes'
+import { type ExportSession, sessionNumericColumns } from './exportSession'
 
 const FORMATS: Array<{ id: ExportFormat; label: string }> = [
   { id: 'csv', label: 'CSV' },

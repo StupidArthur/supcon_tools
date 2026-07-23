@@ -1024,8 +1024,11 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 // 注：本方法为旧的重跑导出路径，当前主流程不使用（主流程用 ExportRowsFormatted 导出内存结果）；
 // xls 暂未启用（运行环境缺 xlwt）。
 func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) error {
+	// 在函数开头统一规范化 format（trim + lowercase），后续 format 门禁与参数构造必须使用同一 fmtLower，
+	// 避免把原始的 " xlsx " 等带空格串透传给 Python argparse（choices 为精确匹配，会被拒）。
+	fmtLower := strings.ToLower(strings.TrimSpace(format))
 	// 格式门禁前置：xls 当前版本暂不支持，未知格式直接拒绝；都不启动子进程。
-	switch strings.ToLower(strings.TrimSpace(format)) {
+	switch fmtLower {
 	case "csv", "xlsx":
 	case "xls":
 		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
@@ -1046,7 +1049,7 @@ func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, expo
 	}
 	defer b.endBatch()
 
-	args := buildBatchExportArgs(configPath, cycles, exportPath, format, columns, sheetName)
+	args := buildBatchExportArgs(configPath, cycles, exportPath, fmtLower, columns, sheetName)
 	cmd := b.dfLaunch.command(b.commandFactory, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1064,12 +1067,16 @@ func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, expo
 }
 
 // buildBatchExportArgs 构造模板导出的 CLI 参数（纯函数，便于测试）。
+//
+// format 调用方已规范化（trim + lowercase）。此处再做一次防御性 trim + lowercase，
+// 保证最终参数中 --format 不会带前后空格。
 func buildBatchExportArgs(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) []string {
+	fmtLower := strings.ToLower(strings.TrimSpace(format))
 	args := []string{
 		"-c", configPath,
 		"--batch", fmt.Sprintf("%d", cycles),
 		"--export", exportPath,
-		"--format", strings.ToLower(format),
+		"--format", fmtLower,
 	}
 	if len(columns) > 0 {
 		args = append(args, "--columns", strings.Join(columns, ","))

@@ -7,6 +7,7 @@ import * as ComponentBinding from '../../wailsjs/go/bindings/ComponentBinding'
 import * as ConfigBinding from '../../wailsjs/go/bindings/ConfigBinding'
 import * as SystemBinding from '../../wailsjs/go/bindings/SystemBinding'
 import * as TemplateConfigBinding from '../../wailsjs/go/bindings/TemplateConfigBinding'
+import type { ExportFormat } from './exportTypes'
 
 // 模板领域类型集中在 features/templates/types.ts，这里只暴露运行时 API。
 // 注意：本文件不再 re-export 领域类型，避免形成 types.ts <-> api.ts 循环依赖。
@@ -59,7 +60,7 @@ export const systemApi = {
     configPath: string,
     cycles: number,
     exportPath: string,
-    format: string,
+    format: ExportFormat,
     columns: string[],
     sheetName: string,
   ) => SystemBinding.ExportBatchFormatted(configPath, cycles, exportPath, format, columns, sheetName),
@@ -68,11 +69,11 @@ export const systemApi = {
     columns: string[],
     rows: Array<Record<string, any>>,
     exportPath: string,
-    format: string,
+    format: ExportFormat,
     sheetName: string,
   ) => SystemBinding.ExportRowsFormatted(columns, rows, exportPath, format, sheetName),
   saveCSVFile: () => SystemBinding.SaveCSVFile(),
-  saveExportFile: (format: string) => SystemBinding.SaveExportFile(format),
+  saveExportFile: (format: ExportFormat) => SystemBinding.SaveExportFile(format),
   readTextFile: (path: string) => SystemBinding.ReadTextFile(path),
   writeTempYAML: (content: string) => SystemBinding.WriteTempYAML(content),
   allocateTempYAMLPath: () => SystemBinding.AllocateTempYAMLPath(),

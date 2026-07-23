@@ -21,11 +21,11 @@ import {
   YAxis,
 } from 'recharts'
 import { systemApi } from '../../lib/api'
+import { type ExportFormat } from '../../lib/exportTypes'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { ExportDialog } from './ExportDialog'
 import {
   createExportSession,
-  type ExportFormat,
   type ExportSession,
   isNumericColumn,
   validateExportSession,

@@ -1234,4 +1234,41 @@ func TestExportBatchFormattedXLSNoSubprocess(t *testing.T) {
 	if active != 0 {
 		t.Fatalf("xls must not take a batch lease, activeBatches=%d", active)
 	}
+
+	// 带空格的 xls 仍须在启动子进程前返回同一错误。
+	b.setCommandFactory(func(name string, arg ...string) *exec.Cmd {
+		t.Fatalf("subprocess must not be launched for trimmed xls: %s %v", name, arg)
+		return exec.Command(name, arg...)
+	})
+	if err := b.ExportBatchFormatted("cfg.yaml", 100, filepath.Join(t.TempDir(), "trim.xls"), " xls ", nil, ""); err == nil ||
+		!strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+		t.Fatalf("trimmed xls: %v", err)
+	}
+}
+
+// TestBuildBatchExportArgsNormalizesFormat 验证最终 CLI 参数中的 --format 不带前后空格。
+// 调用方已规范化，但函数自身仍做防御性 trim + lowercase，保证透传给 Python argparse 的是精确匹配的合法值。
+func TestBuildBatchExportArgsNormalizesFormat(t *testing.T) {
+	got := buildBatchExportArgs("cfg.yaml", 100, "out.xlsx", " xLsX ", []string{"a"}, "")
+	want := []string{
+		"-c", "cfg.yaml",
+		"--batch", "100",
+		"--export", "out.xlsx",
+		"--format", "xlsx",
+		"--columns", "a",
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	got2 := buildBatchExportArgs("cfg.yaml", 50, "out.csv", "  CSV ", nil, "")
+	want2 := []string{
+		"-c", "cfg.yaml",
+		"--batch", "50",
+		"--export", "out.csv",
+		"--format", "csv",
+	}
+	if !equalStrings(got2, want2) {
+		t.Fatalf("got %v, want %v", got2, want2)
+	}
 }

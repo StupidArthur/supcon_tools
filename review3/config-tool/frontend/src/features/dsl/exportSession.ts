@@ -8,7 +8,9 @@
  *   任一不匹配即取消，不创建文件。
  */
 
-export type ExportFormat = 'csv' | 'xlsx'
+import type { ExportFormat } from '../../lib/exportTypes'
+
+export type { ExportFormat }
 
 export interface ExportSession {
   projectId: string
