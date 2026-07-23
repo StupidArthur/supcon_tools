@@ -17,6 +17,8 @@ export function ExportBatchFormatted(arg1:string,arg2:number,arg3:string,arg4:st
 
 export function ExportCSVRows(arg1:Array<string>,arg2:Array<Record<string, any>>,arg3:string):Promise<void>;
 
+export function ExportRowsFormatted(arg1:Array<string>,arg2:Array<Record<string, any>>,arg3:string,arg4:string,arg5:string):Promise<void>;
+
 export function GetDataFactoryPath():Promise<string>;
 
 export function GetRecentLogs():Promise<Array<string>>;

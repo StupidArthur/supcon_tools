@@ -9,7 +9,7 @@
  * - 完成后与当前草稿 hash 比较，不一致标记 stale 并禁止导出
  * - 结果按 projectId / runId / epoch 归属，迟到结果丢弃
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -21,7 +21,7 @@ import {
   YAxis,
 } from 'recharts'
 import { systemApi } from '../../lib/api'
-import { useCanvasStore } from '../../store/useCanvasStore'
+import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { ExportDialog, type ExportFormat } from './ExportDialog'
 import { cleanupTempYAML, materializeYamlTextToTemp } from './materializeYamlDraft'
 import { useDslProjectStore } from './useDslProjectStore'
@@ -71,7 +71,9 @@ function fmt(v: number): string {
 
 export function GenericSimPanel() {
   const projectId = useDslProjectStore((s) => s.projectId)
-  const dfRunning = useCanvasStore((s) => s.dfStatus.running)
+  const dfStatus = useCanvasStore((s) => s.dfStatus)
+  const refreshStatus = useCanvasStore((s) => s.refreshStatus)
+  const dfRunning = dfStatus.running
 
   const status = useGenericSimStore((s) => s.status)
   const cycles = useGenericSimStore((s) => s.cycles)
@@ -99,8 +101,20 @@ export function GenericSimPanel() {
   const owned = boundProjectId === projectId
   const running = status === 'running' && owned
   const yamlText = useDslProjectStore((s) => s.yamlText)
-  const canStart = !running && !dfRunning && !globalBatchRunning && Boolean(yamlText.trim())
+  // Batch 占用 = 本地 lease（即时反馈） || 后端权威状态（跨刷新/跨页面）。
+  const batchBusy = globalBatchRunning || backendBatchBusy(dfStatus)
+  const canStart = !running && !dfRunning && !batchBusy && Boolean(yamlText.trim())
   const displayError = preflightError || (owned ? error : null)
+
+  // 进入页面刷新一次后端状态；仅在 Batch 占用期间短周期轮询，结束后停止。
+  useEffect(() => {
+    refreshStatus()
+  }, [refreshStatus])
+  useEffect(() => {
+    if (!batchBusy) return
+    const id = setInterval(() => refreshStatus(), 1000)
+    return () => clearInterval(id)
+  }, [batchBusy, refreshStatus])
 
   const numericColumns = useMemo(
     () =>
@@ -136,11 +150,13 @@ export function GenericSimPanel() {
   const handleStart = async () => {
     setPreflightError(null)
     setExportError(null)
-    if (dfRunning) {
+    // 点击时再次读取最新状态，避免只依赖渲染时的旧值。
+    const latestDf = useCanvasStore.getState().dfStatus
+    if (latestDf.running) {
       setPreflightError('实时运行进行中，禁止启动离线仿真')
       return
     }
-    if (useGenericSimStore.getState().globalBatchRunning) {
+    if (useGenericSimStore.getState().globalBatchRunning || backendBatchBusy(latestDf)) {
       setPreflightError('已有批量任务正在运行，禁止启动新的离线仿真')
       return
     }
@@ -156,7 +172,8 @@ export function GenericSimPanel() {
     // 全局批量占用 lease：真正结束后才在 finally 释放（按 runId 匹配）。
     useGenericSimStore.getState().beginGlobalBatch(runId)
 
-    // 临时路径保存在本异步函数局部变量，不依赖全局 lastTempPath，避免并发任务互相覆盖。
+    // 临时路径只属于本次异步任务（局部变量），在 finally 中自行清理；
+    // 不写任何全局 Store，旧任务不会清理或覆盖其他任务的路径与 lease。
     let tempPath: string | null = null
     try {
       const exe = await systemApi.getDataFactoryPath()
@@ -184,6 +201,7 @@ export function GenericSimPanel() {
     } finally {
       await cleanupTempYAML(tempPath)
       useGenericSimStore.getState().endGlobalBatch(runId)
+      refreshStatus()
     }
   }
 
@@ -218,6 +236,7 @@ export function GenericSimPanel() {
       setExportError(err?.message || String(err))
     } finally {
       setExportBusy(false)
+      refreshStatus()
     }
   }
 
@@ -266,7 +285,7 @@ export function GenericSimPanel() {
             {status === 'success' && owned ? ` · ${completedCycles} 周期` : ''}
             {stale && owned ? ' · 已过期' : ''}
             {dfRunning ? ' · 实时占用' : ''}
-            {globalBatchRunning && !running ? ' · 全局批量任务运行中' : ''}
+            {batchBusy && !running ? ' · 全局批量任务运行中' : ''}
           </span>
         </span>
         <div className="min-w-2 flex-1" />

@@ -23,14 +23,11 @@ interface DslProjectState {
   yamlDirty: boolean
   yamlError: string | null
   recentPaths: string[]
-  /** Last temp YAML used for draft simulation (informational). */
-  lastDraftSimPath: string | null
   setPhase: (p: DslPhase) => void
   setEditorTab: (t: DslEditorTab) => void
   setSimTab: (t: DslSimTab) => void
   setYamlText: (text: string, dirty?: boolean) => void
   setYamlError: (err: string | null) => void
-  setLastDraftSimPath: (path: string | null) => void
   pushRecent: (path: string) => void
   /** Update saved path without rotating project/session (e.g. after Save As). */
   setProjectFile: (filePath: string, projectName?: string) => void
@@ -91,7 +88,6 @@ export const useDslProjectStore = create<DslProjectState>((set, get) => ({
   yamlDirty: false,
   yamlError: null,
   recentPaths: loadRecent(),
-  lastDraftSimPath: null,
 
   setPhase: (phase) => set({ phase }),
   setEditorTab: (editorTab) => set({ editorTab }),
@@ -103,7 +99,6 @@ export const useDslProjectStore = create<DslProjectState>((set, get) => ({
     }
   },
   setYamlError: (yamlError) => set({ yamlError }),
-  setLastDraftSimPath: (lastDraftSimPath) => set({ lastDraftSimPath }),
 
   pushRecent: (path) => {
     if (!path) return
@@ -131,7 +126,6 @@ export const useDslProjectStore = create<DslProjectState>((set, get) => ({
       yamlText: '',
       yamlDirty: false,
       yamlError: null,
-      lastDraftSimPath: null,
     })
   },
 
@@ -149,7 +143,6 @@ export const useDslProjectStore = create<DslProjectState>((set, get) => ({
       projectKind: opts?.projectKind ?? get().projectKind,
       projectName,
       filePath: filePath ?? '',
-      lastDraftSimPath: null,
     })
   },
 }))

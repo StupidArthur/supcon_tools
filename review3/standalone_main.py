@@ -317,7 +317,7 @@ def _run_convert_export(args):
     if not args.rows_json or not args.export:
         print("Error: --convert-export requires --rows-json and --export")
         sys.exit(1)
-    with open(args.rows_json, "r", encoding="utf-8") as f:
+    with open(args.rows_json, "r", encoding="utf-8-sig") as f:
         payload = _json.load(f)
     columns = payload.get("columns", [])
     rows = payload.get("rows", [])

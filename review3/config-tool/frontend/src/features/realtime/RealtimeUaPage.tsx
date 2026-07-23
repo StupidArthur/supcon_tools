@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { systemApi } from '../../lib/api'
-import { useCanvasStore } from '../../store/useCanvasStore'
+import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { useDslProjectStore } from '../dsl/useDslProjectStore'
 import { useGenericSimStore } from '../dsl/useGenericSimStore'
 
@@ -33,8 +33,10 @@ export function RealtimeUaPage() {
   const logEndRef = useRef<HTMLDivElement>(null)
 
   const isDirty = yamlDirty
+  // Batch 占用 = 本地 lease || 后端权威状态（batchRunning / activeBatches）。
+  const batchBusy = globalBatchRunning || backendBatchBusy(dfStatus)
   const canStart =
-    Boolean(filePath) && !isDirty && !offlineRunning && !globalBatchRunning && !dfStatus.running
+    Boolean(filePath) && !isDirty && !offlineRunning && !batchBusy && !dfStatus.running
 
   useEffect(() => {
     systemApi.getDataFactoryPath().then((p) => {
@@ -42,6 +44,13 @@ export function RealtimeUaPage() {
     })
     refreshStatus()
   }, [refreshStatus, setDfPath])
+
+  // 仅在 Batch 占用期间短周期轮询后端状态，任务结束后停止（不做高频永久轮询）。
+  useEffect(() => {
+    if (!batchBusy) return
+    const id = setInterval(() => refreshStatus(), 1000)
+    return () => clearInterval(id)
+  }, [batchBusy, refreshStatus])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -70,8 +79,10 @@ export function RealtimeUaPage() {
 
   const handleStart = async () => {
     setError('')
-    if (offlineRunning || globalBatchRunning) {
-      setError('离线批量任务进行中，禁止启动实时运行')
+    // 点击时再次读取最新状态（本地 lease + 后端 batchRunning/activeBatches）。
+    const latestDf = useCanvasStore.getState().dfStatus
+    if (offlineRunning || globalBatchRunning || backendBatchBusy(latestDf)) {
+      setError('离线批量任务正在运行，禁止启动实时运行')
       return
     }
     if (!filePath) {
@@ -155,9 +166,9 @@ export function RealtimeUaPage() {
               实时运行使用已保存的 DSL，请先保存。
             </div>
           ) : null}
-          {offlineRunning || globalBatchRunning ? (
+          {offlineRunning || batchBusy ? (
             <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-              离线批量任务进行中，禁止启动实时运行。
+              离线批量任务正在运行，禁止启动实时运行。
             </div>
           ) : null}
         </section>

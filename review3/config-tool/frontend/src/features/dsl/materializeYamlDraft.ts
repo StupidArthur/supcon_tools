@@ -1,10 +1,11 @@
 /**
  * Materialize a fixed YAML snapshot to a temp file for offline simulation.
  * Does not read from the DSL store — caller must pass the snapshot explicitly.
+ *
+ * 只负责「校验 + writeTempYAML + 返回路径」。临时路径属于发起任务的局部变量，
+ * 由调用方在 finally 中用 cleanupTempYAML 清理；本函数不向任何全局 Store 写入路径。
  */
 import { systemApi } from '../../lib/api'
-import { useDslProjectStore } from './useDslProjectStore'
-import { useGenericSimStore } from './useGenericSimStore'
 
 /**
  * Writes `yamlSnapshot` to a unique temp YAML and returns its absolute path.
@@ -13,10 +14,7 @@ export async function materializeYamlTextToTemp(yamlSnapshot: string): Promise<s
   if (!yamlSnapshot.trim()) {
     throw new Error('YAML 内容为空，无法启动仿真')
   }
-  const path = await systemApi.writeTempYAML(yamlSnapshot)
-  useDslProjectStore.getState().setLastDraftSimPath(path)
-  useGenericSimStore.setState({ lastTempPath: path })
-  return path
+  return await systemApi.writeTempYAML(yamlSnapshot)
 }
 
 /** Best-effort cleanup of draft-sim temp directory. */

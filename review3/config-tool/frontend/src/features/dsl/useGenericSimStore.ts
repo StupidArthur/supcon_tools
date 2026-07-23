@@ -15,7 +15,6 @@ interface GenericSimState {
   columns: string[]
   rows: Array<Record<string, unknown>>
   selectedColumns: string[]
-  lastTempPath: string | null
   /** Project/session that owns the current (or in-flight) result. */
   boundProjectId: string | null
   /** Run id of in-flight or last completed run. */
@@ -81,7 +80,6 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
   columns: [],
   rows: [],
   selectedColumns: [],
-  lastTempPath: null,
   boundProjectId: null,
   boundRunId: null,
   boundYamlHash: null,
@@ -179,7 +177,6 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       rows: [],
       selectedColumns: [],
       completedCycles: 0,
-      lastTempPath: null,
       boundProjectId: null,
       boundRunId: null,
       boundYamlHash: null,

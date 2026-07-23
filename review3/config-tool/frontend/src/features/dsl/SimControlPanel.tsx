@@ -87,7 +87,6 @@ export function SimControlPanel() {
       })
     } finally {
       await cleanupTempYAML(tempPath)
-      useGenericSimStore.setState({ lastTempPath: null })
     }
   }
 

@@ -63,14 +63,14 @@ export const systemApi = {
     columns: string[],
     sheetName: string,
   ) => SystemBinding.ExportBatchFormatted(configPath, cycles, exportPath, format, columns, sheetName),
-  // 用当前内存结果行导出（不重新仿真）。bindings 重新生成后可去掉 as any。
+  // 用当前内存结果行导出（不重新仿真、不占 Batch lease）。
   exportRowsFormatted: (
     columns: string[],
     rows: Array<Record<string, any>>,
     exportPath: string,
     format: string,
     sheetName: string,
-  ) => (SystemBinding as any).ExportRowsFormatted(columns, rows, exportPath, format, sheetName),
+  ) => SystemBinding.ExportRowsFormatted(columns, rows, exportPath, format, sheetName),
   saveCSVFile: () => SystemBinding.SaveCSVFile(),
   saveExportFile: (format: string) => SystemBinding.SaveExportFile(format),
   readTextFile: (path: string) => SystemBinding.ReadTextFile(path),

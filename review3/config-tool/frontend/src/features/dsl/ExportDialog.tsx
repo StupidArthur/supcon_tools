@@ -1,8 +1,8 @@
 /**
  * 导出对话框：选择文件格式（csv/xlsx/xls）、导出列（默认 YAML display_args）、Excel 工作表名。
  *
- * 纯展示组件：自身不持有业务数据，导出动作通过 onExport 回调交给父组件
- * （父组件负责物化临时 YAML → 重跑引擎 → 调用 ExportBatchFormatted）。
+ * 纯展示组件：自身不持有业务数据，导出动作通过 onExport 回调交给父组件。
+ * 导出使用当前内存中的仿真 rows，按用户选择的列导出，不重新仿真。
  */
 import { useEffect, useState } from 'react'
 

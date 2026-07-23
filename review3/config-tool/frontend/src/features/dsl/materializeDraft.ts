@@ -22,7 +22,6 @@ export async function materializeDraftToTemp(): Promise<string> {
       throw new Error(dsl.yamlError)
     }
     const path = await systemApi.writeTempYAML(text)
-    useDslProjectStore.getState().setLastDraftSimPath(path)
     return path
   }
 
@@ -66,6 +65,5 @@ export async function materializeDraftToTemp(): Promise<string> {
     allowOverwrite: true,
     patches,
   })
-  useDslProjectStore.getState().setLastDraftSimPath(tempPath)
   return tempPath
 }

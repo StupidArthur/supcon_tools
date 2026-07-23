@@ -30,6 +30,10 @@ export function ExportCSVRows(arg1, arg2, arg3) {
   return window['go']['bindings']['SystemBinding']['ExportCSVRows'](arg1, arg2, arg3);
 }
 
+export function ExportRowsFormatted(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['bindings']['SystemBinding']['ExportRowsFormatted'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function GetDataFactoryPath() {
   return window['go']['bindings']['SystemBinding']['GetDataFactoryPath']();
 }

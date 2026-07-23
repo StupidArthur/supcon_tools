@@ -31,7 +31,7 @@ interface CanvasStore {
   view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime'
   dfPath: string
   configs: string[]
-  dfStatus: { running: boolean; pid: number; configPath: string; mode: string; cycleTime: number; port: number; apiHost?: string; apiPort?: number; runtimeName?: string; apiReady?: boolean }
+  dfStatus: { running: boolean; pid: number; configPath: string; mode: string; cycleTime: number; port: number; apiHost?: string; apiPort?: number; runtimeName?: string; apiReady?: boolean; batchRunning?: boolean; activeBatches?: number }
   dfLogs: string[]
 
   init: () => void
@@ -72,6 +72,15 @@ function defaultParams(meta: config.ComponentMeta): Record<string, any> {
     params[p.name] = p.default
   }
   return params
+}
+
+/**
+ * 后端 SystemStatus 反映的 Batch 占用（跨刷新、跨页面后的权威占用状态）。
+ * 与本地 lease（useGenericSimStore.globalBatchRunning）合并使用：
+ * 本地 lease 只负责即时反馈，后端状态负责权威判定。
+ */
+export function backendBatchBusy(dfStatus: { batchRunning?: boolean; activeBatches?: number }): boolean {
+  return Boolean(dfStatus.batchRunning) || Number(dfStatus.activeBatches || 0) > 0
 }
 
 export const useCanvasStore = create<CanvasStore>((set, get) => ({

@@ -90,6 +90,8 @@ export namespace bindings {
 	    startedAt: string;
 	    configHash: string;
 	    lastError: string;
+	    batchRunning: boolean;
+	    activeBatches: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SystemStatus(source);
@@ -110,6 +112,8 @@ export namespace bindings {
 	        this.startedAt = source["startedAt"];
 	        this.configHash = source["configHash"];
 	        this.lastError = source["lastError"];
+	        this.batchRunning = source["batchRunning"];
+	        this.activeBatches = source["activeBatches"];
 	    }
 	}
 
