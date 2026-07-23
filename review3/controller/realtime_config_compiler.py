@@ -175,28 +175,65 @@ def _rewrite_reference(ref: str, rename: Dict[str, str]) -> str:
 
 
 _IDENT_RE = None
+_REF_TOKEN_RE = None
+
+
+class _InstanceRenamer:
+    """AST 重写：只替换 ast.Name（实例引用），不动 Attribute.attr（属性名）。"""
+
+    def __init__(self, rename: Dict[str, str]):
+        self.rename = rename
+
+    def visit_Name(self, node):
+        if node.id in self.rename:
+            node.id = self.rename[node.id]
+        return node
+
+
+def _rewrite_expression_tokens(expr: str, rename: Dict[str, str]) -> str:
+    """
+    回退重写：匹配 instance.attr 或裸 instance，只替换实例段，保留属性段。
+    单 pass，避免 pid→pid_1 与 pid_1→pid_1_1 的次序串扰。
+    """
+    global _REF_TOKEN_RE
+    if _REF_TOKEN_RE is None:
+        import re
+        _REF_TOKEN_RE = re.compile(
+            r"\b([A-Za-z_][A-Za-z0-9_]*)(\.[A-Za-z_][A-Za-z0-9_]*)?\b"
+        )
+
+    def _repl(m):
+        inst = m.group(1)
+        attr = m.group(2) or ""
+        return rename.get(inst, inst) + attr
+
+    return _REF_TOKEN_RE.sub(_repl, expr)
 
 
 def _rewrite_expression(expr: str, rename: Dict[str, str]) -> str:
     """
-    单 pass 重写表达式/公式中的实例引用。
+    基于 AST 重写表达式/公式中的实例引用。
 
-    用 \\b 匹配最长标识符 token（pid_1 作为一个整体），
-    命中 rename 映射则替换，否则保留。单 pass 避免 pid→pid_1
-    与 pid_1→pid_1_1 的次序串扰。
+    只替换 ast.Name 节点（实例引用），不替换 Attribute.attr（属性名）、
+    字符串字面量或函数名。无法解析时回退到结构化 token 重写。
     """
     if not expr:
         return expr
-    global _IDENT_RE
-    if _IDENT_RE is None:
-        import re
-        _IDENT_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
+    import ast
 
-    def _repl(m):
-        token = m.group(1)
-        return rename.get(token, token)
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return _rewrite_expression_tokens(expr, rename)
 
-    return _IDENT_RE.sub(_repl, expr)
+    renamer = _InstanceRenamer(rename)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            renamer.visit_Name(node)
+    try:
+        return ast.unparse(tree)
+    except Exception:
+        return _rewrite_expression_tokens(expr, rename)
 
 
 def _replicate_program_item(

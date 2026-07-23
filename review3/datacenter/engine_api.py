@@ -546,16 +546,11 @@ class ForceSetRequest(BaseModel):
 
 
 def _refresh_valid_tags(b: "EngineBinding") -> None:
-    """从最新 snapshot 推导权威可发布数值位号集合。"""
+    """从 shared_data（实际发布到 UA 的数值键）建立权威可强制位号集合。"""
     if b.force_manager is None:
         return
-    with b._latest_snapshot_lock:
-        snap = b._latest_snapshot
-    if not snap:
-        return
-    tags = {k for k, v in snap.items()
-            if not k.startswith("_") and isinstance(v, (int, float))
-            and not isinstance(v, bool)}
+    tags = {k for k, v in b.shared_data.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)}
     b.force_manager.set_valid_tags(tags)
 
 
@@ -594,9 +589,11 @@ def api_force_clear_all() -> Dict[str, Any]:
 @app.get("/api/force")
 def api_force_list() -> Dict[str, Any]:
     b = get_binding()
+    _refresh_valid_tags(b)
     if b.force_manager is None:
-        return {"ok": True, "forces": {}}
-    return {"ok": True, "forces": b.force_manager.snapshot()}
+        return {"ok": True, "forces": {}, "tags": []}
+    tags = sorted(b.force_manager.snapshot_valid_tags())
+    return {"ok": True, "forces": b.force_manager.snapshot(), "tags": tags}
 
 
 # --------------------------------------------------------------------------- #

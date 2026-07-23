@@ -89,9 +89,9 @@ type ForceSetRequest struct {
 }
 
 type ForceEntry struct {
-	Mode      string  `json:"mode"`
-	Value     float64 `json:"value,omitempty"`
-	ExpiresAt float64 `json:"expires_at,omitempty"`
+	Mode      string   `json:"mode"`
+	Value     *float64 `json:"value,omitempty"`
+	ExpiresAt *float64 `json:"expires_at,omitempty"`
 }
 
 var forceHTTPClient = &http.Client{Timeout: 5 * time.Second}
@@ -160,25 +160,34 @@ func (b *RealtimeProjectBinding) ClearAllForces(apiHost string, apiPort int) err
 	return decodeForceResponse(resp, nil)
 }
 
-func (b *RealtimeProjectBinding) GetForces(apiHost string, apiPort int) (map[string]ForceEntry, error) {
+type ForceState struct {
+	Forces map[string]ForceEntry `json:"forces"`
+	Tags   []string              `json:"tags"`
+}
+
+func (b *RealtimeProjectBinding) GetForces(apiHost string, apiPort int) (ForceState, error) {
 	resp, err := forceHTTPClient.Get(b.forceURL(apiHost, apiPort, "/api/force"))
 	if err != nil {
-		return nil, err
+		return ForceState{}, err
 	}
 	var result struct {
 		OK     bool                  `json:"ok"`
 		Forces map[string]ForceEntry `json:"forces"`
+		Tags   []string              `json:"tags"`
 	}
 	if err := decodeForceResponse(resp, &result); err != nil {
-		return nil, err
+		return ForceState{}, err
 	}
 	if !result.OK {
-		return nil, fmt.Errorf("获取强制状态失败")
+		return ForceState{}, fmt.Errorf("获取强制状态失败")
 	}
 	if result.Forces == nil {
 		result.Forces = map[string]ForceEntry{}
 	}
-	return result.Forces, nil
+	if result.Tags == nil {
+		result.Tags = []string{}
+	}
+	return ForceState{Forces: result.Forces, Tags: result.Tags}, nil
 }
 
 func ResolveRealtimeProjectsDir() (string, error) {

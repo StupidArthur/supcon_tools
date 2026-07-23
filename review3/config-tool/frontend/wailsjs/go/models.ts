@@ -52,6 +52,54 @@ export namespace bindings {
 	        this.plotScales = source["plotScales"];
 	    }
 	}
+	export class ForceEntry {
+	    mode: string;
+	    value?: number;
+	    expires_at?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ForceEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.value = source["value"];
+	        this.expires_at = source["expires_at"];
+	    }
+	}
+	export class ForceState {
+	    forces: Record<string, ForceEntry>;
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ForceState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.forces = this.convertValues(source["forces"], ForceEntry, true);
+	        this.tags = source["tags"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class StartParams {
 	    configPath: string;
 	    mode: string;

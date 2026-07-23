@@ -420,6 +420,18 @@ class TestCompileProject:
         assert _rewrite_expression("pid.PV + pid_1.PV", rename) == "pid_1.PV + pid_1_1.PV"
         assert _rewrite_expression("tank.level * 2", rename) == "tank_1.level * 2"
 
+    def test_attribute_name_not_renamed(self):
+        # 属性名（Attribute.attr）不得被替换，即使与某实例同名。
+        from controller.realtime_config_compiler import _rewrite_expression
+        rename = {"pid": "pid_1", "PV": "PV_1"}
+        assert _rewrite_expression("pid.PV", rename) == "pid_1.PV"
+
+    def test_string_literal_not_renamed(self):
+        from controller.realtime_config_compiler import _rewrite_expression
+        rename = {"pid": "pid_1"}
+        # 字符串字面量中的 pid 不应被替换
+        assert _rewrite_expression("'pid'", rename) == "'pid'"
+
     def test_self_replica_prefix_conflict_detected(self, tmp_path):
         # DSL 含 pid 和 pid_1，副本 1 把 pid→pid_1 与原 pid_1 冲突，应被拒绝。
         yaml_content = textwrap.dedent("""\

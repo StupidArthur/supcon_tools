@@ -41,6 +41,11 @@ class ForceManager:
         with self._lock:
             self._valid_tags = set(tags)
 
+    def snapshot_valid_tags(self) -> Set[str]:
+        """返回当前权威可强制位号集合的副本。"""
+        with self._lock:
+            return set(self._valid_tags) if self._valid_tags is not None else set()
+
     def _is_valid_tag(self, tag: str) -> bool:
         if self._valid_tags is None:
             return True
@@ -79,8 +84,11 @@ class ForceManager:
                     raise ForceError("fixed 值必须是有限数")
                 entry["value"] = fv
 
-            if duration is not None and duration > 0:
-                entry["expires_at"] = time.time() + float(duration)
+            if duration is not None:
+                dur = float(duration)
+                if dur != dur or dur in (float("inf"), float("-inf")) or dur <= 0:
+                    raise ForceError("duration 必须是有限正数")
+                entry["expires_at"] = time.time() + dur
 
             self._forces[tag] = entry
             return dict(entry)

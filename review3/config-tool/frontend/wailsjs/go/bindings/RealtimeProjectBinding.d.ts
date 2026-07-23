@@ -16,7 +16,7 @@ export function CreateProject(arg1:string):Promise<realtime.Project>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
-export function GetForces(arg1:string,arg2:number):Promise<Record<string, bindings.ForceEntry>>;
+export function GetForces(arg1:string,arg2:number):Promise<bindings.ForceState>;
 
 export function ListProjects():Promise<Array<realtime.ProjectSummary>>;
 

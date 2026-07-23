@@ -15,31 +15,37 @@ export function RuntimeTagTable() {
   const apiPort = useRuntimeStore((s) => s.apiPort)
   const [filter, setFilter] = useState('')
   const [forces, setForces] = useState<Record<string, ForceEntry>>({})
+  const [validTags, setValidTags] = useState<string[] | null>(null)
   const [forceError, setForceError] = useState<string | null>(null)
 
   const refreshForces = useCallback(async () => {
     try {
-      const f = await realtimeProjectApi.getForces(apiHost, apiPort) as any
-      setForces(f || {})
+      const state = await realtimeProjectApi.getForces(apiHost, apiPort) as any
+      setForces(state?.forces || {})
+      if (Array.isArray(state?.tags)) setValidTags(state.tags)
     } catch (e: any) {
       setForceError(String(e))
     }
   }, [apiHost, apiPort])
 
   useEffect(() => {
-    if (connectionState === 'connected') void refreshForces()
+    if (connectionState !== 'connected') return
+    void refreshForces()
+    const id = setInterval(() => void refreshForces(), 2000)
+    return () => clearInterval(id)
   }, [connectionState, refreshForces])
 
   const tags = useMemo(() => {
     if (!rawSnapshot) return []
+    const allowed = validTags ? new Set(validTags) : null
     const entries = Object.entries(rawSnapshot)
-      .filter(([k, v]) => !k.startsWith('_') && typeof v === 'number')
+      .filter(([k, v]) => typeof v === 'number' && (allowed === null || allowed.has(k)))
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => a.name.localeCompare(b.name))
     if (!filter) return entries
     const lower = filter.toLowerCase()
     return entries.filter((e) => e.name.toLowerCase().includes(lower))
-  }, [rawSnapshot, filter])
+  }, [rawSnapshot, filter, validTags])
 
   const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {
     setForceError(null)
@@ -59,6 +65,13 @@ export function RuntimeTagTable() {
     } catch (e: any) {
       setForceError(String(e))
     }
+  }
+
+  const parseDuration = (input: string): number | undefined | null => {
+    if (input.trim() === '') return undefined
+    const n = Number(input)
+    if (!Number.isFinite(n) || n <= 0) return null
+    return n
   }
 
   if (!rawSnapshot) {
@@ -117,7 +130,7 @@ export function RuntimeTagTable() {
             <tr className="border-b border-border">
               <th className="px-3 py-1.5 text-left font-medium">位号</th>
               <th className="px-3 py-1.5 text-right font-medium">运行值</th>
-              <th className="px-3 py-1.5 text-right font-medium">UA输出</th>
+              <th className="px-3 py-1.5 text-right font-medium">预计 UA 输出</th>
               <th className="px-3 py-1.5 text-center font-medium">强制</th>
               <th className="px-3 py-1.5 text-center font-medium">操作</th>
             </tr>
@@ -155,7 +168,8 @@ export function RuntimeTagTable() {
                           onClick={() => {
                             const d = prompt('持续时间（秒，留空=永久）：', '')
                             if (d === null) return
-                            const dur = d.trim() === '' ? undefined : parseFloat(d)
+                            const dur = parseDuration(d)
+                            if (dur === null) { setForceError('持续时间必须是有限正数'); return }
                             void handleForce(tag.name, 'hold', undefined, dur)
                           }}
                           className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
@@ -168,7 +182,8 @@ export function RuntimeTagTable() {
                           onClick={() => {
                             const d = prompt('持续时间（秒，留空=永久）：', '')
                             if (d === null) return
-                            const dur = d.trim() === '' ? undefined : parseFloat(d)
+                            const dur = parseDuration(d)
+                            if (dur === null) { setForceError('持续时间必须是有限正数'); return }
                             void handleForce(tag.name, 'zero', undefined, dur)
                           }}
                           className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
@@ -181,10 +196,13 @@ export function RuntimeTagTable() {
                           onClick={() => {
                             const v = prompt('固定值：', '0')
                             if (v === null) return
+                            const fv = Number(v)
+                            if (!Number.isFinite(fv)) { setForceError('固定值必须是有限数'); return }
                             const d = prompt('持续时间（秒，留空=永久）：', '')
                             if (d === null) return
-                            const dur = d.trim() === '' ? undefined : parseFloat(d)
-                            void handleForce(tag.name, 'fixed', parseFloat(v) || 0, dur)
+                            const dur = parseDuration(d)
+                            if (dur === null) { setForceError('持续时间必须是有限正数'); return }
+                            void handleForce(tag.name, 'fixed', fv, dur)
                           }}
                           className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
                           title="固定值"

@@ -101,6 +101,20 @@ class TestForceValidation:
         with pytest.raises(ForceError):
             fm.set_force("pid.PV", "fixed", value=float("nan"))
 
+    def test_invalid_duration_rejected(self):
+        fm = make_manager(valid_tags={"pid.PV"})
+        for bad in (0, -5, float("nan"), float("inf")):
+            with pytest.raises(ForceError):
+                fm.set_force("pid.PV", "zero", duration=bad)
+
+    def test_zero_value_preserved_in_snapshot(self):
+        fm = make_manager(valid_tags={"pid.SV"})
+        fm.set_force("pid.SV", "fixed", value=0.0)
+        snap = fm.snapshot()
+        assert snap["pid.SV"]["value"] == 0.0
+        out = fm.apply({"pid.SV": 0.8})
+        assert out["pid.SV"] == 0.0
+
 
 class TestForceDuration:
     def test_expired_force_reverts_to_follow(self):
