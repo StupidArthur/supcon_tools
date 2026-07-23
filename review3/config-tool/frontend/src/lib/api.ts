@@ -7,6 +7,7 @@ import * as ComponentBinding from '../../wailsjs/go/bindings/ComponentBinding'
 import * as ConfigBinding from '../../wailsjs/go/bindings/ConfigBinding'
 import * as SystemBinding from '../../wailsjs/go/bindings/SystemBinding'
 import * as TemplateConfigBinding from '../../wailsjs/go/bindings/TemplateConfigBinding'
+import * as RealtimeProjectBinding from '../../wailsjs/go/bindings/RealtimeProjectBinding'
 import type { ExportFormat } from './exportTypes'
 
 // 模板领域类型集中在 features/templates/types.ts，这里只暴露运行时 API。
@@ -81,4 +82,17 @@ export const systemApi = {
   cleanupTempYAML: (path: string) => SystemBinding.CleanupTempYAML(path),
   exportCSVRows: (columns: string[], rows: Array<Record<string, any>>, exportPath: string) =>
     SystemBinding.ExportCSVRows(columns, rows, exportPath),
+}
+
+export const realtimeProjectApi = {
+  listProjects: () => RealtimeProjectBinding.ListProjects(),
+  createProject: (name: string) => RealtimeProjectBinding.CreateProject(name),
+  openProject: (id: string) => RealtimeProjectBinding.OpenProject(id),
+  deleteProject: (id: string) => RealtimeProjectBinding.DeleteProject(id),
+  renameProject: (id: string, newName: string) => RealtimeProjectBinding.RenameProject(id, newName),
+  addSource: (projectId: string) => RealtimeProjectBinding.AddSource(projectId),
+  removeSource: (projectId: string, sourceId: string) => RealtimeProjectBinding.RemoveSource(projectId, sourceId),
+  updateReplicas: (projectId: string, sourceId: string, replicas: number) =>
+    RealtimeProjectBinding.UpdateReplicas(projectId, sourceId, replicas),
+  validateProject: (projectId: string) => RealtimeProjectBinding.ValidateProject(projectId),
 }

@@ -140,3 +140,17 @@ func resolvePythonExecutable() string {
 	}
 	return ""
 }
+
+type DataFactoryLaunchInfo struct {
+	Exe        string
+	PrefixArgs []string
+	WorkDir    string
+}
+
+func ResolveDataFactoryLaunchPublic() (DataFactoryLaunchInfo, error) {
+	d, err := resolveDataFactoryLaunch()
+	if err != nil {
+		return DataFactoryLaunchInfo{}, err
+	}
+	return DataFactoryLaunchInfo{Exe: d.exe, PrefixArgs: d.prefixArgs, WorkDir: d.workDir}, nil
+}

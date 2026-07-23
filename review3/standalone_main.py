@@ -398,6 +398,97 @@ def _run_convert_export(args):
     print(f"Done! Converted {len(rows)} rows to {args.export} ({fmt})")
 
 
+def _run_inspect_project() -> None:
+    """
+    从 stdin 读取 JSON，校验实时工程 sources 的实例展开和重名。
+    stdout 只输出 JSON，诊断信息写 stderr。
+
+    退出码：
+      0 - 检查成功（含 valid=false 的重名结果）
+      2 - 输入 JSON 或参数错误
+      3 - DSL 解析失败
+      4 - 内部错误
+    """
+    import json as _json
+
+    try:
+        raw = sys.stdin.read()
+        payload = _json.loads(raw)
+    except Exception as e:
+        _json.dump({"ok": False, "error": {"code": "INPUT_ERROR", "message": f"stdin JSON 解析失败: {e}"}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(2)
+
+    sources_raw = payload.get("sources")
+    if not isinstance(sources_raw, list):
+        _json.dump({"ok": False, "error": {"code": "INPUT_ERROR", "message": "缺少 sources 数组"}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(2)
+
+    from controller.realtime_config_compiler import SourceSpec, validate_sources
+
+    specs = []
+    for item in sources_raw:
+        sid = item.get("id", "")
+        sfile = item.get("file", "")
+        replicas = item.get("replicas", 1)
+        if not sid or not sfile:
+            _json.dump({"ok": False, "error": {"code": "INPUT_ERROR", "message": f"source 缺少 id 或 file: {item}"}}, sys.stdout)
+            sys.stdout.write("\n")
+            sys.exit(2)
+        specs.append(SourceSpec(source_id=sid, source_file=sfile, replicas=int(replicas)))
+
+    try:
+        result = validate_sources(specs)
+    except ValueError as e:
+        _json.dump({"ok": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(2)
+    except Exception as e:
+        print(f"[inspect-project] DSL parse error: {e}", file=sys.stderr)
+        source_id = ""
+        source_file = ""
+        if specs:
+            source_id = specs[0].source_id
+            source_file = specs[0].source_file
+        _json.dump({"ok": False, "error": {"code": "DSL_PARSE_ERROR", "message": str(e), "sourceId": source_id, "sourceFile": source_file}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(3)
+
+    output = {
+        "ok": True,
+        "valid": result.valid,
+        "instances": [
+            {
+                "name": inst.name,
+                "sourceId": inst.source_id,
+                "sourceFile": inst.source_file,
+                "replicaIndex": inst.replica_index,
+                "originalName": inst.original_name,
+            }
+            for inst in result.instances
+        ],
+        "duplicates": [
+            {
+                "name": dup.name,
+                "occurrences": [
+                    {
+                        "sourceId": occ.source_id,
+                        "sourceFile": occ.source_file,
+                        "replicaIndex": occ.replica_index,
+                        "originalName": occ.original_name,
+                    }
+                    for occ in dup.occurrences
+                ],
+            }
+            for dup in result.duplicates
+        ],
+    }
+    _json.dump(output, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+    sys.exit(0)
+
+
 def main() -> None:
     """主程序入口"""
     parser = argparse.ArgumentParser(description="Data Factory Next - Standalone")
@@ -503,7 +594,16 @@ def main() -> None:
         default=8000,
         help="FastAPI port (default: 8000)"
     )
+    parser.add_argument(
+        "--inspect-project",
+        action="store_true",
+        help="从 stdin 读取 JSON sources 列表，校验实例展开和重名，结果输出到 stdout（JSON）"
+    )
     args = parser.parse_args()
+
+    if args.inspect_project:
+        _run_inspect_project()
+        return
 
     # 内存结果行转换导出（不运行仿真，也不需要配置文件）
     if args.convert_export:
