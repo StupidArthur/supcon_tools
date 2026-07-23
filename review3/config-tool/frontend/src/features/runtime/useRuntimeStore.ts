@@ -18,12 +18,16 @@
 import { create } from 'zustand'
 import type {
   ConnectionState,
+  RuntimeFrame,
   RuntimeSnapshot,
+  RuntimeTagMeta,
 } from './types'
+import { buildRuntimeFrame } from './types'
 import {
   getMeta,
   getSnapshot,
   getStatus,
+  getTags,
   mapApiSnapshot,
   RuntimeApiError,
 } from './runtimeApi'
@@ -61,6 +65,10 @@ export interface RuntimeStoreState {
   // 最新真实 snapshot
   latestSnapshot: RuntimeSnapshot | null
   rawSnapshot: Record<string, unknown> | null
+  // 通用运行帧（阶段 6）：不依赖固定字段
+  latestFrame: RuntimeFrame | null
+  // 通用 tag catalog（阶段 6）
+  tagCatalog: RuntimeTagMeta[]
   snapshotReceivedAt: number | null
   lastHeartbeatAt: number | null
   stale: boolean
@@ -164,6 +172,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     cycleTime: 0.5,
     latestSnapshot: null,
     rawSnapshot: null,
+    latestFrame: null,
+    tagCatalog: [],
     snapshotReceivedAt: null,
     lastHeartbeatAt: null,
     stale: false,
@@ -266,6 +276,16 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         // 忽略
       }
 
+      // 通用 tag catalog（失败不阻止 WS）
+      try {
+        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
+        if (get().connectGeneration === myGen && Array.isArray(tagsResp.tags)) {
+          set({ tagCatalog: tagsResp.tags })
+        }
+      } catch (e) {
+        // 忽略
+      }
+
       // 第三道闸：再次检查 generation，避免 meta 期间被打断
       if (get().connectGeneration !== myGen) {
         return
@@ -285,11 +305,13 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
           // 消息回调：仅在 generation 未变时写入 snapshot / heartbeat。
           if (get().connectGeneration !== myGen) return
           if (msg.type === 'snapshot') {
+            const frame = buildRuntimeFrame(msg.raw, Date.now())
             set((prev) => {
-              prev.trendBuffer.push(msg.snapshot, prev.trendTags)
+              prev.trendBuffer.pushFrame(frame, prev.trendTags)
               return {
                 latestSnapshot: msg.snapshot,
                 rawSnapshot: msg.raw,
+                latestFrame: frame,
                 snapshotReceivedAt: Date.now(),
                 stale: false,
                 lastHeartbeatAt: null,
@@ -375,6 +397,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         cycleTime: 0.5,
         latestSnapshot: null,
         rawSnapshot: null,
+        latestFrame: null,
+        tagCatalog: [],
         snapshotReceivedAt: null,
         lastHeartbeatAt: null,
         stale: false,

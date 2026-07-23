@@ -4,7 +4,7 @@
 // - 仅保留真实 snapshot，最多 N 个；超出时丢弃最旧。
 // - 取数应保持 FIFO 顺序。
 
-import type { RuntimeSnapshot } from './types'
+import type { RuntimeFrame, RuntimeSnapshot } from './types'
 
 export interface TrendPoint {
   // cycleCount/simTime 可以为 null：snapshot 缺字段时如实缺失，绝不替换为 0。
@@ -38,6 +38,24 @@ export class TrendBuffer {
       // 缺失 cycleCount/simTime 时也保留为 null；trend 图层会用 null 跳过该点。
       cycleCount: snap.cycleCount ?? null,
       simTime: snap.simTime ?? null,
+      values,
+    })
+    if (this.buffer.length > this.capacity) {
+      this.buffer.splice(0, this.buffer.length - this.capacity)
+    }
+  }
+
+  // 通用运行帧入口：直接读取 frame.values[tag]，不依赖固定字段映射。
+  // 缺失或非有限值记为 null；simTime=0 是有效值，不被误判缺失。
+  pushFrame(frame: RuntimeFrame, tags: string[]): void {
+    const values: Record<string, number | null> = {}
+    for (const tag of tags) {
+      const v = frame.values[tag]
+      values[tag] = typeof v === 'number' && Number.isFinite(v) ? v : null
+    }
+    this.buffer.push({
+      cycleCount: frame.cycleCount ?? null,
+      simTime: frame.simTime ?? null,
       values,
     })
     if (this.buffer.length > this.capacity) {

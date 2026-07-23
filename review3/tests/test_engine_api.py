@@ -291,6 +291,35 @@ def test_meta_returns_variable_meta(binding):
         assert key in meta["meta"], f"meta 缺少 {key}"
 
 
+def test_tags_catalog_excludes_runtime_metadata(binding):
+    resp = engine_api.api_tags("second_order_tank")
+    assert resp["ok"] is True
+    names = [t["name"] for t in resp["tags"]]
+    # 业务位号存在
+    assert "tank_2.level" in names
+    assert "pid2.SV" in names
+    # 运行元数据不作为业务 tag
+    assert "cycle_count" not in names
+    assert "sim_time" not in names
+    # 排序稳定
+    assert names == sorted(names)
+
+
+def test_tags_catalog_forceable_from_shared_data(binding):
+    resp = engine_api.api_tags("second_order_tank")
+    by_name = {t["name"]: t for t in resp["tags"]}
+    # tank_2.level 在 shared_data 中，应可强制
+    assert by_name["tank_2.level"]["forceable"] is True
+    assert by_name["tank_2.level"]["dataType"] == "number"
+
+
+def test_tags_404_when_runtime_name_mismatch(binding):
+    import pytest
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException):
+        engine_api.api_tags("wrong_name")
+
+
 def test_snapshot_contains_required_tags(binding):
     """snapshot 必须包含 contracts.md §9.3 列出的所有必需位号。"""
     snap = engine_api.api_snapshot("second_order_tank")

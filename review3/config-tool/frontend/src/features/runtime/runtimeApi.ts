@@ -66,6 +66,22 @@ export async function getSnapshot(
   )
 }
 
+export interface ApiTagsResponse {
+  ok: boolean
+  tags: import('./types').RuntimeTagMeta[]
+}
+
+export async function getTags(
+  cfg: RuntimeApiConfig,
+  runtimeName: string,
+  signal?: AbortSignal,
+): Promise<ApiTagsResponse> {
+  return fetchJson<ApiTagsResponse>(
+    apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/tags`),
+    signal,
+  )
+}
+
 // 把 snake_case API snapshot 映射到 RuntimeSnapshot camelCase 形状。
 // 缺失字段保持 undefined，由 selectRuntimeValue 视为 null。
 // 严禁把 undefined 替换为 NaN/0：selectRuntimeNumber 会用 Number.isFinite 区分。

@@ -90,3 +90,50 @@ export interface RuntimeValueMeta {
   // 字段是否为有限值
   finite: boolean
 }
+
+// --------------------------------------------------------------------------- //
+// 通用运行时模型（阶段 6）：不依赖固定 valve/tank/pid 字段。
+// --------------------------------------------------------------------------- //
+
+export type RuntimeScalar = number | string | boolean | null
+
+export interface RuntimeFrame {
+  cycleCount?: number
+  simTime?: number
+  receivedAt: number
+  values: Record<string, RuntimeScalar>
+}
+
+export interface RuntimeTagMeta {
+  name: string
+  dataType: 'number' | 'string' | 'boolean' | 'unknown'
+  description?: string
+  instance?: string
+  attribute?: string
+  writable: boolean
+  forceable: boolean
+  display: boolean
+  plotScaleRef?: number
+}
+
+// 从原始 WS 快照构建通用运行帧。缺失字段保持缺失，不替换为 0。
+export function buildRuntimeFrame(raw: Record<string, unknown>, receivedAt: number): RuntimeFrame {
+  const values: Record<string, RuntimeScalar> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (k.startsWith('_')) continue
+    if (k === 'cycle_count' || k === 'sim_time') continue
+    if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') {
+      values[k] = v
+    } else {
+      values[k] = null
+    }
+  }
+  const cc = raw['cycle_count']
+  const st = raw['sim_time']
+  return {
+    cycleCount: typeof cc === 'number' && Number.isFinite(cc) ? cc : undefined,
+    simTime: typeof st === 'number' && Number.isFinite(st) ? st : undefined,
+    receivedAt,
+    values,
+  }
+}

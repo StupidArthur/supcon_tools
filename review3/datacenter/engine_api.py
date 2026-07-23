@@ -395,6 +395,51 @@ def api_meta(name: str) -> Dict[str, Any]:
     }
 
 
+# 运行元数据键：不作为业务 tag 暴露给通用画面/趋势。
+_RUNTIME_META_KEYS = {
+    "cycle_count", "sim_time", "exec_ratio", "need_sample", "time_str",
+    "_safe_state", "_consecutive_failures",
+}
+
+
+@app.get("/api/instances/{name}/tags")
+def api_tags(name: str) -> Dict[str, Any]:
+    """通用 tag catalog：名称来自真实运行 meta，forceable 来自 shared_data 数值键。
+
+    - 不把 cycle_count/sim_time 等运行元数据当业务 tag；
+    - metadata 缺失仍返回 tag，描述为空；
+    - 排序稳定；
+    - 不从名称后缀推断类型或权限。
+    """
+    b = get_binding()
+    if name != b.instance_name:
+        raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
+
+    meta = b.engine.get_variable_meta() or {}
+    forceable = {k for k, v in b.shared_data.items()
+                 if isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+    tags = []
+    for tag in sorted(meta.keys()):
+        if tag in _RUNTIME_META_KEYS or tag.startswith("_"):
+            continue
+        m = meta[tag]
+        value = b.shared_data.get(tag)
+        data_type = "number" if isinstance(value, (int, float)) and not isinstance(value, bool) else "unknown"
+        tags.append({
+            "name": tag,
+            "dataType": data_type,
+            "description": m.get("description", "") or "",
+            "instance": m.get("instance", "") or "",
+            "attribute": m.get("param", "") or "",
+            "writable": True,
+            "forceable": tag in forceable,
+            "display": bool(m.get("is_display", False)),
+            "plotScaleRef": m.get("plot_scale_ref"),
+        })
+    return {"ok": True, "tags": tags}
+
+
 @app.get("/api/instances/{name}/snapshot")
 def api_snapshot(name: str) -> Dict[str, Any]:
     """最新一次 snapshot。

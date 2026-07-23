@@ -7,6 +7,7 @@ import { useRuntimeStore } from '../runtime/useRuntimeStore'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
 import { useRealtimeRunSessionStore } from './useRealtimeRunSessionStore'
 import { RuntimeTagTable } from './RuntimeTagTable'
+import { GenericTrendPanel } from '../runtime/GenericTrendPanel'
 
 export function RealtimeRunPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
@@ -355,6 +356,8 @@ export function RealtimeRunPage() {
         ) : null}
 
         <RuntimeTagTable />
+
+        <GenericTrendPanel projectId={currentProject?.id} />
 
         <section className="space-y-1">
           <div className="flex items-center justify-between">
