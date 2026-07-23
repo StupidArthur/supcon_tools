@@ -132,7 +132,7 @@ b33256b feat(ua): inventory PARTIAL status + case_fidelity registry
 
 - **交接文档**:本文件 + `docs/talk-main.md`(任务派单) + `docs/overnight-findings.md`(批次发现/FAIL triage) + `bugs.md`(Bug#1/#2 决策)。
 - **架构**: `docs/compose/guidance/ua2-refactor-guide.md` + `.mimocode/plans/1783855834448-mighty-nebula.md`。
-- **case 规格**: `ua_test_gui/doc/test_cases/UA-*.md`(不改)。
+- **case 规格**: `ua_test_harness/test_cases/UA-*.md`(不改)。
 - **调度/缺口**: `scenario_policy.py` + `case_fidelity.py` + `known_blocked.py`。
 - **runtime**: `ua1_runtime.py`/`ua1_precise.py`、`ua2_*_runtime.py`/`ua2_precise.py`/`ua2_ops.py`、`ua3_runtime.py`/`ua3_precise.py`/`ua3_extra.py`。
 - **provisioning**: `provisioning/ua2_baseline.py`。

@@ -7,7 +7,7 @@
 ## 1. 理念
 
 ### 1.1 Case-first 开发
-- 419 条文档 Case(`ua_test_gui/doc/test_cases/*.md`)是唯一需求源;代码实现 Case,不改 Case 文档(除非明确错误并报告)。
+- 419 条文档 Case(`ua_test_harness/test_cases/*.md`)是唯一需求源;代码实现 Case,不改 Case 文档(除非明确错误并报告)。
 - **Case 怎么写就怎么实现**:不删断言、不放宽阈值、不改步骤、不为通过加 `try/except` 吞错。
 - **跑通不是目标,真实结果才是**:FAIL(产品不符)= 有效产出;ERROR(框架 bug)= 要修;BLOCKED(环境)= 如实记录不绕路。
 
@@ -214,7 +214,7 @@ CLI / pytest / runner
 | Bug 决策 | `bugs.md` |
 | 架构手册 | `docs/compose/guidance/ua2-refactor-guide.md` |
 | 路线图 | `.mimocode/plans/1783855834448-mighty-nebula.md` |
-| Case 规格 | `ua_test_gui/doc/test_cases/UA-*.md`(不改) |
+| Case 规格 | `ua_test_harness/test_cases/UA-*.md`(不改) |
 | 调度/缺口 | `scenario_policy.py` / `case_fidelity.py` / `known_blocked.py` |
 | UA-2 runtime | `ua2_create/query/recycle/import/group_runtime.py` / `ua2_precise.py` / `ua2_ops.py` |
 | UA-1 runtime | `ua1_runtime.py` / `ua1_precise.py` |

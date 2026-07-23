@@ -193,6 +193,8 @@ transcript.log                   887
 
 ### 6.3 malformedRows(14 条)
 
+> 注：下表中 `ua_test_gui/doc/test_cases/` 路径已迁移至 `ua_test_harness/test_cases/`。
+
 | path | line | caseId | columnCount |
 |---|---|---|---|
 | ua_test_gui/doc/test_cases/UA-2-1.md | 123 | UA-2-1-026 | **7** |

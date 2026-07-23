@@ -197,7 +197,7 @@ exit code 1(因为有 ERROR);cleanup 在 ERROR 路径仍执行。
 - Python runner 通过环境变量 / 配置文件取 TPT 凭据(没有通过 stdin secret),
   桌面 GUI 内走 Wails binding 注入会更安全;本会话未实现 secret 通道(plan.md 6.5)。
 - `getRTValue` / `add_tag` / `importTagValue` 等端点的最新 payload 字段可能与本会话
-  fixture 不完全匹配(以 tpt_api/datahub.py 与 doc/test_cases/*.md 为准,实时同步)。
+  fixture 不完全匹配(以 tpt_api/datahub.py 与 ua_test_harness/test_cases/*.md 为准,实时同步)。
 - Mock 节点规格扩展字段(Mode/SequenceStart/... 等)已加 Go 端模型;Python
   ua_mocker/config_loader.py 与 change_engines.py 是否支持这些字段,
   待 Mock 实现侧补全(本会话未触及 ua_mocker 源码)。
@@ -208,4 +208,4 @@ exit code 1(因为有 ERROR);cleanup 在 ERROR 路径仍执行。
 
 ## Items that change case semantics
 
-无 — 仅补代码与配置,不修改 `ua_test_gui/doc/test_cases/*.md` 用例语义。
+无 — 仅补代码与配置,不修改 `ua_test_harness/test_cases/*.md` 用例语义。

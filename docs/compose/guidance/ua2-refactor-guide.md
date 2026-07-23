@@ -281,7 +281,7 @@ python -m pytest ua_test_harness\unit_tests\test_ua2_first_batch.py -q
 - `ua_test_harness/ua2_create_runtime.py`(现状)、`ua_test_harness/ua2_ops.py`(C 产出,你将调用)、`ua_test_harness/provisioning/ua2_baseline.py`(B 产出,`require_shared_datasource`)。
 - `ua_test_harness/fixtures/environment.py`(`ensure_mock_ready`、`ensure_logged_in`)。
 - `ua_test_harness/ua2_common.py`(`_make_length_name` 已有,保持同名同行为旧测试不破)。
-- `ua_test_gui/doc/test_cases/UA-2-1.md` 中 017/019/021/022 的产品预期(确认不放宽断言)。
+- `ua_test_harness/test_cases/UA-2-1.md` 中 017/019/021/022 的产品预期(确认不放宽断言)。
 - 总 Plan "Task 4" 节(参考代码)。
 
 **实现要求(行为)**:

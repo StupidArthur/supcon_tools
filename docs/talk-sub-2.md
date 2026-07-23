@@ -11,7 +11,7 @@
 
 | 交付项 | 目标 | 实际 | 备注 |
 |--------|------|------|------|
-| 文档 Case 总量 | 419 | 419 | `ua_test_gui/doc/test_cases/*.md` |
+| 文档 Case 总量 | 419 | 419 | `ua_test_harness/test_cases/*.md` |
 | `_SUPPORTED` 挂接 | 419 | 419 | `scenario_policy.py` 动态加载 |
 | inventory `implemented` | 419 | 419 | `docs/case-inventory.json` |
 | inventory `verified` | 各章真跑 | **0** | 见 [review-sub-2 §1](./review-sub-2.md#1-审计结论executive-summary) |
@@ -31,7 +31,7 @@
 
 ### 1.2 遵守的纪律
 
-- **不改** `ua_test_gui/doc/test_cases/*.md` 文档内容。  
+- **不改** `ua_test_harness/test_cases/*.md` 文档内容。  
 - **不放宽**断言、阈值、步骤；不为通过加 try/except 吞错（`cleanup_case_tag` 除外）。  
 - FAIL / BLOCKED / OBSERVED / ERROR 如实分类。  
 - UA-2 使用共享 baseline；UA-1 **未迁移**共享 baseline（符合派单）。  

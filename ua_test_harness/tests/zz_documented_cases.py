@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ua_test_harness.case_inventory import parse_case_doc
+from ua_test_harness.case_inventory import default_test_cases_dir, parse_case_doc
 from ua_test_harness.catalog import all_defs, case
 from ua_test_harness.models import StepDef
 from ua_test_harness.scenario_policy import execute_documented_case
@@ -34,7 +34,7 @@ def _repo_root() -> Path:
 
 
 def _load_documented_rows(repo_root: Path) -> list[dict[str, Any]]:
-    docs = repo_root / "ua_test_gui" / "doc" / "test_cases"
+    docs = default_test_cases_dir(repo_root)
     rows: list[dict[str, Any]] = []
     malformed: list[dict[str, Any]] = []
     for path in sorted(docs.glob("*.md")):

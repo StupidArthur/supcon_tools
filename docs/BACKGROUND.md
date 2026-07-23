@@ -9,7 +9,7 @@
 
 ## 2. 项目是什么
 - 被测对象:一个 TPT/DataHub 平台的 OPC UA 数据源、位号、采集、实时、历史等功能。
-- **419 条文档 case**,定义在 `ua_test_gui/doc/test_cases/*.md`,分三章:
+- **419 条文档 case**,定义在 `ua_test_harness/test_cases/*.md`,分三章:
   - UA-1 数据源 56 条、UA-2 位号 265 条、UA-3 采集/实时/写/历史/性能 98 条。
 - 每条 case 有 markdown 文档预期(前置/步骤/断言/清理);测试代码实现 handler,跑真实 TPT 验证产品行为。
 - **真实实现进度 38/419**(UA-1:12、UA-2:16、UA-3:10);其余 381 条已注册但 BLOCKED(无 handler)。
@@ -34,7 +34,7 @@
 - **你的任务**:`docs/talk-main.md`(通宵派单:决策边界、每批工作流、报告要求)。
 - **架构/验收细则**:`docs/compose/guidance/ua2-refactor-guide.md`。
 - **路线图/验收/工作流**:`.mimocode/plans/1783855834448-mighty-nebula.md`(Part 4)。
-- **case 规格(不改)**:`ua_test_gui/doc/test_cases/UA-2-1.md`、`UA-2-2.md`、`UA-2-4.md`、`UA-2-3.md`、`UA-2-5.md`、`UA-1-*.md`、`UA-3-*.md`。
+- **case 规格(不改)**:`ua_test_harness/test_cases/UA-2-1.md`、`UA-2-2.md`、`UA-2-4.md`、`UA-2-3.md`、`UA-2-5.md`、`UA-1-*.md`、`UA-3-*.md`。
 - **派发注册 + 各章缺口**:`ua_test_harness/scenario_policy.py`(`_SUPPORTED` 已支持清单 / `_SHARED_SCENARIOS` UA-3 场景 / `_BLOCK_REASONS` 各章待补适配器=路线图)。
 - **现有 handler 范本(照着写)**:
   - UA-2:`ua_test_harness/ua2_create_runtime.py`、`ua2_query_runtime.py`、`ua2_recycle_runtime.py`(16 个已实现 handler)。

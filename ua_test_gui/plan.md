@@ -215,7 +215,7 @@ ua_test_gui/internal/app/config.go
 
 ## 4.1 单一事实源
 
-用例文档在 `ua_test_gui/doc/test_cases/*.md`，但运行器不能每次解析 Markdown 表格作为执行目录。请建立机器可读目录：
+用例文档在 `ua_test_harness/test_cases/*.md`，但运行器不能每次解析 Markdown 表格作为执行目录。请建立机器可读目录：
 
 ```text
 ua_test_harness/cases/catalog.json
@@ -257,7 +257,7 @@ ua_test_harness/cases/catalog.json
           "timeoutSec": 120,
           "destructive": false,
           "exclusiveResources": ["history-store"],
-          "docPath": "ua_test_gui/doc/test_cases/UA-3-4.md",
+          "docPath": "ua_test_harness/test_cases/UA-3-4.md",
           "description": "...",
           "steps": ["..."],
           "assertions": ["..."]

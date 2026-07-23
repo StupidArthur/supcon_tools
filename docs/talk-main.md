@@ -26,7 +26,7 @@
 
 ### 任务 A:回归类 OBSERVED -> 真实 doc 断言(移 PARTIAL->IMPLEMENTED)
 **目标**:doc 有明确断言的回归 case,实现真实 `check_*` 断言,删 OBSERVED 回退。改一条就从 `OBSERVED_ONLY` 移到 `STRICT_IMPLEMENTED`。
-**第一批(高保真价值)**:UA-2-2 余量(003/006/007/009/010/012/014/017/018/020~032 除 053)+ UA-2-1 余量回归类。逐条读 `ua_test_gui/doc/test_cases/UA-2-*.md` 断言列 -> handler 实现 `check_*` -> 单测(mock 验证断言触发)。
+**第一批(高保真价值)**:UA-2-2 余量(003/006/007/009/010/012/014/017/018/020~032 除 053)+ UA-2-1 余量回归类。逐条读 `ua_test_harness/test_cases/UA-2-*.md` 断言列 -> handler 实现 `check_*` -> 单测(mock 验证断言触发)。
 **边界**:doc 无硬断言的探索类(UA-3-5/6 等)保留 OBSERVED + 留在 `OBSERVED_ONLY`;产品不符 -> FAIL 保留。
 
 ### 任务 F:清理 UA-3 死代码(决策一)
