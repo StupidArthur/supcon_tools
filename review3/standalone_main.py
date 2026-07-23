@@ -374,9 +374,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--format",
-        choices=["csv", "xlsx", "xls"],
+        choices=["csv", "xlsx"],
         default=None,
-        help="批量导出文件格式；指定后走引擎模板导出（时间列+表头），否则输出全列裸 CSV"
+        help="批量导出文件格式（csv/xlsx）；指定后走引擎模板导出（时间列+表头），否则输出全列裸 CSV"
     )
     parser.add_argument(
         "--columns",
@@ -394,12 +394,12 @@ def main() -> None:
         "--sheet-name",
         type=str,
         default=None,
-        help="Excel 工作表名（仅 xlsx/xls），缺省「控制器」"
+        help="Excel 工作表名（仅 xlsx），缺省「控制器」"
     )
     parser.add_argument(
         "--convert-export",
         action="store_true",
-        help="将 --rows-json 指定的内存结果行转换为格式化导出文件（csv/xlsx/xls），不运行仿真"
+        help="将 --rows-json 指定的内存结果行转换为格式化导出文件（csv/xlsx），不运行仿真"
     )
     parser.add_argument(
         "--rows-json",
@@ -505,7 +505,7 @@ def main() -> None:
         print(f"Exporting to {output_path}...")
 
         if args.format:
-            # 模板导出：engine.export_snapshots（时间列 + 表头，csv/xlsx/xls）。
+            # 模板导出：engine.export_snapshots（时间列 + 表头，csv/xlsx）。
             # 列由 --columns 指定，留空则用 DSL display_args。
             from components.export_templates import TemplateManager
             template = TemplateManager().load_template(args.template)

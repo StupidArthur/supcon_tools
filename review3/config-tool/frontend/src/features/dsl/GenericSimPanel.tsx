@@ -89,6 +89,7 @@ export function GenericSimPanel() {
   const fail = useGenericSimStore((s) => s.fail)
   const toggleColumn = useGenericSimStore((s) => s.toggleColumn)
   const hasDisplay = useGenericSimStore((s) => s.hasDisplayResult(projectId))
+  const hasExportable = useGenericSimStore((s) => s.hasExportableResult(projectId))
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
   const boundRunId = useGenericSimStore((s) => s.boundRunId)
   const boundYamlHash = useGenericSimStore((s) => s.boundYamlHash)
@@ -220,17 +221,24 @@ export function GenericSimPanel() {
     }
   }
 
-  // 打开导出窗口：冻结当前结果身份与数据为不可变会话快照。
+  // 打开导出窗口：先确认当前结果可导出（属于本工程、成功、未过期），
+  // 再冻结当前结果身份与数据为不可变会话快照。
+  // stale 结果禁止打开（仍可查看趋势）；工程身份一律读取实时 Store 值。
   const openExport = () => {
     setExportError(null)
-    const s = useGenericSimStore.getState()
+    const sim = useGenericSimStore.getState()
+    const currentProjectId = useDslProjectStore.getState().projectId
+    if (!sim.hasExportableResult(currentProjectId)) {
+      setExportError(sim.stale ? '结果已过期，请重新仿真后再导出' : '当前没有可导出的仿真结果')
+      return
+    }
     const session = createExportSession({
-      projectId,
-      boundRunId: s.boundRunId,
-      boundYamlHash: s.boundYamlHash,
-      columns: s.columns,
-      selectedColumns: s.selectedColumns,
-      rows: s.rows,
+      projectId: currentProjectId,
+      boundRunId: sim.boundRunId,
+      boundYamlHash: sim.boundYamlHash,
+      columns: sim.columns,
+      selectedColumns: sim.selectedColumns,
+      rows: sim.rows,
     })
     if (!session) return
     setExportSession(session)
@@ -245,14 +253,16 @@ export function GenericSimPanel() {
       return
     }
     // 调用后端前复查身份：projectId/runId/yamlHash/stale/归属，任一不匹配即取消、不创建文件。
+    // projectId 读取实时 Store 值（不用闭包旧值），保存窗口前后各检查一次。
     const check = () => {
-      const cur = useGenericSimStore.getState()
+      const sim = useGenericSimStore.getState()
+      const currentProjectId = useDslProjectStore.getState().projectId
       return validateExportSession(session, {
-        projectId,
-        boundRunId: cur.boundRunId,
-        boundYamlHash: cur.boundYamlHash,
-        stale: cur.stale,
-        hasDisplayResult: cur.hasDisplayResult(projectId),
+        projectId: currentProjectId,
+        boundRunId: sim.boundRunId,
+        boundYamlHash: sim.boundYamlHash,
+        stale: sim.stale,
+        hasDisplayResult: sim.hasDisplayResult(currentProjectId),
       })
     }
     const invalidBefore = check()
@@ -342,7 +352,7 @@ export function GenericSimPanel() {
         <button
           type="button"
           onClick={openExport}
-          disabled={!hasDisplay}
+          disabled={!hasExportable || exportBusy}
           className="rounded-md border border-border bg-card px-3 py-1.5 transition-colors hover:bg-secondary disabled:opacity-40 disabled:hover:bg-card"
           data-testid="sim-export-button"
         >

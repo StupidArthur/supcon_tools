@@ -1188,3 +1188,50 @@ func TestExportRowsFormattedRealChain(t *testing.T) {
 		t.Fatalf("csv missing data: %q", string(csvData))
 	}
 }
+
+func TestExportFileDialogSpec(t *testing.T) {
+	name, pat, def, err := exportFileDialogSpec("csv")
+	if err != nil || name == "" || pat != "*.csv" || def != "result.csv" {
+		t.Fatalf("csv: err=%v name=%q pat=%q def=%q", err, name, pat, def)
+	}
+	if _, _, _, err := exportFileDialogSpec("xlsx"); err != nil {
+		t.Fatalf("xlsx: unexpected err %v", err)
+	}
+	if _, _, _, err := exportFileDialogSpec("XLSX"); err != nil {
+		t.Fatalf("uppercase xlsx: unexpected err %v", err)
+	}
+	if _, _, _, err := exportFileDialogSpec(" xls "); err == nil ||
+		!strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+		t.Fatalf("xls (trim): %v", err)
+	}
+	if _, _, _, err := exportFileDialogSpec("pdf"); err == nil ||
+		!strings.Contains(err.Error(), "不支持的导出格式") {
+		t.Fatalf("unknown format: %v", err)
+	}
+}
+
+func TestExportBatchFormattedXLSNoSubprocess(t *testing.T) {
+	b := NewSystemBinding()
+	// 若 xls 漏过格式门禁并触达子进程路径，将 panic 失败。
+	b.setCommandFactory(func(name string, arg ...string) *exec.Cmd {
+		t.Fatalf("subprocess must not be launched for xls: %s %v", name, arg)
+		return exec.Command(name, arg...)
+	})
+	out := filepath.Join(t.TempDir(), "out.xls")
+	err := b.ExportBatchFormatted("cfg.yaml", 100, out, "xls", []string{"a"}, "")
+	if err == nil {
+		t.Fatal("expected error for xls")
+	}
+	if !strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+		t.Fatalf("expected xls error, got: %v", err)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Fatalf("xls must not create a file: %v", err)
+	}
+	b.mu.Lock()
+	active := b.activeBatches
+	b.mu.Unlock()
+	if active != 0 {
+		t.Fatalf("xls must not take a batch lease, activeBatches=%d", active)
+	}
+}

@@ -899,12 +899,26 @@ func (b *SystemBinding) SaveCSVFile() (string, error) {
 	})
 }
 
-// SaveExportFile 按导出格式弹出保存对话框（csv/xlsx）。xls 当前版本暂不支持，前端不再提供该选项。
-func (b *SystemBinding) SaveExportFile(format string) (string, error) {
-	displayName, pattern, def := "CSV 文件", "*.csv", "result.csv"
-	switch strings.ToLower(format) {
+// exportFileDialogSpec 将导出格式解析为保存对话框参数（纯函数，便于测试）。
+// 仅支持 csv/xlsx；xls 当前版本暂不支持，未知格式返回错误——都不静默落到 CSV。
+func exportFileDialogSpec(format string) (displayName string, pattern string, def string, err error) {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "csv":
+		return "CSV 文件", "*.csv", "result.csv", nil
 	case "xlsx":
-		displayName, pattern, def = "Excel 工作簿 (*.xlsx)", "*.xlsx", "result.xlsx"
+		return "Excel 工作簿 (*.xlsx)", "*.xlsx", "result.xlsx", nil
+	case "xls":
+		return "", "", "", fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
+	default:
+		return "", "", "", fmt.Errorf("不支持的导出格式: %s", format)
+	}
+}
+
+// SaveExportFile 按导出格式弹出保存对话框（csv/xlsx）。xls 与未知格式返回明确错误。
+func (b *SystemBinding) SaveExportFile(format string) (string, error) {
+	displayName, pattern, def, err := exportFileDialogSpec(format)
+	if err != nil {
+		return "", err
 	}
 	return runtime.SaveFileDialog(b.ctx, runtime.SaveDialogOptions{
 		Title:           "导出仿真结果",
@@ -1010,6 +1024,14 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 // 注：本方法为旧的重跑导出路径，当前主流程不使用（主流程用 ExportRowsFormatted 导出内存结果）；
 // xls 暂未启用（运行环境缺 xlwt）。
 func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) error {
+	// 格式门禁前置：xls 当前版本暂不支持，未知格式直接拒绝；都不启动子进程。
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "csv", "xlsx":
+	case "xls":
+		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
+	default:
+		return fmt.Errorf("不支持的导出格式: %s", format)
+	}
 	if err := b.ensureDataFactory(); err != nil {
 		return err
 	}
@@ -1018,11 +1040,6 @@ func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, expo
 	}
 	if cycles <= 0 {
 		return fmt.Errorf("周期数必须大于 0")
-	}
-	switch strings.ToLower(format) {
-	case "csv", "xlsx", "xls":
-	default:
-		return fmt.Errorf("不支持的导出格式: %s", format)
 	}
 	if err := b.beginBatch(); err != nil {
 		return err
@@ -1077,7 +1094,7 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 	if len(columns) == 0 {
 		return fmt.Errorf("列为空，无法导出")
 	}
-	fmtLower := strings.ToLower(format)
+	fmtLower := strings.ToLower(strings.TrimSpace(format))
 	switch fmtLower {
 	case "csv":
 		return b.ExportCSVRows(columns, rows, exportPath)
