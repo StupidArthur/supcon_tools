@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"config-tool/internal/realtime"
@@ -124,6 +125,39 @@ type ForceEntry struct {
 
 var forceHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
+var (
+	tokenMu       sync.Mutex
+	currentToken  string
+)
+
+func SetCurrentAPIToken(token string) {
+	tokenMu.Lock()
+	defer tokenMu.Unlock()
+	currentToken = token
+}
+
+func CurrentAPIToken() string {
+	tokenMu.Lock()
+	defer tokenMu.Unlock()
+	return currentToken
+}
+
+func applyAuth(req *http.Request) {
+	if t := CurrentAPIToken(); t != "" {
+		req.Header.Set("Authorization", "Bearer "+t)
+	}
+}
+
+func httpPostJSON(client *http.Client, url string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	applyAuth(req)
+	return client.Do(req)
+}
+
 func (b *RealtimeProjectBinding) forceURL(apiHost string, apiPort int, path string) string {
 	return fmt.Sprintf("http://%s:%d%s", apiHost, apiPort, path)
 }
@@ -149,7 +183,12 @@ func decodeForceResponse(resp *http.Response, out any) error {
 }
 
 func httpGetJSON(client *http.Client, url string) (map[string]any, error) {
-	resp, err := client.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	applyAuth(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +210,7 @@ func (b *RealtimeProjectBinding) SetForce(apiHost string, apiPort int, tag, mode
 	if err != nil {
 		return fmt.Errorf("序列化请求失败: %w", err)
 	}
-	resp, err := forceHTTPClient.Post(b.forceURL(apiHost, apiPort, "/api/force"), "application/json", bytes.NewReader(data))
+	resp, err := httpPostJSON(forceHTTPClient, b.forceURL(apiHost, apiPort, "/api/force"), data)
 	if err != nil {
 		return err
 	}

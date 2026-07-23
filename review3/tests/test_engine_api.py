@@ -366,6 +366,39 @@ def test_broadcaster_independent_subscriptions(binding):
     assert "tank.level" in g2 and "pid.PV" not in g2
 
 
+def test_token_auth_rejects_without_token(binding):
+    from fastapi.testclient import TestClient
+    engine_api.set_api_token("secret-token")
+    try:
+        client = TestClient(engine_api.app)
+        r = client.get("/api/status")
+        assert r.status_code == 401
+    finally:
+        engine_api.set_api_token(None)
+
+
+def test_token_auth_accepts_with_token(binding):
+    from fastapi.testclient import TestClient
+    engine_api.set_api_token("secret-token")
+    try:
+        client = TestClient(engine_api.app)
+        r = client.get("/api/status", headers={"Authorization": "Bearer secret-token"})
+        assert r.status_code == 200
+    finally:
+        engine_api.set_api_token(None)
+
+
+def test_token_auth_wrong_token(binding):
+    from fastapi.testclient import TestClient
+    engine_api.set_api_token("secret-token")
+    try:
+        client = TestClient(engine_api.app)
+        r = client.get("/api/status", headers={"Authorization": "Bearer wrong"})
+        assert r.status_code == 401
+    finally:
+        engine_api.set_api_token(None)
+
+
 def test_snapshot_contains_required_tags(binding):
     """snapshot 必须包含 contracts.md §9.3 列出的所有必需位号。"""
     snap = engine_api.api_snapshot("second_order_tank")

@@ -649,6 +649,12 @@ def main() -> None:
         help="FastAPI port (default: 8000)"
     )
     parser.add_argument(
+        "--api-token",
+        type=str,
+        default=None,
+        help="本地 API 会话令牌（启用 REST/WS 鉴权）"
+    )
+    parser.add_argument(
         "--inspect-project",
         action="store_true",
         help="从 stdin 读取 JSON sources 列表，校验实例展开和重名，结果输出到 stdout（JSON）"
@@ -881,9 +887,12 @@ def main() -> None:
         from datacenter.engine_api import run_api_server
         api_thread = run_api_server(
             api_binding, host=args.api_host, port=args.api_port,
+            api_token=args.api_token,
         )
         print(f"[Main] FastAPI debug API on http://{args.api_host}:{args.api_port}")
         print(f"[Main] WebSocket: ws://{args.api_host}:{args.api_port}/ws/snapshot")
+        if args.api_host not in ("127.0.0.1", "localhost", "::1"):
+            print(f"[Main] WARNING: 绑定非 loopback 地址 {args.api_host}，存在本地安全风险")
 
     try:
         # 阻塞主线程，周期性检查引擎线程存活状态。

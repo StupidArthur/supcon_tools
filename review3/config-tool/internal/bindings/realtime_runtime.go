@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -207,7 +206,7 @@ func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSessio
 		return
 	}
 	url := fmt.Sprintf("http://%s:%d/api/archive/start", session.APIHost, session.APIPort)
-	resp, err := forceHTTPClient.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := httpPostJSON(forceHTTPClient, url, data)
 	if err != nil {
 		return
 	}
@@ -227,7 +226,7 @@ func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSes
 		return
 	}
 	url := fmt.Sprintf("http://%s:%d/api/alarms/config", session.APIHost, session.APIPort)
-	resp, err := forceHTTPClient.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := httpPostJSON(forceHTTPClient, url, data)
 	if err != nil {
 		return
 	}
@@ -269,7 +268,7 @@ func (b *RealtimeRuntimeBinding) AckAlarm(alarmID string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := forceHTTPClient.Post(base+"/api/alarms/"+alarmID+"/ack", "application/json", bytes.NewReader([]byte("{}")))
+	resp, err := httpPostJSON(forceHTTPClient, base+"/api/alarms/"+alarmID+"/ack", []byte("{}"))
 	if err != nil {
 		return err
 	}
@@ -281,7 +280,7 @@ func (b *RealtimeRuntimeBinding) AckAllAlarms() error {
 	if err != nil {
 		return err
 	}
-	resp, err := forceHTTPClient.Post(base+"/api/alarms/ack-all", "application/json", bytes.NewReader([]byte("{}")))
+	resp, err := httpPostJSON(forceHTTPClient, base+"/api/alarms/ack-all", []byte("{}"))
 	if err != nil {
 		return err
 	}

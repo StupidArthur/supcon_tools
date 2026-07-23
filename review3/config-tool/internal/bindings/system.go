@@ -3,6 +3,7 @@ package bindings
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
@@ -34,6 +35,7 @@ type StartParams struct {
 	APIHost     string  `json:"apiHost"`     // HTTP API host
 	RuntimeName string  `json:"runtimeName"` // 运行实例名（通过 --name 传递）
 	EnableOpcUa bool    `json:"enableOpcUa"` // 是否启用 OPC UA
+	APIToken    string  `json:"-"`           // 本地 API 会话令牌（不暴露给前端）
 }
 
 // SystemStatus 系统状态
@@ -286,8 +288,20 @@ func BuildArgs(params StartParams) []string {
 	if params.RuntimeName != "" {
 		args = append(args, "--name", params.RuntimeName)
 	}
+	if params.APIToken != "" {
+		args = append(args, "--api-token", params.APIToken)
+	}
 
 	return args
+}
+
+// generateAPIToken 生成本次运行的随机会话令牌（仅内存，不落盘、不入日志）。
+func generateAPIToken() string {
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("tok-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(buf)
 }
 
 // beginBatch 获取批量任务 lease：实时进程运行中或已有批量任务运行时拒绝，否则 activeBatches++。
@@ -341,6 +355,10 @@ func (b *SystemBinding) Start(params StartParams) error {
 	pollInterval := b.readyPollInterval
 	readyTimeout := b.readyTimeout
 	dfLaunch := b.dfLaunch
+	if params.APIToken == "" {
+		params.APIToken = generateAPIToken()
+	}
+	SetCurrentAPIToken(params.APIToken)
 	args := BuildArgs(params)
 	cmd := dfLaunch.command(commandFactory, args...)
 
@@ -627,6 +645,9 @@ func (b *SystemBinding) Stop() error {
 		b.proc = nil
 	}
 	b.mu.Unlock()
+
+	// 运行结束，会话令牌立即失效
+	SetCurrentAPIToken("")
 
 	// 发送事件
 	status := b.Status()

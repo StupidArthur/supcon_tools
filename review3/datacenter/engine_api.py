@@ -356,6 +356,35 @@ app.add_middleware(
 )
 
 
+# 本地 API 会话令牌（阶段 9c）。每次运行生成随机 token，仅在内存中。
+# 不写 project，不输出日志，运行结束即失效。
+_api_token: Optional[str] = None
+
+
+def set_api_token(token: Optional[str]) -> None:
+    global _api_token
+    _api_token = token
+
+
+def _auth_disabled() -> bool:
+    # 明确的开发测试开关下允许无 token 模式。
+    return os.environ.get("DATAFACTORY_NO_AUTH") == "1"
+
+
+@app.middleware("http")
+async def token_auth_middleware(request, call_next):
+    if _auth_disabled() or _api_token is None:
+        return await call_next(request)
+    # WebSocket 升级走 query token（在 ws handler 内校验），此处放行。
+    if request.url.path.startswith("/ws/"):
+        return await call_next(request)
+    auth = request.headers.get("authorization", "")
+    if auth != f"Bearer {_api_token}":
+        from starlette.responses import JSONResponse
+        return JSONResponse(status_code=401, content={"detail": "未授权"})
+    return await call_next(request)
+
+
 # 全局 binding 引用（由 set_binding() 注入）
 _binding: Optional[EngineBinding] = None
 _binding_lock = threading.Lock()
@@ -827,6 +856,11 @@ async def ws_snapshot(ws: WebSocket) -> None:
     心跳：1s 内未收到真实 snapshot，发送 ``{"_heartbeat": true, "ts": ...}``。
     """
     await ws.accept()
+    if not _auth_disabled() and _api_token is not None:
+        token = ws.query_params.get("token")
+        if token != _api_token:
+            await ws.close(code=4401)
+            return
     b = get_binding()
     my_queue = b.broadcaster.register()
     logger.info("WS client connected, total clients=%d",
@@ -878,13 +912,14 @@ async def ws_snapshot(ws: WebSocket) -> None:
 # uvicorn 启动入口                                                            #
 # --------------------------------------------------------------------------- #
 
-def run_api_server(binding: EngineBinding, host: str, port: int) -> threading.Thread:
+def run_api_server(binding: EngineBinding, host: str, port: int, api_token: Optional[str] = None) -> threading.Thread:
     """
     在新线程里启动 uvicorn + FastAPI。
 
     Returns: daemon 线程句柄，调用方可 join。
     """
     set_binding(binding)
+    set_api_token(api_token)
 
     import uvicorn
 
