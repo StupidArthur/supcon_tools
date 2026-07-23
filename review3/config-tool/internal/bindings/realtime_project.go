@@ -140,6 +140,23 @@ func decodeForceResponse(resp *http.Response, out any) error {
 	return nil
 }
 
+func httpGetJSON(client *http.Client, url string) (map[string]any, error) {
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("请求失败: HTTP %d", resp.StatusCode)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	return out, nil
+}
+
 func (b *RealtimeProjectBinding) SetForce(apiHost string, apiPort int, tag, mode string, value *float64, duration *float64) error {
 	reqBody := ForceSetRequest{Tag: tag, Mode: mode, Value: value, Duration: duration}
 	data, err := json.Marshal(reqBody)

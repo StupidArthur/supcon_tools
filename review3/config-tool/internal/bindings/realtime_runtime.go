@@ -1,7 +1,9 @@
 package bindings
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
@@ -170,12 +172,90 @@ func (b *RealtimeRuntimeBinding) launch(
 
 	_ = b.sessionManager.WriteSessionJSON(dir, sessionRecordFor(session))
 
+	if session.SourceKind == realtime.RuntimeSourceProject {
+		b.pushAlarmConfig(session)
+	}
+
 	b.mu.Lock()
 	b.current = &session
 	b.curDir = dir
 	b.mu.Unlock()
 
 	return session, nil
+}
+
+func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSession) {
+	rules, err := b.manager.ListAlarmRules(context.Background(), session.ProjectID)
+	if err != nil || len(rules) == 0 {
+		return
+	}
+	payload := struct {
+		Rules []realtime.AlarmRule `json:"rules"`
+	}{Rules: rules}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	url := fmt.Sprintf("http://%s:%d/api/alarms/config", session.APIHost, session.APIPort)
+	resp, err := forceHTTPClient.Post(url, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func (b *RealtimeRuntimeBinding) apiBase() (string, error) {
+	b.mu.Lock()
+	s := b.current
+	b.mu.Unlock()
+	if s == nil {
+		return "", fmt.Errorf("没有运行会话")
+	}
+	return fmt.Sprintf("http://%s:%d", s.APIHost, s.APIPort), nil
+}
+
+func (b *RealtimeRuntimeBinding) GetAlarms() (map[string]any, error) {
+	base, err := b.apiBase()
+	if err != nil {
+		return nil, err
+	}
+	return httpGetJSON(forceHTTPClient, base+"/api/alarms")
+}
+
+func (b *RealtimeRuntimeBinding) GetAlarmEvents(limit int) (map[string]any, error) {
+	base, err := b.apiBase()
+	if err != nil {
+		return nil, err
+	}
+	url := base + "/api/alarm-events"
+	if limit > 0 {
+		url += fmt.Sprintf("?limit=%d", limit)
+	}
+	return httpGetJSON(forceHTTPClient, url)
+}
+
+func (b *RealtimeRuntimeBinding) AckAlarm(alarmID string) error {
+	base, err := b.apiBase()
+	if err != nil {
+		return err
+	}
+	resp, err := forceHTTPClient.Post(base+"/api/alarms/"+alarmID+"/ack", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return err
+	}
+	return decodeForceResponse(resp, nil)
+}
+
+func (b *RealtimeRuntimeBinding) AckAllAlarms() error {
+	base, err := b.apiBase()
+	if err != nil {
+		return err
+	}
+	resp, err := forceHTTPClient.Post(base+"/api/alarms/ack-all", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return err
+	}
+	return decodeForceResponse(resp, nil)
 }
 
 func (b *RealtimeRuntimeBinding) Stop() error {

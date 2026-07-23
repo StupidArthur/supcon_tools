@@ -182,6 +182,7 @@ class EngineBinding:
     _batch_lock: threading.Lock = field(default_factory=threading.Lock)
     _batches: Dict[str, WriteBatchRecord] = field(default_factory=dict)
     force_manager: Any = None
+    alarm_manager: Any = None
 
     def push_snapshot(self, snapshot: Dict[str, Any]) -> None:
         """由 standalone_main 的引擎线程每周期调用一次。
@@ -205,6 +206,13 @@ class EngineBinding:
 
         # 4) 原子写 batch 确认 / 超时
         self._update_write_batches(snapshot)
+
+        # 5) 报警评估（异常不阻塞 Engine 周期）
+        if self.alarm_manager is not None:
+            try:
+                self.alarm_manager.evaluate(snapshot)
+            except Exception as e:
+                logger.error(f"alarm evaluate error: {e}")
 
     def get_recent_snapshots(self, n: Optional[int]) -> List[Dict[str, Any]]:
         with self._buffer_lock:
@@ -639,6 +647,71 @@ def api_force_list() -> Dict[str, Any]:
         return {"ok": True, "forces": {}, "tags": []}
     tags = sorted(b.force_manager.snapshot_valid_tags())
     return {"ok": True, "forces": b.force_manager.snapshot(), "tags": tags}
+
+
+# --------------------------------------------------------------------------- #
+# 报警                                                                         #
+# --------------------------------------------------------------------------- #
+
+class AlarmRulePayload(BaseModel):
+    id: str
+    name: str
+    tag: str
+    direction: str
+    limit: float
+    severity: str
+    delay_seconds: float = 0.0
+    deadband: float = 0.0
+    enabled: bool = True
+    message: str = ""
+
+
+class AlarmConfigRequest(BaseModel):
+    rules: List[AlarmRulePayload]
+
+
+@app.post("/api/alarms/config")
+def api_alarm_config(req: AlarmConfigRequest) -> Dict[str, Any]:
+    from datacenter.alarm_manager import AlarmManager, AlarmRuleSpec
+    b = get_binding()
+    specs = [AlarmRuleSpec(**r.dict()) for r in req.rules]
+    b.alarm_manager = AlarmManager(specs)
+    return {"ok": True, "count": len(specs)}
+
+
+@app.get("/api/alarms")
+def api_alarms() -> Dict[str, Any]:
+    b = get_binding()
+    if b.alarm_manager is None:
+        return {"ok": True, "alarms": []}
+    return {"ok": True, "alarms": b.alarm_manager.statuses()}
+
+
+@app.post("/api/alarms/{alarm_id}/ack")
+def api_alarm_ack(alarm_id: str) -> Dict[str, Any]:
+    b = get_binding()
+    if b.alarm_manager is None:
+        raise HTTPException(status_code=404, detail="报警未启用")
+    ok = b.alarm_manager.acknowledge(alarm_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="报警不可确认")
+    return {"ok": True}
+
+
+@app.post("/api/alarms/ack-all")
+def api_alarm_ack_all() -> Dict[str, Any]:
+    b = get_binding()
+    if b.alarm_manager is None:
+        return {"ok": True, "acked": 0}
+    return {"ok": True, "acked": b.alarm_manager.acknowledge_all()}
+
+
+@app.get("/api/alarm-events")
+def api_alarm_events(limit: Optional[int] = None) -> Dict[str, Any]:
+    b = get_binding()
+    if b.alarm_manager is None:
+        return {"ok": True, "events": []}
+    return {"ok": True, "events": b.alarm_manager.events(limit)}
 
 
 # --------------------------------------------------------------------------- #

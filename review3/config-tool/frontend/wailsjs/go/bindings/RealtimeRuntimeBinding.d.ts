@@ -3,7 +3,15 @@
 import {realtime} from '../models';
 import {context} from '../models';
 
+export function AckAlarm(arg1:string):Promise<void>;
+
+export function AckAllAlarms():Promise<void>;
+
 export function Cleanup():Promise<void>;
+
+export function GetAlarmEvents(arg1:number):Promise<Record<string, any>>;
+
+export function GetAlarms():Promise<Record<string, any>>;
 
 export function GetProjectRevision(arg1:string):Promise<string>;
 

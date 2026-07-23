@@ -122,4 +122,8 @@ export const realtimeRuntimeApi = {
   stop: () => RealtimeRuntimeBinding.Stop(),
   getSession: () => RealtimeRuntimeBinding.GetSession(),
   getProjectRevision: (projectId: string) => RealtimeRuntimeBinding.GetProjectRevision(projectId),
+  getAlarms: () => RealtimeRuntimeBinding.GetAlarms(),
+  getAlarmEvents: (limit: number) => RealtimeRuntimeBinding.GetAlarmEvents(limit),
+  ackAlarm: (alarmId: string) => RealtimeRuntimeBinding.AckAlarm(alarmId),
+  ackAllAlarms: () => RealtimeRuntimeBinding.AckAllAlarms(),
 }
