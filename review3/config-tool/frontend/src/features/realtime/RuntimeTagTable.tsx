@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { realtimeProjectApi } from '../../lib/api'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
 
@@ -6,6 +6,10 @@ interface ForceEntry {
   mode: string
   value?: number
 }
+
+const ROW_HEIGHT = 28
+const VIEWPORT_HEIGHT = 384
+const OVERSCAN = 8
 
 export function RuntimeTagTable() {
   const rawSnapshot = useRuntimeStore((s) => s.rawSnapshot)
@@ -17,6 +21,8 @@ export function RuntimeTagTable() {
   const [forces, setForces] = useState<Record<string, ForceEntry>>({})
   const [validTags, setValidTags] = useState<string[] | null>(null)
   const [forceError, setForceError] = useState<string | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const refreshForces = useCallback(async () => {
     try {
@@ -46,6 +52,18 @@ export function RuntimeTagTable() {
     const lower = filter.toLowerCase()
     return entries.filter((e) => e.name.toLowerCase().includes(lower))
   }, [rawSnapshot, filter, validTags])
+
+  const visibleTags = useMemo(() => {
+    const total = tags.length
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+    const visibleCount = Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN * 2
+    const end = Math.min(total, start + visibleCount)
+    const out: { tag: { name: string; value: unknown }; index: number }[] = []
+    for (let i = start; i < end; i++) {
+      out.push({ tag: tags[i], index: i })
+    }
+    return out
+  }, [tags, scrollTop])
 
   const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {
     setForceError(null)
@@ -124,99 +142,103 @@ export function RuntimeTagTable() {
           data-testid="tag-table-filter"
         />
       </div>
-      <div className="max-h-96 overflow-y-auto rounded-md border border-border">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-card">
-            <tr className="border-b border-border">
-              <th className="px-3 py-1.5 text-left font-medium">位号</th>
-              <th className="px-3 py-1.5 text-right font-medium">运行值</th>
-              <th className="px-3 py-1.5 text-right font-medium">预计 UA 输出</th>
-              <th className="px-3 py-1.5 text-center font-medium">强制</th>
-              <th className="px-3 py-1.5 text-center font-medium">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tags.map((tag) => (
-              <tr key={tag.name} className="border-b border-border/50">
-                <td className="px-3 py-1 font-mono">{tag.name}</td>
-                <td className="px-3 py-1 text-right font-mono">
-                  {typeof tag.value === 'number' ? tag.value.toFixed(4) : String(tag.value ?? '—')}
-                </td>
-                <td className="px-3 py-1 text-right font-mono">
-                  {getUaValue(tag.name, tag.value)}
-                </td>
-                <td className="px-3 py-1 text-center">
-                  <span className={forces[tag.name] ? 'text-amber-700' : 'text-muted-foreground'}>
-                    {getForceLabel(tag.name)}
-                  </span>
-                </td>
-                <td className="px-3 py-1 text-center">
-                  <div className="flex items-center justify-center gap-0.5">
-                    {forces[tag.name] ? (
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto rounded-md border border-border"
+        style={{ height: VIEWPORT_HEIGHT }}
+        onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
+        data-testid="tag-table-scroll"
+      >
+        <div className="sticky top-0 z-10 grid grid-cols-[2fr_1fr_1fr_1fr_1fr] border-b border-border bg-card text-xs font-medium">
+          <div className="px-3 py-1.5">位号</div>
+          <div className="px-3 py-1.5 text-right">运行值</div>
+          <div className="px-3 py-1.5 text-right">预计 UA 输出</div>
+          <div className="px-3 py-1.5 text-center">强制</div>
+          <div className="px-3 py-1.5 text-center">操作</div>
+        </div>
+        <div style={{ height: tags.length * ROW_HEIGHT, position: 'relative' }}>
+          {visibleTags.map(({ tag, index }) => (
+            <div
+              key={tag.name}
+              className="absolute grid w-full grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center border-b border-border/50 text-xs"
+              style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT }}
+            >
+              <div className="truncate px-3 font-mono">{tag.name}</div>
+              <div className="px-3 text-right font-mono">
+                {typeof tag.value === 'number' ? tag.value.toFixed(4) : String(tag.value ?? '—')}
+              </div>
+              <div className="px-3 text-right font-mono">{getUaValue(tag.name, tag.value)}</div>
+              <div className="px-3 text-center">
+                <span className={forces[tag.name] ? 'text-amber-700' : 'text-muted-foreground'}>
+                  {getForceLabel(tag.name)}
+                </span>
+              </div>
+              <div className="px-3 text-center">
+                <div className="flex items-center justify-center gap-0.5">
+                  {forces[tag.name] ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleClearForce(tag.name)}
+                      className="rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-secondary"
+                      title="恢复跟随"
+                    >
+                      ↺
+                    </button>
+                  ) : (
+                    <>
                       <button
                         type="button"
-                        onClick={() => void handleClearForce(tag.name)}
-                        className="rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-secondary"
-                        title="恢复跟随"
+                        onClick={() => {
+                          const d = prompt('持续时间（秒，留空=永久）：', '')
+                          if (d === null) return
+                          const dur = parseDuration(d)
+                          if (dur === null) { setForceError('持续时间必须是有限正数'); return }
+                          void handleForce(tag.name, 'hold', undefined, dur)
+                        }}
+                        className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
+                        title="保持当前输出（后端原子捕获）"
                       >
-                        ↺
+                        H
                       </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const d = prompt('持续时间（秒，留空=永久）：', '')
-                            if (d === null) return
-                            const dur = parseDuration(d)
-                            if (dur === null) { setForceError('持续时间必须是有限正数'); return }
-                            void handleForce(tag.name, 'hold', undefined, dur)
-                          }}
-                          className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                          title="保持当前输出（后端原子捕获）"
-                        >
-                          H
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const d = prompt('持续时间（秒，留空=永久）：', '')
-                            if (d === null) return
-                            const dur = parseDuration(d)
-                            if (dur === null) { setForceError('持续时间必须是有限正数'); return }
-                            void handleForce(tag.name, 'zero', undefined, dur)
-                          }}
-                          className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                          title="置零"
-                        >
-                          0
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const v = prompt('固定值：', '0')
-                            if (v === null) return
-                            const fv = Number(v)
-                            if (!Number.isFinite(fv)) { setForceError('固定值必须是有限数'); return }
-                            const d = prompt('持续时间（秒，留空=永久）：', '')
-                            if (d === null) return
-                            const dur = parseDuration(d)
-                            if (dur === null) { setForceError('持续时间必须是有限正数'); return }
-                            void handleForce(tag.name, 'fixed', fv, dur)
-                          }}
-                          className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                          title="固定值"
-                        >
-                          F
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = prompt('持续时间（秒，留空=永久）：', '')
+                          if (d === null) return
+                          const dur = parseDuration(d)
+                          if (dur === null) { setForceError('持续时间必须是有限正数'); return }
+                          void handleForce(tag.name, 'zero', undefined, dur)
+                        }}
+                        className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
+                        title="置零"
+                      >
+                        0
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const v = prompt('固定值：', '0')
+                          if (v === null) return
+                          const fv = Number(v)
+                          if (!Number.isFinite(fv)) { setForceError('固定值必须是有限数'); return }
+                          const d = prompt('持续时间（秒，留空=永久）：', '')
+                          if (d === null) return
+                          const dur = parseDuration(d)
+                          if (dur === null) { setForceError('持续时间必须是有限正数'); return }
+                          void handleForce(tag.name, 'fixed', fv, dur)
+                        }}
+                        className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
+                        title="固定值"
+                      >
+                        F
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       {forceError ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive" data-testid="force-error">

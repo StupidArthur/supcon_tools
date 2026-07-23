@@ -103,20 +103,27 @@ class _WsBroadcaster:
     """
 
     _MAX_QUEUE = 1
+    MAX_SUBSCRIPTIONS = 5000
 
     def __init__(self) -> None:
-        self._clients: Set["queue.Queue[Dict[str, Any]]"] = set()
+        # queue -> 订阅 tag 集合（None 表示全量，向后兼容旧客户端）
+        self._clients: Dict["queue.Queue[Dict[str, Any]]", Optional[Set[str]]] = {}
         self._lock = threading.Lock()
 
     def register(self) -> "queue.Queue[Dict[str, Any]]":
         q: "queue.Queue[Dict[str, Any]]" = queue.Queue(maxsize=self._MAX_QUEUE)
         with self._lock:
-            self._clients.add(q)
+            self._clients[q] = None
         return q
 
     def unregister(self, q: "queue.Queue[Dict[str, Any]]") -> None:
         with self._lock:
-            self._clients.discard(q)
+            self._clients.pop(q, None)
+
+    def subscribe(self, q: "queue.Queue[Dict[str, Any]]", tags: Optional[Set[str]]) -> None:
+        with self._lock:
+            if q in self._clients:
+                self._clients[q] = tags
 
     def client_count(self) -> int:
         with self._lock:
@@ -130,11 +137,16 @@ class _WsBroadcaster:
             if isinstance(v, (int, float, str, bool)):
                 safe[k] = v
         with self._lock:
-            queues = list(self._clients)
-        for q in queues:
+            clients = list(self._clients.items())
+        for q, sub in clients:
+            if sub is None:
+                payload = safe
+            else:
+                # 订阅客户端只收到订阅 tag（保留 cycle_count/sim_time 元数据供时间轴）
+                payload = {k: v for k, v in safe.items()
+                           if k in sub or k in ("cycle_count", "sim_time")}
             # 始终只保留最新一帧；旧帧未消费则丢弃。
             try:
-                # 非阻塞尝试取出已有条目（不阻塞 Engine）
                 while True:
                     try:
                         q.get_nowait()
@@ -143,7 +155,7 @@ class _WsBroadcaster:
             except Exception:
                 pass
             try:
-                q.put_nowait(safe)
+                q.put_nowait(payload)
             except queue.Full:
                 # 极端 race：仍满则直接丢弃新帧，本客户端短暂缺帧不影响 Engine。
                 pass
@@ -721,31 +733,55 @@ def api_alarm_events(limit: Optional[int] = None) -> Dict[str, Any]:
 @app.websocket("/ws/snapshot")
 async def ws_snapshot(ws: WebSocket) -> None:
     """
-    每周期推一次 snapshot。
+    每周期推一次 snapshot；支持客户端订阅协议。
 
-    引擎线程把 snapshot put 到 broadcaster queue；这里 await 阻塞拿数据再发给客户端。
-    断开时 unregister。
+    订阅协议（新客户端）：
+        {"type": "subscribe", "tags": ["pid.PV", "pid.SV"], "includeMeta": true}
+    旧客户端不发 subscribe 时保持全量行为。
+    非法 tag 返回结构化错误：{"type": "error", "code": "INVALID_TAG", ...}。
 
     心跳：1s 内未收到真实 snapshot，发送 ``{"_heartbeat": true, "ts": ...}``。
-    真实 snapshot 本身就是完整 dict，不再包一层 ``data``。
     """
     await ws.accept()
     b = get_binding()
     my_queue = b.broadcaster.register()
     logger.info("WS client connected, total clients=%d",
                 b.broadcaster.client_count())
-    try:
+
+    async def sender() -> None:
+        loop = asyncio.get_running_loop()
         while True:
-            # 从队列取 snapshot。run_in_executor 把阻塞 get 放到线程池，避免阻塞 asyncio loop。
-            loop = asyncio.get_running_loop()
             try:
                 snapshot = await loop.run_in_executor(None, my_queue.get, True, 1.0)
             except queue.Empty:
-                # 1s 内没数据，发送心跳（保持连接活跃 + 前端可识别"还活着"）
                 await ws.send_json({"_heartbeat": True, "ts": time.time()})
                 continue
-            # snapshot 本身就是完整对象，不读取 message.data，也不额外包装。
             await ws.send_json(snapshot)
+
+    async def receiver() -> None:
+        while True:
+            msg = await ws.receive_json()
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("type") == "subscribe":
+                tags = msg.get("tags")
+                if tags is None:
+                    b.broadcaster.subscribe(my_queue, None)
+                    await ws.send_json({"type": "subscribed", "tags": None})
+                    continue
+                if not isinstance(tags, list):
+                    await ws.send_json({"type": "error", "code": "INVALID_SUBSCRIBE", "message": "tags 必须是数组"})
+                    continue
+                if len(tags) > _WsBroadcaster.MAX_SUBSCRIPTIONS:
+                    await ws.send_json({"type": "error", "code": "TOO_MANY_SUBSCRIPTIONS",
+                                        "message": f"订阅数超过上限 {_WsBroadcaster.MAX_SUBSCRIPTIONS}"})
+                    continue
+                tagset = {str(t) for t in tags}
+                b.broadcaster.subscribe(my_queue, tagset)
+                await ws.send_json({"type": "subscribed", "tags": sorted(tagset)})
+
+    try:
+        await asyncio.gather(sender(), receiver())
     except WebSocketDisconnect:
         logger.info("WS client disconnected")
     except Exception as e:

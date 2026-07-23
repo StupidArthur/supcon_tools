@@ -320,6 +320,52 @@ def test_tags_404_when_runtime_name_mismatch(binding):
         engine_api.api_tags("wrong_name")
 
 
+def test_broadcaster_full_snapshot_without_subscribe(binding):
+    bc = engine_api._WsBroadcaster()
+    q = bc.register()
+    bc.publish({"cycle_count": 1, "pid.PV": 0.5, "tank.level": 0.3})
+    got = q.get_nowait()
+    assert got["pid.PV"] == 0.5
+    assert got["tank.level"] == 0.3
+
+
+def test_broadcaster_subscribe_filters_tags(binding):
+    bc = engine_api._WsBroadcaster()
+    q = bc.register()
+    bc.subscribe(q, {"pid.PV"})
+    bc.publish({"cycle_count": 1, "sim_time": 0.5, "pid.PV": 0.5, "tank.level": 0.3})
+    got = q.get_nowait()
+    assert got["pid.PV"] == 0.5
+    # 未订阅的业务 tag 被过滤
+    assert "tank.level" not in got
+    # 时间元数据保留
+    assert got["cycle_count"] == 1
+    assert got["sim_time"] == 0.5
+
+
+def test_broadcaster_resubscribe_to_full(binding):
+    bc = engine_api._WsBroadcaster()
+    q = bc.register()
+    bc.subscribe(q, {"pid.PV"})
+    bc.subscribe(q, None)
+    bc.publish({"pid.PV": 0.5, "tank.level": 0.3})
+    got = q.get_nowait()
+    assert "tank.level" in got
+
+
+def test_broadcaster_independent_subscriptions(binding):
+    bc = engine_api._WsBroadcaster()
+    q1 = bc.register()
+    q2 = bc.register()
+    bc.subscribe(q1, {"pid.PV"})
+    bc.subscribe(q2, {"tank.level"})
+    bc.publish({"pid.PV": 0.5, "tank.level": 0.3})
+    g1 = q1.get_nowait()
+    g2 = q2.get_nowait()
+    assert "pid.PV" in g1 and "tank.level" not in g1
+    assert "tank.level" in g2 and "pid.PV" not in g2
+
+
 def test_snapshot_contains_required_tags(binding):
     """snapshot 必须包含 contracts.md §9.3 列出的所有必需位号。"""
     snap = engine_api.api_snapshot("second_order_tank")
