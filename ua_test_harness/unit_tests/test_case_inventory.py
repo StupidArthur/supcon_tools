@@ -6,7 +6,7 @@ from ua_test_harness.case_inventory import build_inventory, parse_case_doc, stru
 
 
 def _write_doc(repo: Path, body: str, name: str = "UA-1-1.md") -> Path:
-    path = repo / "ua_test_gui" / "doc" / "test_cases" / name
+    path = repo / "ua_test_harness" / "test_cases" / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
     return path

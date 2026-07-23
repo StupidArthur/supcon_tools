@@ -1,6 +1,6 @@
 """tests/ua_1:UA-1 数据源连接/启停/恢复 用例。
 
-按 doc/test_cases/UA-1-1.md (12) + UA-1-2.md (8) + UA-1-3.md (8) = 28 个 case。
+按 ua_test_harness/test_cases/UA-1-1.md (12) + UA-1-2.md (8) + UA-1-3.md (8) = 28 个 case。
 case 文档怎么写就怎么实现,跑通不是目标,真实记录。
 """
 from __future__ import annotations

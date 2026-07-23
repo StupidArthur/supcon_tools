@@ -32,7 +32,7 @@
 
 一条 Case 只有同时满足以下条件，才能标记为 `IMPLEMENTED`：
 
-- ID 与 `ua_test_gui/doc/test_cases/*.md` 完全一致；
+- ID 与 `ua_test_harness/test_cases/*.md` 完全一致；
 - `@case` 元数据包含章节、标题、类型、超时、文档路径和资源约束；
 - 函数体包含前置条件、动作和文档要求的断言；
 - 不使用空函数、固定 PASS、吞异常或降低阈值；

@@ -39,7 +39,7 @@
   - `scripts/` — runner、cleanup、teardown、diagnose
   - `ua_mocker/` — mock 配置(yaml)
   - `tpt_api/python/tpt_api/` — TPT API 客户端(真实签名来源)
-  - `ua_test_gui/doc/test_cases/` — 16 条 case 的产品预期(markdown,**不许改**)
+  - `ua_test_harness/test_cases/` — 16 条 case 的产品预期(markdown,**不许改**)
 
 ## 4. 铁律(违反即返工)
 

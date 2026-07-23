@@ -300,7 +300,7 @@
 ## 规模/时长缩减审计（任务 B）
 
 > 原则：能还原 doc 规模的还原；不能的**必须登记**，禁止静默缩减。  
-> 审计方式：静态代码 grep + doc 对照（`ua_test_gui/doc/test_cases/*.md`）。
+> 审计方式：静态代码 grep + doc 对照（`ua_test_gui/doc/test_cases/*.md`，已迁移至 `ua_test_harness/test_cases/`）。
 
 | Case ID | doc 要求 | 实现实际 | 代码位置 | 缩减理由 | 可否还原 |
 |---------|----------|----------|----------|----------|----------|

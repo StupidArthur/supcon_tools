@@ -187,9 +187,22 @@ def parse_case_doc(path: Path, repo_root: Path) -> tuple[list[dict[str, Any]], l
     return cases, malformed
 
 
+def default_test_cases_dir(repo_root: Path | None = None) -> Path:
+    """Return the canonical test-case spec directory.
+
+    When *repo_root* is given the directory is resolved relative to it
+    (``<repo_root>/ua_test_harness/test_cases``).  Otherwise the directory
+    is located relative to this file's package, which makes the harness
+    work without depending on the GUI source tree.
+    """
+    if repo_root is not None:
+        return repo_root.resolve() / "ua_test_harness" / "test_cases"
+    return Path(__file__).resolve().parent / "test_cases"
+
+
 def load_documented_cases(repo_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     repo_root = repo_root.resolve()
-    docs_dir = repo_root / "ua_test_gui" / "doc" / "test_cases"
+    docs_dir = default_test_cases_dir(repo_root)
     if not docs_dir.is_dir():
         raise FileNotFoundError(f"test case docs directory not found: {docs_dir}")
     rows: list[dict[str, Any]] = []

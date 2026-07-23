@@ -3,7 +3,7 @@
 ## 0. 当前开发顺序
 
 - 冻结新的 GUI 功能开发和 GUI 联调。
-- 先完成 `ua_test_gui/doc/test_cases/*.md` 定义的 419 条 Case。
+- 先完成 `ua_test_harness/test_cases/*.md` 定义的 419 条 Case。
 - 实现顺序为 UA-1 → UA-2 → UA-3；详细规则见 `ua_test_gui/doc/case-first-plan.md`。
 - 只有覆盖矩阵达到 `documented=419`、`implemented=419` 后，才恢复 GUI 工作。
 - 已有 GUI / Go / SQLite 代码保留；只允许修复阻断 CLI Case 执行、报告或清理的底层问题。
@@ -17,7 +17,7 @@
 
 ## 2. Case 跑不过不改 Case
 
-实现并运行 plan.md / doc/test_cases/*.md 中定义的 case 时:
+实现并运行 plan.md / ua_test_harness/test_cases/*.md 中定义的 case 时:
 - **Case 怎么写就怎么实现**,不删断言、不放宽阈值、不改步骤
 - 不要为"跑通过"加 `try/except` 把错误吞掉
 - 不要为"跑通过"修改用例的步骤顺序或断言条件

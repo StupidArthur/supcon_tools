@@ -125,7 +125,7 @@ b41490f fix: align fixtures with tpt_api signatures and real TPT environment
 
 ### 2.2 Case 跑不过不改 Case
 
-实现并运行 `plan.md` / `doc/test_cases/*.md` 中定义的 case 时:
+实现并运行 `plan.md` / `ua_test_harness/test_cases/*.md` 中定义的 case 时:
 - **Case 怎么写就怎么实现**,不删断言、不放宽阈值、不改步骤
 - 不要为"跑通过"加 `try/except` 把错误吞掉
 - 不要为"跑通过"修改用例的步骤顺序或断言条件
@@ -148,11 +148,11 @@ b41490f fix: align fixtures with tpt_api signatures and real TPT environment
 
 ---
 
-## 3. 用例设计规范(从 doc/test_cases/*.md 抽取出的共性)
+## 3. 用例设计规范(从 ua_test_harness/test_cases/*.md 抽取出的共性)
 
 ### 3.1 命名
 
-- ID 格式:`UA-<chapter>-<sub>-<NN>`,NN 是两位数,严格与 `doc/test_cases/<chapter>.md` 一致
+- ID 格式:`UA-<chapter>-<sub>-<NN>`,NN 是两位数,严格与 `ua_test_harness/test_cases/<chapter>.md` 一致
   - 正例:`UA-1-1-01`、`UA-3-4-008`
   - 反例:`UA-1-1-001`(三位数)、`UA-1-1-1`(位数不对)
 - 章节 prefix:
@@ -318,7 +318,7 @@ case fail 时在 summary / nightly-report.md 里分类:
 - 阻塞:ua_mocker 子节点缺失(§1.4 #1),RT 验证全部 fail,如实记录
 
 ### 6.6 codegen 工具(可选)
-- 写 `ua_test_harness/codegen/md2cases.py`:解析 doc/test_cases/*.md → 自动生成 @case 函数骨架(无函数体或最简函数体)
+- 写 `ua_test_harness/codegen/md2cases.py`:解析 ua_test_harness/test_cases/*.md → 自动生成 @case 函数骨架(无函数体或最简函数体)
 - 用法:先 codegen 出 419 个骨架,再人工填函数体(对 419 个 case 来说 codegen 仍省一半时间)
 - 不强求:骨架可执行只是为了让 catalog 能导出 + dry-run 能列出全部 case
 

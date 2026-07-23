@@ -262,6 +262,6 @@ TPT 通过 `tagBaseName` 关联 UA 节点，约定格式 `"<namespace>_<nodeName
 | `ua_test_gui/frontend/src/pages/VerifyPage.tsx` | 验证页（11 类型读写回写遍历） |
 | `ua_test_gui/frontend/src/pages/ProvisionPage.tsx` | 数据源/位号组态页 |
 | `ua_test_gui/doc/tpt_data-hub_test_cases.md` | 测试用例总表 |
-| `ua_test_gui/doc/test_cases/*.md` | 各二级点详情 |
+| `ua_test_harness/test_cases/*.md` | 各二级点详情 |
 | `ua_test_gui/doc/how-to-design-test-case.md` | 测试设计方法论 |
 | `ua_test_gui/doc/mm.md` | 项目记忆与进度 |
