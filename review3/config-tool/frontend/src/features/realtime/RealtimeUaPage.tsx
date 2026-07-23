@@ -22,6 +22,7 @@ export function RealtimeUaPage() {
   const setYamlText = useDslProjectStore((s) => s.setYamlText)
 
   const offlineRunning = useGenericSimStore((s) => s.status === 'running')
+  const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
 
   const [cycleTime, setCycleTime] = useState(0.5)
   const [port, setPort] = useState(18951)
@@ -33,7 +34,7 @@ export function RealtimeUaPage() {
 
   const isDirty = yamlDirty
   const canStart =
-    Boolean(filePath) && !isDirty && !offlineRunning && !dfStatus.running
+    Boolean(filePath) && !isDirty && !offlineRunning && !globalBatchRunning && !dfStatus.running
 
   useEffect(() => {
     systemApi.getDataFactoryPath().then((p) => {
@@ -69,8 +70,8 @@ export function RealtimeUaPage() {
 
   const handleStart = async () => {
     setError('')
-    if (offlineRunning) {
-      setError('离线仿真进行中，禁止启动实时运行')
+    if (offlineRunning || globalBatchRunning) {
+      setError('离线批量任务进行中，禁止启动实时运行')
       return
     }
     if (!filePath) {
@@ -154,9 +155,9 @@ export function RealtimeUaPage() {
               实时运行使用已保存的 DSL，请先保存。
             </div>
           ) : null}
-          {offlineRunning ? (
+          {offlineRunning || globalBatchRunning ? (
             <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-              离线仿真进行中，禁止启动实时运行。
+              离线批量任务进行中，禁止启动实时运行。
             </div>
           ) : null}
         </section>

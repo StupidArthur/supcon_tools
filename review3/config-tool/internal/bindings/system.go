@@ -37,19 +37,21 @@ type StartParams struct {
 
 // SystemStatus 系统状态
 type SystemStatus struct {
-	Running     bool    `json:"running"`
-	APIReady    bool    `json:"apiReady"`
-	PID         int     `json:"pid"`
-	ConfigPath  string  `json:"configPath"`
-	Mode        string  `json:"mode"`
-	CycleTime   float64 `json:"cycleTime"`
-	Port        int     `json:"port"`
-	APIPort     int     `json:"apiPort"`
-	APIHost     string  `json:"apiHost"`
-	RuntimeName string  `json:"runtimeName"`
-	StartedAt   string  `json:"startedAt"`
-	ConfigHash  string  `json:"configHash"`
-	LastError   string  `json:"lastError"`
+	Running       bool    `json:"running"`
+	APIReady      bool    `json:"apiReady"`
+	PID           int     `json:"pid"`
+	ConfigPath    string  `json:"configPath"`
+	Mode          string  `json:"mode"`
+	CycleTime     float64 `json:"cycleTime"`
+	Port          int     `json:"port"`
+	APIPort       int     `json:"apiPort"`
+	APIHost       string  `json:"apiHost"`
+	RuntimeName   string  `json:"runtimeName"`
+	StartedAt     string  `json:"startedAt"`
+	ConfigHash    string  `json:"configHash"`
+	LastError     string  `json:"lastError"`
+	BatchRunning  bool    `json:"batchRunning"`
+	ActiveBatches int     `json:"activeBatches"`
 }
 
 // BatchResult 批量仿真结果
@@ -283,13 +285,16 @@ func BuildArgs(params StartParams) []string {
 	return args
 }
 
-// beginBatch 获取批量任务 lease：实时进程运行中则拒绝，否则 activeBatches++。
-// 调用方必须用 defer endBatch()，失败路径也要释放。
+// beginBatch 获取批量任务 lease：实时进程运行中或已有批量任务运行时拒绝，否则 activeBatches++。
+// 同一时间最多允许一个批量任务。调用方必须用 defer endBatch()，失败路径也要释放。
 func (b *SystemBinding) beginBatch() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.proc != nil {
 		return fmt.Errorf("实时仿真正在运行，无法执行批量任务")
+	}
+	if b.activeBatches > 0 {
+		return fmt.Errorf("已有批量任务正在运行，禁止并发批量任务")
 	}
 	b.activeBatches++
 	return nil
@@ -635,40 +640,37 @@ func (b *SystemBinding) Status() SystemStatus {
 
 // buildStatus 构建状态（需要持有锁）
 func (b *SystemBinding) buildStatus() SystemStatus {
+	var st SystemStatus
 	proc := b.proc
-	if proc == nil {
-		return SystemStatus{
-			Running:   false,
-			LastError: b.lastError,
-		}
-	}
-
-	// 检查进程是否已退出
-	select {
-	case <-proc.done:
-		// 进程已退出
-		lastErr := formatProcessError(proc.result)
-		return SystemStatus{
-			Running:   false,
-			LastError: lastErr,
-		}
+	switch {
+	case proc == nil:
+		st = SystemStatus{Running: false, LastError: b.lastError}
 	default:
-		// 进程仍在运行
-		return SystemStatus{
-			Running:     true,
-			APIReady:    proc.ready, // 读取 proc.ready，禁止硬编码 true
-			PID:         proc.cmd.Process.Pid,
-			ConfigPath:  proc.params.ConfigPath,
-			Mode:        proc.params.Mode,
-			CycleTime:   proc.params.CycleTime,
-			Port:        proc.params.Port,
-			APIPort:     proc.params.APIPort,
-			APIHost:     proc.params.APIHost,
-			RuntimeName: proc.params.RuntimeName,
-			StartedAt:   proc.startedAt.Format(time.RFC3339),
-			ConfigHash:  proc.configHash,
+		select {
+		case <-proc.done:
+			// 进程已退出
+			st = SystemStatus{Running: false, LastError: formatProcessError(proc.result)}
+		default:
+			// 进程仍在运行
+			st = SystemStatus{
+				Running:     true,
+				APIReady:    proc.ready, // 读取 proc.ready，禁止硬编码 true
+				PID:         proc.cmd.Process.Pid,
+				ConfigPath:  proc.params.ConfigPath,
+				Mode:        proc.params.Mode,
+				CycleTime:   proc.params.CycleTime,
+				Port:        proc.params.Port,
+				APIPort:     proc.params.APIPort,
+				APIHost:     proc.params.APIHost,
+				RuntimeName: proc.params.RuntimeName,
+				StartedAt:   proc.startedAt.Format(time.RFC3339),
+				ConfigHash:  proc.configHash,
+			}
 		}
 	}
+	st.BatchRunning = b.activeBatches > 0
+	st.ActiveBatches = b.activeBatches
+	return st
 }
 
 // formatProcessError 格式化进程错误
@@ -1059,6 +1061,67 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 		args = append(args, "--sheet-name", sheetName)
 	}
 	return args
+}
+
+// ExportRowsFormatted 将前端当前内存中的仿真结果行（不重新仿真）导出为 csv/xlsx/xls。
+// columns 为要导出的有序列（含固定序号列 _cycle）；rows 为当前趋势图使用的同一份数据。
+//   - csv：Go 直接写出；
+//   - xlsx/xls：将 rows 写入临时 JSON，调用引擎侧 --convert-export 用 openpyxl/xlwt 转换。
+func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]any, exportPath string, format string, sheetName string) error {
+	if strings.TrimSpace(exportPath) == "" {
+		return fmt.Errorf("导出路径不能为空")
+	}
+	if len(columns) == 0 {
+		return fmt.Errorf("列为空，无法导出")
+	}
+	fmtLower := strings.ToLower(format)
+	switch fmtLower {
+	case "csv", "xlsx", "xls":
+	default:
+		return fmt.Errorf("不支持的导出格式: %s", format)
+	}
+
+	if fmtLower == "csv" {
+		return b.ExportCSVRows(columns, rows, exportPath)
+	}
+
+	if err := b.ensureDataFactory(); err != nil {
+		return err
+	}
+	workDir, err := os.MkdirTemp("", "review3-export-*")
+	if err != nil {
+		return fmt.Errorf("创建导出临时目录失败: %w", err)
+	}
+	defer os.RemoveAll(workDir)
+
+	rowsJSON := filepath.Join(workDir, "rows.json")
+	payload := map[string]any{"columns": columns, "rows": rows}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("序列化导出行失败: %w", err)
+	}
+	if err := os.WriteFile(rowsJSON, data, 0o644); err != nil {
+		return fmt.Errorf("写入导出临时文件失败: %w", err)
+	}
+
+	args := []string{"--convert-export", "--rows-json", rowsJSON, "--export", exportPath, "--format", fmtLower}
+	if sheetName != "" {
+		args = append(args, "--sheet-name", sheetName)
+	}
+	cmd := b.dfLaunch.command(b.commandFactory, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("DataFactory 导出失败: %w\n%s", err, string(output))
+	}
+
+	info, err := os.Stat(exportPath)
+	if err != nil {
+		return fmt.Errorf("导出文件未生成: %w", err)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf("导出文件为空")
+	}
+	return nil
 }
 
 // validateBatchCSV 确认目标 CSV 存在、非空、且至少有一行数据（不只表头）。

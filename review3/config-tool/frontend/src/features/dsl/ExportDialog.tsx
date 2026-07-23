@@ -22,8 +22,8 @@ interface ExportDialogProps {
   columns: string[]
   /** 默认勾选的列（来自 YAML display_args） */
   defaultSelected: string[]
-  /** 导出将重跑的周期数（仅用于提示） */
-  cycles: number
+  /** 当前仿真结果行数（仅用于提示，不重新仿真） */
+  rowCount: number
   busy: boolean
   error: string | null
   onClose: () => void
@@ -31,7 +31,7 @@ interface ExportDialogProps {
 }
 
 export function ExportDialog(props: ExportDialogProps) {
-  const { open, columns, defaultSelected, cycles, busy, error, onClose, onExport } = props
+  const { open, columns, defaultSelected, rowCount, busy, error, onClose, onExport } = props
   const [format, setFormat] = useState<ExportFormat>('xlsx')
   const [selected, setSelected] = useState<string[]>(defaultSelected)
   const [sheetName, setSheetName] = useState(DEFAULT_SHEET_NAME)
@@ -128,7 +128,7 @@ export function ExportDialog(props: ExportDialogProps) {
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-border px-4 py-3 text-xs">
-          <span className="mr-auto text-muted-foreground">将重跑 {cycles} 周期生成文件</span>
+          <span className="mr-auto text-muted-foreground">导出当前仿真结果：{rowCount} 行</span>
           <button
             type="button"
             onClick={onClose}

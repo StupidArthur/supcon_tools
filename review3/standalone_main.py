@@ -276,6 +276,56 @@ def run_instance(
     return engine_thread, opcua_thread, server, stop_event, shared_data
 
 
+def _write_rows_export(rows, columns, output_path, fmt, sheet_name):
+    """将内存结果行（_cycle 序号列 + 数据列）写为 csv/xlsx/xls，不重新仿真。"""
+    if fmt == "csv":
+        import csv as _csv
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            w = _csv.writer(f)
+            w.writerow(columns)
+            for row in rows:
+                w.writerow(["" if row.get(c) is None else row.get(c) for c in columns])
+        return
+    if fmt == "xlsx":
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = (sheet_name or "控制器")[:31]
+        ws.append(columns)
+        for row in rows:
+            ws.append([row.get(c) for c in columns])
+        wb.save(output_path)
+        return
+    if fmt == "xls":
+        import xlwt
+        book = xlwt.Workbook(encoding="utf-8")
+        sheet = book.add_sheet((sheet_name or "控制器")[:31])
+        for j, c in enumerate(columns):
+            sheet.write(0, j, c)
+        for i, row in enumerate(rows, start=1):
+            for j, c in enumerate(columns):
+                v = row.get(c)
+                sheet.write(i, j, "" if v is None else v)
+        book.save(output_path)
+        return
+    raise ValueError(f"不支持的导出格式: {fmt}")
+
+
+def _run_convert_export(args):
+    """--convert-export：读取 rows JSON，转换为格式化导出文件（不运行仿真）。"""
+    import json as _json
+    if not args.rows_json or not args.export:
+        print("Error: --convert-export requires --rows-json and --export")
+        sys.exit(1)
+    with open(args.rows_json, "r", encoding="utf-8") as f:
+        payload = _json.load(f)
+    columns = payload.get("columns", [])
+    rows = payload.get("rows", [])
+    fmt = (args.format or "csv").lower()
+    _write_rows_export(rows, columns, args.export, fmt, args.sheet_name or "控制器")
+    print(f"Done! Converted {len(rows)} rows to {args.export} ({fmt})")
+
+
 def main() -> None:
     """主程序入口"""
     parser = argparse.ArgumentParser(description="Data Factory Next - Standalone")
@@ -354,6 +404,17 @@ def main() -> None:
         help="Excel 工作表名（仅 xlsx/xls），缺省「控制器」"
     )
     parser.add_argument(
+        "--convert-export",
+        action="store_true",
+        help="将 --rows-json 指定的内存结果行转换为格式化导出文件（csv/xlsx/xls），不运行仿真"
+    )
+    parser.add_argument(
+        "--rows-json",
+        type=str,
+        default=None,
+        help="--convert-export 的输入：{\"columns\": [...], \"rows\": [{...}, ...]}"
+    )
+    parser.add_argument(
         "--api",
         action="store_true",
         help="Enable FastAPI debug HTTP+WebSocket server (for Wails GUI tooling)"
@@ -371,6 +432,11 @@ def main() -> None:
         help="FastAPI port (default: 8000)"
     )
     args = parser.parse_args()
+
+    # 内存结果行转换导出（不运行仿真，也不需要配置文件）
+    if args.convert_export:
+        _run_convert_export(args)
+        sys.exit(0)
 
     # 收集所有要运行的实例
     instances: Dict[str, Tuple[str, str]] = {}  # {instance_name: (yaml_path, server_url)}

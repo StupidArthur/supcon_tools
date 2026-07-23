@@ -26,9 +26,18 @@ interface GenericSimState {
   stale: boolean
   /** Invalidates in-flight runs (incremented on project switch / clear). */
   epoch: number
+  /**
+   * 全局 DataFactory 批量任务占用状态（与「当前工程结果状态」分离）。
+   * 工程切换 / 返回首页 / 清空结果都不会清除；只有发起任务在自己 finally 里、
+   * 且 runId 仍匹配时才释放（lease 语义），避免旧任务清掉后来任务的状态。
+   */
+  globalBatchRunning: boolean
+  globalBatchRunId: string | null
   setCycles: (n: number) => void
   setSelectedColumns: (cols: string[]) => void
   toggleColumn: (col: string) => void
+  beginGlobalBatch: (runId: string) => void
+  endGlobalBatch: (runId: string) => void
   beginRun: (opts: { projectId: string; yamlHash: string; cycles: number; epoch: number }) => string
   succeed: (payload: {
     projectId: string
@@ -78,6 +87,8 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
   boundYamlHash: null,
   stale: false,
   epoch: 0,
+  globalBatchRunning: false,
+  globalBatchRunId: null,
 
   setCycles: (cycles) => set({ cycles: Math.max(1, Math.floor(cycles) || DEFAULT_OFFLINE_SIM_CYCLES) }),
   setSelectedColumns: (selectedColumns) => set({ selectedColumns }),
@@ -86,6 +97,14 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     set({
       selectedColumns: cur.includes(col) ? cur.filter((c) => c !== col) : [...cur, col],
     })
+  },
+
+  beginGlobalBatch: (runId) => set({ globalBatchRunning: true, globalBatchRunId: runId }),
+  endGlobalBatch: (runId) => {
+    // lease 语义：只释放自己发起的任务，不能清掉后来任务的状态。
+    if (get().globalBatchRunId === runId) {
+      set({ globalBatchRunning: false, globalBatchRunId: null })
+    }
   },
 
   beginRun: ({ projectId, yamlHash, cycles, epoch }) => {

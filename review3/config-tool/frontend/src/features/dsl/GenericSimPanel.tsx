@@ -89,6 +89,7 @@ export function GenericSimPanel() {
   const toggleColumn = useGenericSimStore((s) => s.toggleColumn)
   const hasDisplay = useGenericSimStore((s) => s.hasDisplayResult(projectId))
   const exportable = useGenericSimStore((s) => s.hasExportableResult(projectId))
+  const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
 
   const [preflightError, setPreflightError] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -98,7 +99,7 @@ export function GenericSimPanel() {
   const owned = boundProjectId === projectId
   const running = status === 'running' && owned
   const yamlText = useDslProjectStore((s) => s.yamlText)
-  const canStart = !running && !dfRunning && Boolean(yamlText.trim())
+  const canStart = !running && !dfRunning && !globalBatchRunning && Boolean(yamlText.trim())
   const displayError = preflightError || (owned ? error : null)
 
   const numericColumns = useMemo(
@@ -139,6 +140,10 @@ export function GenericSimPanel() {
       setPreflightError('实时运行进行中，禁止启动离线仿真')
       return
     }
+    if (useGenericSimStore.getState().globalBatchRunning) {
+      setPreflightError('已有批量任务正在运行，禁止启动新的离线仿真')
+      return
+    }
     const yamlSnapshot = useDslProjectStore.getState().yamlText
     if (!yamlSnapshot.trim()) {
       setPreflightError('YAML 内容为空，无法启动仿真')
@@ -148,7 +153,10 @@ export function GenericSimPanel() {
     const epoch = useGenericSimStore.getState().epoch
     const yamlHash = hashYamlText(yamlSnapshot)
     const runId = beginRun({ projectId, yamlHash, cycles: n, epoch })
+    // 全局批量占用 lease：真正结束后才在 finally 释放（按 runId 匹配）。
+    useGenericSimStore.getState().beginGlobalBatch(runId)
 
+    // 临时路径保存在本异步函数局部变量，不依赖全局 lastTempPath，避免并发任务互相覆盖。
     let tempPath: string | null = null
     try {
       const exe = await systemApi.getDataFactoryPath()
@@ -175,7 +183,7 @@ export function GenericSimPanel() {
       fail({ projectId, runId, epoch, error: err?.message || String(err) })
     } finally {
       await cleanupTempYAML(tempPath)
-      useGenericSimStore.setState({ lastTempPath: null })
+      useGenericSimStore.getState().endGlobalBatch(runId)
     }
   }
 
@@ -186,25 +194,29 @@ export function GenericSimPanel() {
       return
     }
     setExportBusy(true)
-    let tempPath: string | null = null
     try {
       const path = await systemApi.saveExportFile(opts.format)
       if (!path) return
-      if (!useGenericSimStore.getState().hasExportableResult(projectId)) {
-        setExportError('工程已切换或结果已失效，取消导出')
+      // 对话框返回后复查身份与 stale：工程/run 改变或已过期则取消。
+      const cur = useGenericSimStore.getState()
+      if (!cur.hasExportableResult(projectId)) {
+        setExportError('工程已切换、结果已失效或已过期，取消导出')
         return
       }
-      const yamlSnapshot = useDslProjectStore.getState().yamlText
-      if (!yamlSnapshot.trim()) throw new Error('YAML 内容为空，无法导出')
-      tempPath = await materializeYamlTextToTemp(yamlSnapshot)
-      const n = completedCycles > 0 ? completedCycles : cycles
-      await systemApi.exportBatchFormatted(tempPath, n, path, opts.format, opts.columns, opts.sheetName)
+      // 导出内容与趋势图完全一致：固定序号列 _cycle + 用户勾选列，全部来自当前内存 rows。
+      // 不重新仿真、不重新物化 YAML。
+      const exportColumns = ['_cycle', ...opts.columns]
+      await systemApi.exportRowsFormatted(
+        exportColumns,
+        cur.rows as Array<Record<string, any>>,
+        path,
+        opts.format,
+        opts.sheetName,
+      )
       setExportOpen(false)
     } catch (err: any) {
       setExportError(err?.message || String(err))
     } finally {
-      await cleanupTempYAML(tempPath)
-      useGenericSimStore.setState({ lastTempPath: null })
       setExportBusy(false)
     }
   }
@@ -254,6 +266,7 @@ export function GenericSimPanel() {
             {status === 'success' && owned ? ` · ${completedCycles} 周期` : ''}
             {stale && owned ? ' · 已过期' : ''}
             {dfRunning ? ' · 实时占用' : ''}
+            {globalBatchRunning && !running ? ' · 全局批量任务运行中' : ''}
           </span>
         </span>
         <div className="min-w-2 flex-1" />
@@ -376,7 +389,7 @@ export function GenericSimPanel() {
         open={exportOpen}
         columns={numericColumns}
         defaultSelected={selectedColumns}
-        cycles={completedCycles}
+        rowCount={rows.length}
         busy={exportBusy}
         error={exportError}
         onClose={() => setExportOpen(false)}
