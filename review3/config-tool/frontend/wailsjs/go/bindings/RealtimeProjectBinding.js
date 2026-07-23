@@ -18,8 +18,16 @@ export function CompileProject(arg1, arg2) {
   return window['go']['bindings']['RealtimeProjectBinding']['CompileProject'](arg1, arg2);
 }
 
+export function CreateAlarmRule(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['CreateAlarmRule'](arg1, arg2);
+}
+
 export function CreateProject(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['CreateProject'](arg1);
+}
+
+export function DeleteAlarmRule(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['DeleteAlarmRule'](arg1, arg2);
 }
 
 export function DeleteProject(arg1) {
@@ -28,6 +36,10 @@ export function DeleteProject(arg1) {
 
 export function GetForces(arg1, arg2) {
   return window['go']['bindings']['RealtimeProjectBinding']['GetForces'](arg1, arg2);
+}
+
+export function ListAlarmRules(arg1) {
+  return window['go']['bindings']['RealtimeProjectBinding']['ListAlarmRules'](arg1);
 }
 
 export function ListProjects() {
@@ -54,8 +66,16 @@ export function SetForce(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['bindings']['RealtimeProjectBinding']['SetForce'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function UpdateAlarmRule(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['UpdateAlarmRule'](arg1, arg2);
+}
+
 export function UpdateReplicas(arg1, arg2, arg3) {
   return window['go']['bindings']['RealtimeProjectBinding']['UpdateReplicas'](arg1, arg2, arg3);
+}
+
+export function ValidateAlarmRules(arg1) {
+  return window['go']['bindings']['RealtimeProjectBinding']['ValidateAlarmRules'](arg1);
 }
 
 export function ValidateProject(arg1) {

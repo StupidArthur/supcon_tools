@@ -98,6 +98,12 @@ export const realtimeProjectApi = {
   validateProject: (projectId: string) => RealtimeProjectBinding.ValidateProject(projectId),
   compileProject: (projectId: string, outputPath: string) =>
     RealtimeProjectBinding.CompileProject(projectId, outputPath),
+  listAlarmRules: (projectId: string) => RealtimeProjectBinding.ListAlarmRules(projectId),
+  createAlarmRule: (projectId: string, rule: any) => RealtimeProjectBinding.CreateAlarmRule(projectId, rule),
+  updateAlarmRule: (projectId: string, rule: any) => RealtimeProjectBinding.UpdateAlarmRule(projectId, rule),
+  deleteAlarmRule: (projectId: string, alarmId: string) =>
+    RealtimeProjectBinding.DeleteAlarmRule(projectId, alarmId),
+  validateAlarmRules: (projectId: string) => RealtimeProjectBinding.ValidateAlarmRules(projectId),
   setForce: (apiHost: string, apiPort: number, tag: string, mode: string, value?: number, duration?: number) =>
     RealtimeProjectBinding.SetForce(apiHost, apiPort, tag, mode, value ?? null, duration ?? null),
   clearForce: (apiHost: string, apiPort: number, tag: string) =>

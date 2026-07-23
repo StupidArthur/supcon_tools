@@ -77,6 +77,26 @@ func (b *RealtimeProjectBinding) ValidateProject(projectID string) (realtime.Val
 	return b.manager.ValidateProject(b.ctx, projectID)
 }
 
+func (b *RealtimeProjectBinding) ListAlarmRules(projectID string) ([]realtime.AlarmRule, error) {
+	return b.manager.ListAlarmRules(b.ctx, projectID)
+}
+
+func (b *RealtimeProjectBinding) CreateAlarmRule(projectID string, rule realtime.AlarmRule) ([]realtime.AlarmRule, error) {
+	return b.manager.CreateAlarmRule(b.ctx, projectID, rule)
+}
+
+func (b *RealtimeProjectBinding) UpdateAlarmRule(projectID string, rule realtime.AlarmRule) ([]realtime.AlarmRule, error) {
+	return b.manager.UpdateAlarmRule(b.ctx, projectID, rule)
+}
+
+func (b *RealtimeProjectBinding) DeleteAlarmRule(projectID string, alarmID string) ([]realtime.AlarmRule, error) {
+	return b.manager.DeleteAlarmRule(b.ctx, projectID, alarmID)
+}
+
+func (b *RealtimeProjectBinding) ValidateAlarmRules(projectID string) error {
+	return b.manager.ValidateAlarmRules(b.ctx, projectID)
+}
+
 func (b *RealtimeProjectBinding) CompileProject(projectID, outputPath string) (string, error) {
 	return b.manager.CompileProject(b.ctx, projectID, outputPath)
 }

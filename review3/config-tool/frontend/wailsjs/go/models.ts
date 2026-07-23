@@ -853,6 +853,36 @@ export namespace config {
 
 export namespace realtime {
 	
+	export class AlarmRule {
+	    id: string;
+	    name: string;
+	    tag: string;
+	    direction: string;
+	    limit: number;
+	    severity: string;
+	    delay_seconds: number;
+	    deadband: number;
+	    enabled: boolean;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AlarmRule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.tag = source["tag"];
+	        this.direction = source["direction"];
+	        this.limit = source["limit"];
+	        this.severity = source["severity"];
+	        this.delay_seconds = source["delay_seconds"];
+	        this.deadband = source["deadband"];
+	        this.enabled = source["enabled"];
+	        this.message = source["message"];
+	    }
+	}
 	export class InstanceOrigin {
 	    sourceId: string;
 	    sourceFile: string;

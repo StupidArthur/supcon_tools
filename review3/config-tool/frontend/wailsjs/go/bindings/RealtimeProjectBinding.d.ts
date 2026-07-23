@@ -12,11 +12,17 @@ export function ClearForce(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function CompileProject(arg1:string,arg2:string):Promise<string>;
 
+export function CreateAlarmRule(arg1:string,arg2:realtime.AlarmRule):Promise<Array<realtime.AlarmRule>>;
+
 export function CreateProject(arg1:string):Promise<realtime.Project>;
+
+export function DeleteAlarmRule(arg1:string,arg2:string):Promise<Array<realtime.AlarmRule>>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
 export function GetForces(arg1:string,arg2:number):Promise<bindings.ForceState>;
+
+export function ListAlarmRules(arg1:string):Promise<Array<realtime.AlarmRule>>;
 
 export function ListProjects():Promise<Array<realtime.ProjectSummary>>;
 
@@ -30,6 +36,10 @@ export function SetContext(arg1:context.Context):Promise<void>;
 
 export function SetForce(arg1:string,arg2:number,arg3:string,arg4:string,arg5:any,arg6:any):Promise<void>;
 
+export function UpdateAlarmRule(arg1:string,arg2:realtime.AlarmRule):Promise<Array<realtime.AlarmRule>>;
+
 export function UpdateReplicas(arg1:string,arg2:string,arg3:number):Promise<realtime.ProjectView>;
+
+export function ValidateAlarmRules(arg1:string):Promise<void>;
 
 export function ValidateProject(arg1:string):Promise<realtime.ValidationResult>;

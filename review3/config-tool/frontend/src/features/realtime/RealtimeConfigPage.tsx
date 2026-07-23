@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
 import { CreateRealtimeProjectDialog } from './CreateRealtimeProjectDialog'
 import { DuplicateInstancesDialog } from './DuplicateInstancesDialog'
+import { AlarmConfigPanel } from './AlarmConfigPanel'
 
 export function RealtimeConfigPage() {
   const {
@@ -90,6 +91,7 @@ export function RealtimeConfigPage() {
             没有打开的工程。新建或选择一个实时工程开始组态。
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-2 gap-4">
             <section className="rounded-md border border-border bg-card" data-testid="realtime-sources-table">
               <div className="border-b border-border px-3 py-2 text-xs font-medium">YAML</div>
@@ -158,6 +160,8 @@ export function RealtimeConfigPage() {
               </div>
             </section>
           </div>
+          <AlarmConfigPanel projectId={currentProject.id} />
+          </>
         )}
 
         {error ? (

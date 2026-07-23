@@ -48,3 +48,19 @@ export interface RealtimeProjectView {
   project: RealtimeProject
   validation: RealtimeValidationResult
 }
+
+export type AlarmDirection = 'high' | 'low'
+export type AlarmSeverity = 'info' | 'warning' | 'high' | 'critical'
+
+export interface AlarmRule {
+  id: string
+  name: string
+  tag: string
+  direction: AlarmDirection
+  limit: number
+  severity: AlarmSeverity
+  delay_seconds: number
+  deadband: number
+  enabled: boolean
+  message: string
+}
