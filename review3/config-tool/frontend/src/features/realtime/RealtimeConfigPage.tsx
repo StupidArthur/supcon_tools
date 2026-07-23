@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
 import { CreateRealtimeProjectDialog } from './CreateRealtimeProjectDialog'
 import { DuplicateInstancesDialog } from './DuplicateInstancesDialog'
+import type { ExpandedInstance } from './types'
 
 export function RealtimeConfigPage() {
   const {
@@ -22,6 +23,7 @@ export function RealtimeConfigPage() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [instanceFilter, setInstanceFilter] = useState('')
+  const [detailInstance, setDetailInstance] = useState<ExpandedInstance | null>(null)
 
   useEffect(() => {
     void refreshProjects()
@@ -30,6 +32,11 @@ export function RealtimeConfigPage() {
   const filteredInstances = instanceFilter
     ? instances.filter((i) => i.name.toLowerCase().includes(instanceFilter.toLowerCase()))
     : instances
+
+  const sourceNameById = (sourceId: string): string => {
+    const src = currentProject?.sources.find((s) => s.id === sourceId)
+    return src ? src.name : sourceId
+  }
 
   const handleReplicasChange = async (sourceId: string, value: string) => {
     if (!currentProject) return
@@ -133,6 +140,7 @@ export function RealtimeConfigPage() {
             <section className="rounded-md border border-border bg-card" data-testid="realtime-instances-table">
               <div className="flex items-center gap-2 border-b border-border px-3 py-2">
                 <span className="text-xs font-medium">实例</span>
+                <span className="text-xs text-muted-foreground">({filteredInstances.length})</span>
                 <input
                   type="text"
                   placeholder="搜索..."
@@ -148,11 +156,33 @@ export function RealtimeConfigPage() {
                     {instances.length === 0 ? '暂无实例' : '无匹配结果'}
                   </div>
                 ) : (
-                  filteredInstances.map((inst, i) => (
-                    <div key={`${inst.name}-${i}`} className="px-3 py-1 text-xs">
-                      {inst.name}
-                    </div>
-                  ))
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-card">
+                      <tr className="border-b border-border">
+                        <th className="px-3 py-1.5 text-left font-medium">实例名</th>
+                        <th className="px-3 py-1.5 text-left font-medium">来源 YAML</th>
+                        <th className="px-3 py-1.5 text-center font-medium">详情</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredInstances.map((inst, i) => (
+                        <tr key={`${inst.name}-${i}`} className="border-b border-border/40">
+                          <td className="px-3 py-1 font-mono">{inst.name}</td>
+                          <td className="px-3 py-1 text-muted-foreground">{sourceNameById(inst.sourceId)}</td>
+                          <td className="px-3 py-1 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setDetailInstance(inst)}
+                              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
+                              data-testid={`realtime-detail-${inst.name}`}
+                            >
+                              详情
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </section>
@@ -177,6 +207,46 @@ export function RealtimeConfigPage() {
 
       {duplicates.length > 0 ? (
         <DuplicateInstancesDialog duplicates={duplicates} onClose={clearError} />
+      ) : null}
+
+      {detailInstance ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="instance-detail-dialog">
+          <div className="w-96 rounded-lg border border-border bg-card p-4 shadow-lg">
+            <h3 className="text-sm font-medium">实例详情</h3>
+            <div className="mt-3 space-y-2 text-xs">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">实例名</span>
+                <span className="font-mono">{detailInstance.name}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">原始实例名</span>
+                <span className="font-mono">{detailInstance.originalName}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">来源 YAML</span>
+                <span>{sourceNameById(detailInstance.sourceId)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">副本序号</span>
+                <span>{detailInstance.replicaIndex}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">源文件</span>
+                <span className="truncate font-mono" title={detailInstance.sourceFile}>{detailInstance.sourceFile}</span>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDetailInstance(null)}
+                className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground"
+                data-testid="instance-detail-close"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )
