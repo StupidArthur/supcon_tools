@@ -1027,30 +1027,96 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-func TestReadDisplayColumnsFiltersToCSVColumns(t *testing.T) {
+func TestReadDisplayMetadataReadsColumnsAndScales(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
-	writeSidecar(t, csvPath, `{"display_columns":["pid2.MV","pid2.SV","tank_2.level","not_in_csv"]}`)
+	writeSidecar(t, csvPath, `{"display_columns":["pid2.MV","pid2.SV","tank_2.level","not_in_csv"],`+
+		`"plot_scales":{"pid2.MV":100.0,"pid2.SV":1.2,"tank_2.level":1.2,"not_in_csv":99.0}}`)
 
-	valid := []string{"_cycle", "pid2.MV", "pid2.SV", "pid2.PV", "tank_2.level", "tank_1.level"}
-	got := readDisplayColumns(csvPath, valid)
-	want := []string{"pid2.MV", "pid2.SV", "tank_2.level"}
-	if !equalStrings(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
+	valid := []string{"_cycle", "pid2.MV", "pid2.SV", "tank_2.level"}
+	gotCols, gotScales := readDisplayMetadata(csvPath, valid)
+	if !equalStrings(gotCols, []string{"pid2.MV", "pid2.SV", "tank_2.level"}) {
+		t.Fatalf("columns got %v, want [pid2.MV pid2.SV tank_2.level]", gotCols)
+	}
+	wantScales := map[string]float64{"pid2.MV": 100.0, "pid2.SV": 1.2, "tank_2.level": 1.2}
+	if len(gotScales) != len(wantScales) {
+		t.Fatalf("scales len got %d, want %d (%v)", len(gotScales), len(wantScales), gotScales)
+	}
+	for k, v := range wantScales {
+		if gotScales[k] != v {
+			t.Fatalf("scale %s got %v, want %v", k, gotScales[k], v)
+		}
 	}
 }
 
-func TestReadDisplayColumnsMissingSidecar(t *testing.T) {
+func TestReadDisplayMetadataBackcompatOldSidecar(t *testing.T) {
+	// 旧 sidecar 只有 display_columns，没有 plot_scales — 必须返回 nil scales，不报错。
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
-	if got := readDisplayColumns(csvPath, []string{"a"}); got != nil {
-		t.Fatalf("expected nil for missing sidecar, got %v", got)
+	writeSidecar(t, csvPath, `{"display_columns":["a","b"]}`)
+	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a", "b", "c"})
+	if !equalStrings(gotCols, []string{"a", "b"}) {
+		t.Fatalf("columns got %v", gotCols)
+	}
+	if gotScales != nil {
+		t.Fatalf("expected nil scales for old sidecar, got %v", gotScales)
 	}
 }
 
-func TestReadDisplayColumnsMalformedSidecar(t *testing.T) {
+func TestReadDisplayMetadataFiltersInvalidScales(t *testing.T) {
+	csvPath := filepath.Join(t.TempDir(), "result.csv")
+	// CSV 中只保留 a、b；plot_scales 中混入：
+	//  - 0、负数：违反 f > 0
+	//  - 字符串：json.Number 解析失败
+	//  - c、d：列不在 CSV 中
+	// 合法的只剩 a=1.2、b=100.0。
+	body := `{"display_columns":["a","b"],` +
+		`"plot_scales":{"a":1.2,"b":100.0,"c":1.2,"d":1.2,` +
+		`"zero":0,"neg":-1.2,"str":"abc"}}`
+	writeSidecar(t, csvPath, body)
+	if data, _ := os.ReadFile(csvPath + ".display.json"); len(data) > 0 {
+		t.Logf("sidecar: %s", string(data))
+	}
+	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a", "b"})
+	if !equalStrings(gotCols, []string{"a", "b"}) {
+		// dump fresh payload
+		if data, _ := os.ReadFile(csvPath + ".display.json"); data != nil {
+			t.Logf("raw bytes: %q", string(data))
+			// local parse to see what json sees
+			t.Logf("parsed columns: %v", gotCols)
+		}
+		t.Fatalf("columns got %v", gotCols)
+	}
+	if len(gotScales) != 2 {
+		t.Fatalf("scales got %v (want only a=1.2, b=100.0)", gotScales)
+	}
+	if gotScales["a"] != 1.2 {
+		t.Fatalf("a got %v, want 1.2", gotScales["a"])
+	}
+	if gotScales["b"] != 100.0 {
+		t.Fatalf("b got %v, want 100.0", gotScales["b"])
+	}
+	for _, bad := range []string{"zero", "neg", "str", "c", "d"} {
+		if _, ok := gotScales[bad]; ok {
+			t.Fatalf("invalid scale %q should be filtered, got %v", bad, gotScales[bad])
+		}
+	}
+}
+
+func TestReadDisplayMetadataMissingSidecar(t *testing.T) {
+	csvPath := filepath.Join(t.TempDir(), "result.csv")
+	// 不存在时必须返回零值（nil, nil），不阻断 Batch。
+	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a"})
+	if gotCols != nil || gotScales != nil {
+		t.Fatalf("expected (nil, nil), got (%v, %v)", gotCols, gotScales)
+	}
+}
+
+func TestReadDisplayMetadataMalformedSidecar(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
 	writeSidecar(t, csvPath, `{not json`)
-	if got := readDisplayColumns(csvPath, []string{"a"}); got != nil {
-		t.Fatalf("expected nil for malformed sidecar, got %v", got)
+	// JSON 损坏必须不阻断 Batch（返回零值，不 panic）。
+	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a"})
+	if gotCols != nil || gotScales != nil {
+		t.Fatalf("expected (nil, nil) for malformed sidecar, got (%v, %v)", gotCols, gotScales)
 	}
 }
 

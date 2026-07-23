@@ -160,3 +160,76 @@ describe('useGenericSimStore', () => {
     expect(useGenericSimStore.getState().hasDisplayResult('p1')).toBe(true)
   })
 })
+
+describe('useGenericSimStore plotScales lifecycle', () => {
+  beforeEach(() => {
+    useGenericSimStore.getState().clearResults()
+  })
+
+  it('beginRun clears any prior plotScales', () => {
+    // 先用 succeed 写入 plotScales
+    const epoch = useGenericSimStore.getState().epoch
+    const r1 = useGenericSimStore.getState().beginRun({
+      projectId: 'p1', yamlHash: 'h1', cycles: 1, epoch,
+    })
+    useGenericSimStore.getState().succeed({
+      projectId: 'p1', runId: r1, epoch,
+      columns: ['_cycle', 'pid.PV'], rows: [{ _cycle: 0, 'pid.PV': 0.8 }],
+      completedCycles: 1, currentYamlHash: 'h1',
+      plotScales: { 'pid.PV': 1.2 },
+    })
+    expect(useGenericSimStore.getState().plotScales).toEqual({ 'pid.PV': 1.2 })
+
+    // 新一轮必须清空（与该 run 的结果身份一起作废）
+    const epoch2 = useGenericSimStore.getState().epoch
+    useGenericSimStore.getState().beginRun({
+      projectId: 'p1', yamlHash: 'h2', cycles: 1, epoch: epoch2,
+    })
+    expect(useGenericSimStore.getState().plotScales).toEqual({})
+  })
+
+  it('succeed persists only finite-positive scales for actual columns', () => {
+    const epoch = useGenericSimStore.getState().epoch
+    const runId = useGenericSimStore.getState().beginRun({
+      projectId: 'p1', yamlHash: 'h1', cycles: 1, epoch,
+    })
+    useGenericSimStore.getState().succeed({
+      projectId: 'p1', runId, epoch,
+      columns: ['_cycle', 'pid.PV', 'pid.MV'],
+      rows: [
+        { _cycle: 0, 'pid.PV': 0.8, 'pid.MV': 66 },
+        { _cycle: 1, 'pid.PV': 0.9, 'pid.MV': 70 },
+      ],
+      completedCycles: 2, currentYamlHash: 'h1',
+      plotScales: {
+        'pid.PV': 1.2,
+        'pid.MV': 100,
+        'pid.SV': 1.2,        // 列不在 columns 中 — 过滤
+        'pid.zero': 0,       // 非正 — 过滤
+        'pid.neg': -1,       // 负数 — 过滤
+        'pid.NaN': Number.NaN, // 非有限 — 过滤
+        'pid.Inf': Number.POSITIVE_INFINITY, // 非有限 — 过滤
+      } as unknown as Record<string, number>,
+    })
+    expect(useGenericSimStore.getState().plotScales).toEqual({
+      'pid.PV': 1.2,
+      'pid.MV': 100,
+    })
+  })
+
+  it('clearResults resets plotScales', () => {
+    const epoch = useGenericSimStore.getState().epoch
+    const runId = useGenericSimStore.getState().beginRun({
+      projectId: 'p1', yamlHash: 'h1', cycles: 1, epoch,
+    })
+    useGenericSimStore.getState().succeed({
+      projectId: 'p1', runId, epoch,
+      columns: ['_cycle', 'pid.PV'], rows: [{ _cycle: 0, 'pid.PV': 0.8 }],
+      completedCycles: 1, currentYamlHash: 'h1',
+      plotScales: { 'pid.PV': 1.2 },
+    })
+    expect(useGenericSimStore.getState().plotScales).toEqual({ 'pid.PV': 1.2 })
+    useGenericSimStore.getState().clearResults()
+    expect(useGenericSimStore.getState().plotScales).toEqual({})
+  })
+})

@@ -24,6 +24,7 @@ import { systemApi } from '../../lib/api'
 import { type ExportFormat } from '../../lib/exportTypes'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { ExportDialog } from './ExportDialog'
+import { hasPlotScale, scalePlotValue } from './plotScaling'
 import {
   createExportSession,
   type ExportSession,
@@ -93,6 +94,7 @@ export function GenericSimPanel() {
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
   const boundRunId = useGenericSimStore((s) => s.boundRunId)
   const boundYamlHash = useGenericSimStore((s) => s.boundYamlHash)
+  const plotScales = useGenericSimStore((s) => s.plotScales)
 
   const [preflightError, setPreflightError] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -149,12 +151,13 @@ export function GenericSimPanel() {
       for (const col of selectedColumns) {
         const v = row[col]
         if (typeof v === 'number' && Number.isFinite(v)) {
-          point[col] = v
+          // 绘图缩放：按当前结果身份保存的 [ref]，不修改原始 rows / session.rows / 导出数据。
+          point[col] = scalePlotValue(v, plotScales[col])
         }
       }
       return point
     })
-  }, [rows, selectedColumns, owned, hasDisplay])
+  }, [rows, selectedColumns, plotScales, owned, hasDisplay])
 
   const stats = useMemo(() => {
     if (!owned || !hasDisplay) return [] as Array<{ col: string; stat: ColumnStat }>
@@ -201,6 +204,7 @@ export function GenericSimPanel() {
       const resultColumns = (result as any).columns || []
       const resultRows = ((result as any).rows || []) as Array<Record<string, unknown>>
       const displayColumns = ((result as any).displayColumns || []) as string[]
+      const resultPlotScales = ((result as any).plotScales || {}) as Record<string, number>
       const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
       succeed({
         projectId,
@@ -211,6 +215,7 @@ export function GenericSimPanel() {
         completedCycles: resultRows.length,
         currentYamlHash,
         displayColumns,
+        plotScales: resultPlotScales,
       })
     } catch (err: any) {
       fail({ projectId, runId, epoch, error: err?.message || String(err) })
@@ -430,6 +435,7 @@ export function GenericSimPanel() {
                 <Line
                   key={col}
                   type="monotone"
+                  name={hasPlotScale(plotScales, col) ? `${col}（量程%）` : col}
                   dataKey={col}
                   stroke={COLORS[i % COLORS.length]}
                   dot={false}

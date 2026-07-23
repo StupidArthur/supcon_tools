@@ -38,6 +38,7 @@ export namespace bindings {
 	    columns: string[];
 	    rows: any[];
 	    displayColumns: string[];
+	    plotScales: Record<string, number>;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchResult(source);
@@ -48,6 +49,7 @@ export namespace bindings {
 	        this.columns = source["columns"];
 	        this.rows = source["rows"];
 	        this.displayColumns = source["displayColumns"];
+	        this.plotScales = source["plotScales"];
 	    }
 	}
 	export class StartParams {

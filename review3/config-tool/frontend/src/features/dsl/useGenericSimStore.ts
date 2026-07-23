@@ -15,6 +15,12 @@ interface GenericSimState {
   columns: string[]
   rows: Array<Record<string, unknown>>
   selectedColumns: string[]
+  /**
+   * 绘图缩放 (display_args 中的 [ref])：plotValue = raw × 100 / ref。
+   * 仅当 ref 有限且 > 0 时保留；与 projectId/runId/yamlHash 一起作为结果身份被快照切换/清空。
+   * 不直接修改 rows / session.rows / 导出数据——只在构造 chartData 时按列应用。
+   */
+  plotScales: Record<string, number>
   /** Project/session that owns the current (or in-flight) result. */
   boundProjectId: string | null
   /** Run id of in-flight or last completed run. */
@@ -49,6 +55,8 @@ interface GenericSimState {
     currentYamlHash: string
     /** DSL display_args 声明的默认绘图列（来自引擎），作为默认选中；YAML 未声明时为空。 */
     displayColumns?: string[]
+    /** 绘图缩放（[ref]）：plotValue = raw × 100 / ref；缺失时使用空对象。 */
+    plotScales?: Record<string, number>
   }) => boolean
   fail: (payload: { projectId: string; runId: string; epoch: number; error: string }) => boolean
   markStale: () => void
@@ -80,6 +88,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
   columns: [],
   rows: [],
   selectedColumns: [],
+  plotScales: {},
   boundProjectId: null,
   boundRunId: null,
   boundYamlHash: null,
@@ -115,6 +124,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       columns: [],
       rows: [],
       selectedColumns: [],
+      plotScales: {},
       boundProjectId: projectId,
       boundRunId: runId,
       boundYamlHash: yamlHash,
@@ -124,7 +134,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     return runId
   },
 
-  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles, currentYamlHash, displayColumns }) => {
+  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles, currentYamlHash, displayColumns, plotScales }) => {
     const s = get()
     if (s.epoch !== epoch || s.boundProjectId !== projectId || s.boundRunId !== runId) {
       return false
@@ -135,6 +145,16 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     // 仅保留 CSV 实际存在的列，YAML 未声明则为空（由用户手动勾选）。
     const columnSet = new Set(columns)
     const selectedColumns = (displayColumns ?? []).filter((c) => columnSet.has(c))
+    // 绘图缩放：保留 CSV 中真实存在、有限且 > 0 的 ref；其他列被忽略，保证除零安全。
+    const plotScalesFiltered: Record<string, number> = {}
+    if (plotScales) {
+      for (const c of columns) {
+        const v = plotScales[c]
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+          plotScalesFiltered[c] = v
+        }
+      }
+    }
     set({
       status: 'success',
       columns,
@@ -142,6 +162,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       completedCycles,
       error: null,
       selectedColumns,
+      plotScales: plotScalesFiltered,
       stale,
     })
     return true
@@ -176,6 +197,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       columns: [],
       rows: [],
       selectedColumns: [],
+      plotScales: {},
       completedCycles: 0,
       boundProjectId: null,
       boundRunId: null,

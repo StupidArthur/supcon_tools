@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -61,6 +62,10 @@ type BatchResult struct {
 	// DisplayColumns 是 DSL display_args 声明的默认绘图列（来自引擎 get_display_variables），
 	// 已过滤为 Columns 中实际存在的列；YAML 未写 display_args 时为空。
 	DisplayColumns []string `json:"displayColumns"`
+	// PlotScales 是 DSL display_args 中声明的绘图缩放（[ref]），
+	// 计算规则：plotValue = raw × 100 / ref。仅保留 CSV 中实际存在、有限且 ref > 0 的列；
+	// sidecar 缺失/损坏或字段非法时为空，不阻断 Batch。
+	PlotScales map[string]float64 `json:"plotScales"`
 }
 
 // commandFactory 创建命令的工厂函数（用于测试注入）
@@ -963,35 +968,87 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 	if err != nil {
 		return BatchResult{}, err
 	}
-	result.DisplayColumns = readDisplayColumns(csvPath, result.Columns)
+	result.DisplayColumns, result.PlotScales =
+		readDisplayMetadata(csvPath, result.Columns)
 	return result, nil
 }
 
-// readDisplayColumns 读取批量导出 CSV 旁的 sidecar（<csv>.display.json），
-// 取出 DSL display_args 声明的默认绘图列，并过滤为 CSV 实际存在的列。
-// sidecar 缺失或解析失败时返回 nil（不阻断批量结果）。
-func readDisplayColumns(csvPath string, validColumns []string) []string {
+// readDisplayMetadata 读取批量导出 CSV 旁的 sidecar（<csv>.display.json）。
+// 返回 DSL display_args 声明的：
+//   - display_columns（已过滤为 CSV 实际存在的列）
+//   - plot_scales（仅保留有效列；scale 必须是有限数且 > 0，否则忽略）
+//
+// sidecar 缺失、JSON 损坏、字段类型错误时返回零值（nil 列 + nil map），不阻断 Batch。
+// 兼容旧 sidecar 只含 display_columns 的情况。
+func readDisplayMetadata(
+	csvPath string,
+	validColumns []string,
+) ([]string, map[string]float64) {
 	data, err := os.ReadFile(csvPath + ".display.json")
 	if err != nil {
-		return nil
+		return nil, nil
 	}
+	// 兼容旧版（只含 display_columns）与新版（含 plot_scales）的 sidecar。
+	// plot_scales 解析为 interface{} 以容忍混合值（数字/字符串），按条目单独判断。
 	var payload struct {
 		DisplayColumns []string `json:"display_columns"`
+		PlotScales     map[string]interface{} `json:"plot_scales,omitempty"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
+		return nil, nil
 	}
 	valid := make(map[string]bool, len(validColumns))
 	for _, c := range validColumns {
 		valid[c] = true
 	}
-	var out []string
+	var (
+		displayColumns []string
+		plotScales     map[string]float64
+	)
 	for _, c := range payload.DisplayColumns {
 		if valid[c] {
-			out = append(out, c)
+			displayColumns = append(displayColumns, c)
 		}
 	}
-	return out
+	for k, raw := range payload.PlotScales {
+		if !valid[k] {
+			continue
+		}
+		f, ok := coercePositiveFloat(raw)
+		if !ok || !isFiniteNonZeroPositive(f) {
+			continue
+		}
+		if plotScales == nil {
+			plotScales = make(map[string]float64)
+		}
+		plotScales[k] = f
+	}
+	return displayColumns, plotScales
+}
+
+// coercePositiveFloat 将 JSON 值转为 float64，仅当原始值是有限正数时返回 true。
+// 接受 float64/int/json.Number；字符串/布尔/null/对象/数组/NaN/Inf/<=0 一律返回 false。
+func coercePositiveFloat(raw interface{}) (float64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
+// isFiniteNonZeroPositive 判断是否有限且 > 0。
+// plot_scales 必须是有限数（不能是 NaN/Inf）、且 > 0（防止除零）；
+// display_args 中未显式写方括号时，解析器默认填 100，仍 > 0，但这里仍做防御性检查。
+func isFiniteNonZeroPositive(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0) && f > 0
 }
 
 // ExportBatch 导出批量仿真结果

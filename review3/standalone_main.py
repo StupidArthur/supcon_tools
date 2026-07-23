@@ -544,12 +544,23 @@ def main() -> None:
                 writer.writeheader()
                 writer.writerows(results)
 
-            # 默认绘图列：来自 DSL display_args（引擎权威实现 get_display_variables）。
-            # 写为 CSV 旁的 sidecar，供组态工具前端做默认选中，避免前端自行猜测。
+            # 默认绘图列与绘图缩放（ref）：均来自 DSL display_args（引擎权威实现）。
+            # 写为 CSV 旁的 sidecar，供组态工具前端做默认选中与画布缩放，避免前端自行猜测。
+            # plotValue = raw × 100 / ref；不声明 ref 的列不输出 scale。CSV 中的原始数值不被缩放。
             import json
             display_columns = engine.get_display_variables()
+            all_plot_scales = engine.get_plot_scales()
+            plot_scales = {
+                col: all_plot_scales[col]
+                for col in display_columns
+                if col in all_plot_scales
+            }
             with open(output_path + ".display.json", "w", encoding="utf-8") as f:
-                json.dump({"display_columns": display_columns}, f, ensure_ascii=False)
+                json.dump(
+                    {"display_columns": display_columns, "plot_scales": plot_scales},
+                    f,
+                    ensure_ascii=False,
+                )
 
         print(f"Done! Exported {len(results)} rows to {output_path}")
         sys.exit(0)
