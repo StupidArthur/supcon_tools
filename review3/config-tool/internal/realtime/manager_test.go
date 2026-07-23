@@ -18,6 +18,10 @@ func (f *fakeCompiler) Validate(_ context.Context, _ []CompilerSourceSpec) (Vali
 	return f.result, f.err
 }
 
+func (f *fakeCompiler) Compile(_ context.Context, _ []CompilerSourceSpec, outputPath string) (string, error) {
+	return outputPath, nil
+}
+
 func newTestManager(t *testing.T, compiler RealtimeCompiler) *Manager {
 	t.Helper()
 	dir := t.TempDir()

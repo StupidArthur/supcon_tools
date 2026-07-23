@@ -34,6 +34,7 @@ from controller.realtime_config_compiler import (
     MIN_REPLICAS,
     ExpandedInstance,
     SourceSpec,
+    compile_project,
     expand_instance_names,
     inspect_source,
     validate_sources,
@@ -295,3 +296,112 @@ class TestCLI:
         lines = [l for l in proc.stdout.strip().split("\n") if l.strip()]
         assert len(lines) == 1
         json.loads(lines[0])
+
+
+class TestCompileProject:
+    def test_single_source_replica_1(self, tank_yaml):
+        sources = [SourceSpec(source_id="s1", source_file=tank_yaml, replicas=1)]
+        result = compile_project(sources)
+        names = [p["name"] for p in result["program"]]
+        assert names == ["source_flow", "tank", "pid"]
+
+    def test_single_source_replica_2_rewrites_names(self, tank_yaml):
+        sources = [SourceSpec(source_id="s1", source_file=tank_yaml, replicas=2)]
+        result = compile_project(sources)
+        names = [p["name"] for p in result["program"]]
+        assert names == ["source_flow", "tank", "pid", "source_flow_1", "tank_1", "pid_1"]
+
+    def test_replica_rewrites_inputs(self, tank_yaml):
+        sources = [SourceSpec(source_id="s1", source_file=tank_yaml, replicas=2)]
+        result = compile_project(sources)
+        pid_1 = next(p for p in result["program"] if p["name"] == "pid_1")
+        assert pid_1["inputs"]["PV"] == "tank_1.level"
+
+    def test_replica_0_keeps_original_inputs(self, tank_yaml):
+        sources = [SourceSpec(source_id="s1", source_file=tank_yaml, replicas=2)]
+        result = compile_project(sources)
+        pid_0 = next(p for p in result["program"] if p["name"] == "pid")
+        assert pid_0["inputs"]["PV"] == "tank.level"
+
+    def test_multi_source_merge(self, tank_yaml, tmp_path):
+        other = tmp_path / "other.yaml"
+        other.write_text(textwrap.dedent("""\
+            clock:
+              mode: GENERATOR
+              cycle_time: 0.5
+            program:
+              - name: boiler
+                type: Variable
+                value: 1.0
+        """), encoding="utf-8")
+        sources = [
+            SourceSpec(source_id="s1", source_file=tank_yaml, replicas=1),
+            SourceSpec(source_id="s2", source_file=str(other), replicas=1),
+        ]
+        result = compile_project(sources)
+        names = [p["name"] for p in result["program"]]
+        assert names == ["source_flow", "tank", "pid", "boiler"]
+
+    def test_compile_duplicate_raises(self, tank_yaml, common_yaml):
+        sources = [
+            SourceSpec(source_id="s1", source_file=tank_yaml, replicas=1),
+            SourceSpec(source_id="s2", source_file=common_yaml, replicas=1),
+        ]
+        with pytest.raises(ValueError, match="冲突"):
+            compile_project(sources)
+
+    def test_clock_from_first_source(self, tank_yaml):
+        sources = [SourceSpec(source_id="s1", source_file=tank_yaml, replicas=1)]
+        result = compile_project(sources)
+        assert result["clock"]["mode"] == "GENERATOR"
+        assert result["clock"]["cycle_time"] == 0.5
+
+    def test_deterministic_order(self, tank_yaml):
+        sources = [SourceSpec(source_id="s1", source_file=tank_yaml, replicas=3)]
+        result = compile_project(sources)
+        names = [p["name"] for p in result["program"]]
+        expected = [
+            "source_flow", "tank", "pid",
+            "source_flow_1", "tank_1", "pid_1",
+            "source_flow_2", "tank_2", "pid_2",
+        ]
+        assert names == expected
+
+
+class TestCompileCLI:
+    def _run_compile(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(project_root / "standalone_main.py"), "--compile-project"],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=str(project_root),
+            timeout=30,
+        )
+
+    def test_compile_success(self, tank_yaml, tmp_path):
+        out = str(tmp_path / "merged.yaml")
+        payload = {"sources": [{"id": "s1", "file": tank_yaml, "replicas": 2}], "output": out}
+        proc = self._run_compile(payload)
+        assert proc.returncode == 0
+        data = json.loads(proc.stdout)
+        assert data["ok"] is True
+        assert data["output"] == out
+        import yaml
+        with open(out, encoding="utf-8") as f:
+            merged = yaml.safe_load(f)
+        assert len(merged["program"]) == 6
+
+    def test_compile_duplicate_returns_error(self, tank_yaml, common_yaml, tmp_path):
+        out = str(tmp_path / "merged.yaml")
+        payload = {
+            "sources": [
+                {"id": "s1", "file": tank_yaml, "replicas": 1},
+                {"id": "s2", "file": common_yaml, "replicas": 1},
+            ],
+            "output": out,
+        }
+        proc = self._run_compile(payload)
+        assert proc.returncode == 2
+        data = json.loads(proc.stdout)
+        assert data["ok"] is False

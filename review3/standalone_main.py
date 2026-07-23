@@ -489,6 +489,56 @@ def _run_inspect_project() -> None:
     sys.exit(0)
 
 
+def _run_compile_project() -> None:
+    """
+    从 stdin 读取 JSON，编译实时工程为合并 YAML。
+    输入: {"sources": [...], "output": "/path/to/merged.yaml"}
+    stdout 只输出 JSON。
+    """
+    import json as _json
+
+    try:
+        raw = sys.stdin.read()
+        payload = _json.loads(raw)
+    except Exception as e:
+        _json.dump({"ok": False, "error": {"code": "INPUT_ERROR", "message": f"stdin JSON 解析失败: {e}"}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(2)
+
+    sources_raw = payload.get("sources")
+    output_path = payload.get("output", "")
+    if not isinstance(sources_raw, list) or not output_path:
+        _json.dump({"ok": False, "error": {"code": "INPUT_ERROR", "message": "缺少 sources 数组或 output 路径"}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(2)
+
+    from controller.realtime_config_compiler import SourceSpec, compile_project_to_file
+
+    specs = []
+    for item in sources_raw:
+        specs.append(SourceSpec(
+            source_id=item.get("id", ""),
+            source_file=item.get("file", ""),
+            replicas=int(item.get("replicas", 1)),
+        ))
+
+    try:
+        result_path = compile_project_to_file(specs, output_path)
+    except ValueError as e:
+        _json.dump({"ok": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(2)
+    except Exception as e:
+        print(f"[compile-project] error: {e}", file=sys.stderr)
+        _json.dump({"ok": False, "error": {"code": "COMPILE_ERROR", "message": str(e)}}, sys.stdout)
+        sys.stdout.write("\n")
+        sys.exit(3)
+
+    _json.dump({"ok": True, "output": result_path}, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+    sys.exit(0)
+
+
 def main() -> None:
     """主程序入口"""
     parser = argparse.ArgumentParser(description="Data Factory Next - Standalone")
@@ -599,10 +649,19 @@ def main() -> None:
         action="store_true",
         help="从 stdin 读取 JSON sources 列表，校验实例展开和重名，结果输出到 stdout（JSON）"
     )
+    parser.add_argument(
+        "--compile-project",
+        action="store_true",
+        help="从 stdin 读取 JSON（sources + output），编译合并为单一 YAML 文件"
+    )
     args = parser.parse_args()
 
     if args.inspect_project:
         _run_inspect_project()
+        return
+
+    if args.compile_project:
+        _run_compile_project()
         return
 
     # 内存结果行转换导出（不运行仿真，也不需要配置文件）

@@ -16,6 +16,7 @@ type CompilerSourceSpec struct {
 
 type RealtimeCompiler interface {
 	Validate(ctx context.Context, sources []CompilerSourceSpec) (ValidationResult, error)
+	Compile(ctx context.Context, sources []CompilerSourceSpec, outputPath string) (string, error)
 }
 
 type PythonRealtimeCompiler struct {
@@ -120,4 +121,63 @@ func (c *PythonRealtimeCompiler) Validate(ctx context.Context, sources []Compile
 		result.Duplicates = []DuplicateInstance{}
 	}
 	return result, nil
+}
+
+type compileInput struct {
+	Sources []CompilerSourceSpec `json:"sources"`
+	Output  string               `json:"output"`
+}
+
+type compileOutput struct {
+	OK     bool      `json:"ok"`
+	Output string    `json:"output,omitempty"`
+	Error  *cliError `json:"error,omitempty"`
+}
+
+func (c *PythonRealtimeCompiler) Compile(ctx context.Context, sources []CompilerSourceSpec, outputPath string) (string, error) {
+	input := compileInput{Sources: sources, Output: outputPath}
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("序列化输入失败: %w", err)
+	}
+
+	allArgs := append(append([]string{}, c.exec.prefixArgs...), "--compile-project")
+	cmd := exec.CommandContext(ctx, c.exec.exe, allArgs...)
+	if c.exec.workDir != "" {
+		cmd.Dir = c.exec.workDir
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdin = bytes.NewReader(inputJSON)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	runErr := cmd.Run()
+
+	if runErr != nil {
+		var out compileOutput
+		if jsonErr := json.Unmarshal(stdout.Bytes(), &out); jsonErr == nil && out.Error != nil {
+			return "", &ValidationError{Code: out.Error.Code, Message: out.Error.Message}
+		}
+		stderrSnippet := stderr.String()
+		if len(stderrSnippet) > 512 {
+			stderrSnippet = stderrSnippet[:512]
+		}
+		return "", fmt.Errorf("Python 编译进程失败: %w\nstderr: %s", runErr, stderrSnippet)
+	}
+
+	var out compileOutput
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		return "", fmt.Errorf("解析 Python 编译输出失败: %w\nstdout: %s", err, stdout.String())
+	}
+	if !out.OK {
+		msg := "未知错误"
+		code := "UNKNOWN"
+		if out.Error != nil {
+			msg = out.Error.Message
+			code = out.Error.Code
+		}
+		return "", &ValidationError{Code: code, Message: msg}
+	}
+	return out.Output, nil
 }

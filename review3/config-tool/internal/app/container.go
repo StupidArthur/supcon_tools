@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"config-tool/internal/bindings"
 	"config-tool/internal/config"
@@ -63,5 +64,9 @@ type noopCompiler struct{}
 
 func (n *noopCompiler) Validate(_ context.Context, _ []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
 	return realtime.ValidationResult{Valid: true, Instances: []realtime.ExpandedInstance{}, Duplicates: []realtime.DuplicateInstance{}}, nil
+}
+
+func (n *noopCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, _ string) (string, error) {
+	return "", fmt.Errorf("DataFactory 未找到，无法编译工程")
 }
 

@@ -71,6 +71,10 @@ func (b *RealtimeProjectBinding) ValidateProject(projectID string) (realtime.Val
 	return b.manager.ValidateProject(b.ctx, projectID)
 }
 
+func (b *RealtimeProjectBinding) CompileProject(projectID, outputPath string) (string, error) {
+	return b.manager.CompileProject(b.ctx, projectID, outputPath)
+}
+
 func ResolveRealtimeProjectsDir() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {

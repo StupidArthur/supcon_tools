@@ -95,4 +95,6 @@ export const realtimeProjectApi = {
   updateReplicas: (projectId: string, sourceId: string, replicas: number) =>
     RealtimeProjectBinding.UpdateReplicas(projectId, sourceId, replicas),
   validateProject: (projectId: string) => RealtimeProjectBinding.ValidateProject(projectId),
+  compileProject: (projectId: string, outputPath: string) =>
+    RealtimeProjectBinding.CompileProject(projectId, outputPath),
 }

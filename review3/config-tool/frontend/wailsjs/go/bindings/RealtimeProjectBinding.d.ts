@@ -5,6 +5,8 @@ import {context} from '../models';
 
 export function AddSource(arg1:string):Promise<realtime.ProjectView>;
 
+export function CompileProject(arg1:string,arg2:string):Promise<string>;
+
 export function CreateProject(arg1:string):Promise<realtime.Project>;
 
 export function DeleteProject(arg1:string):Promise<void>;

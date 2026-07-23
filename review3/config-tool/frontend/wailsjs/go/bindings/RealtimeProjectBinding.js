@@ -6,6 +6,10 @@ export function AddSource(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['AddSource'](arg1);
 }
 
+export function CompileProject(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['CompileProject'](arg1, arg2);
+}
+
 export function CreateProject(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['CreateProject'](arg1);
 }

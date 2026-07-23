@@ -208,6 +208,29 @@ func (m *Manager) ValidateProject(ctx context.Context, projectID string) (Valida
 	return m.validateCandidate(ctx, projectID, p.Sources)
 }
 
+func (m *Manager) CompileProject(ctx context.Context, projectID, outputPath string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	p, err := m.storage.LoadProject(projectID)
+	if err != nil {
+		return "", err
+	}
+	if len(p.Sources) == 0 {
+		return "", fmt.Errorf("工程没有 YAML 来源")
+	}
+
+	specs := make([]CompilerSourceSpec, len(p.Sources))
+	for i, s := range p.Sources {
+		specs[i] = CompilerSourceSpec{
+			ID:       s.ID,
+			File:     m.storage.SourceAbsPath(projectID, s.ID),
+			Replicas: s.Replicas,
+		}
+	}
+	return m.compiler.Compile(ctx, specs, outputPath)
+}
+
 func (m *Manager) validateCandidate(ctx context.Context, projectID string, sources []Source) (ValidationResult, error) {
 	if len(sources) == 0 {
 		return ValidationResult{Valid: true, Instances: []ExpandedInstance{}, Duplicates: []DuplicateInstance{}}, nil

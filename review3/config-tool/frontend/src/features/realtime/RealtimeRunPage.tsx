@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { systemApi } from '../../lib/api'
+import { realtimeProjectApi, systemApi } from '../../lib/api'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { useDslProjectStore } from '../dsl/useDslProjectStore'
 import { useGenericSimStore } from '../dsl/useGenericSimStore'
+import { useRealtimeProjectStore } from './useRealtimeProjectStore'
 
 export function RealtimeRunPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
@@ -16,6 +17,8 @@ export function RealtimeRunPage() {
   const openWorkspace = useDslProjectStore((s) => s.openWorkspace)
   const pushRecent = useDslProjectStore((s) => s.pushRecent)
   const setYamlText = useDslProjectStore((s) => s.setYamlText)
+
+  const currentProject = useRealtimeProjectStore((s) => s.currentProject)
 
   const offlineRunning = useGenericSimStore((s) => s.status === 'running')
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
@@ -114,18 +117,70 @@ export function RealtimeRunPage() {
     }
   }
 
+  const handleStartProject = async () => {
+    if (!currentProject) return
+    setError('')
+    const latestDf = useCanvasStore.getState().dfStatus
+    if (offlineRunning || globalBatchRunning || backendBatchBusy(latestDf)) {
+      setError('离线批量任务正在运行，禁止启动实时运行')
+      return
+    }
+    try {
+      const p = await systemApi.getDataFactoryPath()
+      if (p) setDfPath(p)
+      const tmpPath = `realtime_compiled_${currentProject.id}.yaml`
+      const compiledPath = await realtimeProjectApi.compileProject(currentProject.id, tmpPath)
+      await systemApi.start({
+        configPath: compiledPath,
+        mode: 'REALTIME',
+        cycleTime,
+        port,
+        apiHost,
+        apiPort,
+        runtimeName: currentProject.name,
+        enableOpcUa: true,
+      })
+      refreshStatus()
+    } catch (e: any) {
+      setError(String(e))
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-background p-6" data-testid="realtime-run-page">
       <div className="mx-auto max-w-2xl space-y-5">
         <div>
           <h2 className="text-lg font-medium">实时运行</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            基于已保存 DSL 启动实时实例并提供 OPC UA Server。与 DSL 离线仿真互斥。
+            基于实时工程或已保存 DSL 启动实时实例并提供 OPC UA Server。与 DSL 离线仿真互斥。
           </p>
         </div>
 
+        {currentProject ? (
+          <section className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3" data-testid="realtime-project-run">
+            <div className="text-xs font-medium">实时工程</div>
+            <div className="text-xs">
+              {currentProject.name}
+              <span className="ml-2 text-muted-foreground">
+                {currentProject.sources.length} 个 YAML
+              </span>
+            </div>
+            {!dfStatus.running ? (
+              <button
+                type="button"
+                onClick={() => void handleStartProject()}
+                disabled={offlineRunning || batchBusy}
+                className="rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-40"
+                data-testid="realtime-start-project"
+              >
+                启动工程
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="space-y-2 rounded-md border border-border bg-card p-3">
-          <div className="text-xs font-medium">当前 DSL</div>
+          <div className="text-xs font-medium">单 YAML 运行（旧入口）</div>
           {filePath ? (
             <div className="truncate text-xs" title={filePath} data-testid="realtime-dsl-path">
               {projectName || filePath}

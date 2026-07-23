@@ -6,15 +6,18 @@
 - 按副本数展开实例名称
 - 全局唯一性校验
 - 结构化冲突报告
-
-本模块不修改 DSL 内容，不生成可执行合并配置（第二阶段）。
+- 编译合并：展开副本、重写引用、合并为单一 ProgramConfig YAML
 """
 
 from __future__ import annotations
 
+import copy
 import sys
 from dataclasses import dataclass, field
-from typing import List
+from pathlib import Path
+from typing import Any, Dict, List
+
+import yaml
 
 from .parser import DSLParser
 
@@ -148,3 +151,105 @@ def validate_sources(sources: List[SourceSpec]) -> ValidationResult:
         return ValidationResult(valid=False, instances=[], duplicates=duplicates)
 
     return ValidationResult(valid=True, instances=all_instances, duplicates=[])
+
+
+def _build_rename_map(original_names: List[str], replica_index: int) -> Dict[str, str]:
+    rename: Dict[str, str] = {}
+    for name in original_names:
+        if replica_index == 0:
+            rename[name] = name
+        else:
+            rename[name] = f"{name}_{replica_index}"
+    return rename
+
+
+def _rewrite_reference(ref: str, rename: Dict[str, str]) -> str:
+    if "." in ref:
+        instance_part, attr_part = ref.split(".", 1)
+    else:
+        instance_part = ref
+        attr_part = None
+
+    new_instance = rename.get(instance_part, instance_part)
+    if attr_part is not None:
+        return f"{new_instance}.{attr_part}"
+    return new_instance
+
+
+def _rewrite_expression(expr: str, rename: Dict[str, str]) -> str:
+    if not expr:
+        return expr
+    import re
+    for old_name, new_name in rename.items():
+        if old_name == new_name:
+            continue
+        expr = re.sub(rf"\b{re.escape(old_name)}\b", new_name, expr)
+    return expr
+
+
+def _replicate_program_item(
+    item: Dict[str, Any],
+    rename: Dict[str, str],
+) -> Dict[str, Any]:
+    new_item = copy.deepcopy(item)
+    original_name = str(new_item["name"])
+    new_item["name"] = rename.get(original_name, original_name)
+
+    if "inputs" in new_item and new_item["inputs"]:
+        new_inputs = {}
+        for port, ref in new_item["inputs"].items():
+            new_inputs[port] = _rewrite_reference(str(ref), rename)
+        new_item["inputs"] = new_inputs
+
+    if "expression" in new_item and new_item["expression"]:
+        new_item["expression"] = _rewrite_expression(str(new_item["expression"]), rename)
+
+    return new_item
+
+
+def compile_project(sources: List[SourceSpec]) -> Dict[str, Any]:
+    """
+    编译实时工程：解析全部来源、展开副本、重写引用、合并为单一 DSL dict。
+
+    复用 validate_sources 的展开和冲突检查规则。
+    顺序保证与 validate_sources 一致。
+    """
+    validation = validate_sources(sources)
+    if not validation.valid:
+        dup_names = [d.name for d in validation.duplicates]
+        raise ValueError(f"实例名称冲突，无法编译: {dup_names}")
+
+    merged_program: List[Dict[str, Any]] = []
+    clock_config: Dict[str, Any] | None = None
+
+    for source in sources:
+        path = Path(source.source_file)
+        with path.open("r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+
+        if clock_config is None:
+            clock_config = raw.get("clock", {})
+
+        original_names = inspect_source(source)
+
+        for replica_index in range(source.replicas):
+            rename = _build_rename_map(original_names, replica_index)
+            for item in raw.get("program", []) or []:
+                merged_program.append(_replicate_program_item(item, rename))
+
+    result: Dict[str, Any] = {}
+    if clock_config:
+        result["clock"] = clock_config
+    else:
+        result["clock"] = {"mode": "REALTIME", "cycle_time": 0.5}
+    result["program"] = merged_program
+    return result
+
+
+def compile_project_to_file(sources: List[SourceSpec], output_path: str) -> str:
+    merged = compile_project(sources)
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as f:
+        yaml.dump(merged, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return str(out)
