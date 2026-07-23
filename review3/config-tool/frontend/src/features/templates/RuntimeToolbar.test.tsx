@@ -682,7 +682,7 @@ describe('RuntimeToolbar', () => {
       // Stop 成功后应 reset
       await waitFor(() => expect(mockReset).toHaveBeenCalled())
       // 应离开页面
-      await waitFor(() => expect(mockSetView).toHaveBeenCalledWith('system'))
+      await waitFor(() => expect(mockSetView).toHaveBeenCalledWith('dsl'))
       confirmSpy.mockRestore()
     })
 

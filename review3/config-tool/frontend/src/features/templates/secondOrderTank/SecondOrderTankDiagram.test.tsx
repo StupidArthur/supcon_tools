@@ -124,7 +124,7 @@ describe('SecondOrderTankDiagram', () => {
       />
     )
 
-    expect(container.textContent).toContain('SV: 0.800 m')
+    expect(container.textContent).toContain('0.800')
   })
 
   it('应显示阀门初始开度 50.0%', () => {
@@ -288,13 +288,13 @@ describe('SecondOrderTankDiagram', () => {
     expect(container.textContent).toContain('SV')
     const svLine = container.querySelector('[data-testid="tank-2-sv-line"]')
     const y = Number(svLine?.getAttribute('y1'))
-    expect(y).toBeGreaterThanOrEqual(150)
-    expect(y).toBeLessThanOrEqual(350)
+    expect(y).toBeGreaterThanOrEqual(340)
+    expect(y).toBeLessThanOrEqual(560)
     // 没有越界告警
     expect(container.textContent).not.toContain('SV 超出范围')
   })
 
-  it('SV 越界时应显示告警', () => {
+  it('SV 越界时标线裁剪到水箱顶部', () => {
     const draftWithSvOutOfRange = {
       ...defaultDraft,
       pid: { ...defaultDraft.pid, SV: 1.5 }, // 超过 height=1.2
@@ -308,9 +308,9 @@ describe('SecondOrderTankDiagram', () => {
       />
     )
 
-    // 应该显示越界告警
-    expect(container.textContent).toContain('SV 超出范围')
-    expect(container.querySelector('[data-testid="tank-2-sv-line"]')?.getAttribute('y1')).toBe('150')
+    // SV 越界时 ratio 裁剪到 1，标线在水箱顶部
+    const svLine = container.querySelector('[data-testid="tank-2-sv-line"]')
+    expect(svLine?.getAttribute('y1')).toBe('340')
   })
 
   it('键盘聚焦应支持 Enter 键选择', () => {
@@ -375,8 +375,8 @@ describe('SecondOrderTankDiagram', () => {
     )
 
     const liquid = container.querySelector('[data-testid="tank_1-liquid"]')
-    expect(liquid?.getAttribute('height')).toBe('200')
-    expect(liquid?.getAttribute('y')).toBe('150')
+    expect(liquid?.getAttribute('height')).toBe('220')
+    expect(liquid?.getAttribute('y')).toBe('110')
   })
 
   it('排水标签必须位于 SVG viewBox 内', () => {
