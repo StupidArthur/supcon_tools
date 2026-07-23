@@ -14,6 +14,10 @@ export function Cleanup() {
   return window['go']['bindings']['RealtimeRuntimeBinding']['Cleanup']();
 }
 
+export function DeleteRunHistory(arg1) {
+  return window['go']['bindings']['RealtimeRuntimeBinding']['DeleteRunHistory'](arg1);
+}
+
 export function GetAlarmEvents(arg1) {
   return window['go']['bindings']['RealtimeRuntimeBinding']['GetAlarmEvents'](arg1);
 }
@@ -28,6 +32,10 @@ export function GetProjectRevision(arg1) {
 
 export function GetSession() {
   return window['go']['bindings']['RealtimeRuntimeBinding']['GetSession']();
+}
+
+export function ListRunHistory() {
+  return window['go']['bindings']['RealtimeRuntimeBinding']['ListRunHistory']();
 }
 
 export function SetContext(arg1) {

@@ -1232,6 +1232,8 @@ export namespace realtime {
 	    apiHost: string;
 	    apiPort: number;
 	    runtimeName: string;
+	    archiveEnabled: boolean;
+	    archiveTags: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RealtimeStartOptions(source);
@@ -1244,6 +1246,8 @@ export namespace realtime {
 	        this.apiHost = source["apiHost"];
 	        this.apiPort = source["apiPort"];
 	        this.runtimeName = source["runtimeName"];
+	        this.archiveEnabled = source["archiveEnabled"];
+	        this.archiveTags = source["archiveTags"];
 	    }
 	}
 	

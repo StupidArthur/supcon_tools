@@ -48,11 +48,13 @@ type RealtimeRunSession struct {
 }
 
 type RealtimeStartOptions struct {
-	CycleTime   float64 `json:"cycleTime"`
-	OPCUAPort   int     `json:"opcUaPort"`
-	APIHost     string  `json:"apiHost"`
-	APIPort     int     `json:"apiPort"`
-	RuntimeName string  `json:"runtimeName"`
+	CycleTime      float64  `json:"cycleTime"`
+	OPCUAPort      int      `json:"opcUaPort"`
+	APIHost        string   `json:"apiHost"`
+	APIPort        int      `json:"apiPort"`
+	RuntimeName    string   `json:"runtimeName"`
+	ArchiveEnabled bool     `json:"archiveEnabled"`
+	ArchiveTags    []string `json:"archiveTags"`
 }
 
 func (o RealtimeStartOptions) WithDefaults() RealtimeStartOptions {

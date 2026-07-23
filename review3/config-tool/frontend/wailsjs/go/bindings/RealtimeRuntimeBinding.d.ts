@@ -9,6 +9,8 @@ export function AckAllAlarms():Promise<void>;
 
 export function Cleanup():Promise<void>;
 
+export function DeleteRunHistory(arg1:string):Promise<void>;
+
 export function GetAlarmEvents(arg1:number):Promise<Record<string, any>>;
 
 export function GetAlarms():Promise<Record<string, any>>;
@@ -16,6 +18,8 @@ export function GetAlarms():Promise<Record<string, any>>;
 export function GetProjectRevision(arg1:string):Promise<string>;
 
 export function GetSession():Promise<realtime.RealtimeRunSession>;
+
+export function ListRunHistory():Promise<Array<Record<string, any>>>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 

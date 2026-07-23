@@ -129,4 +129,6 @@ export const realtimeRuntimeApi = {
   getAlarmEvents: (limit: number) => RealtimeRuntimeBinding.GetAlarmEvents(limit),
   ackAlarm: (alarmId: string) => RealtimeRuntimeBinding.AckAlarm(alarmId),
   ackAllAlarms: () => RealtimeRuntimeBinding.AckAllAlarms(),
+  listRunHistory: () => RealtimeRuntimeBinding.ListRunHistory(),
+  deleteRunHistory: (sessionId: string) => RealtimeRuntimeBinding.DeleteRunHistory(sessionId),
 }

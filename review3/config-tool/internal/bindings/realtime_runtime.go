@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"config-tool/internal/realtime"
@@ -176,12 +178,40 @@ func (b *RealtimeRuntimeBinding) launch(
 		b.pushAlarmConfig(session)
 	}
 
+	if opts.ArchiveEnabled {
+		b.startArchive(session, opts.ArchiveTags)
+	}
+
 	b.mu.Lock()
 	b.current = &session
 	b.curDir = dir
 	b.mu.Unlock()
 
 	return session, nil
+}
+
+func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSession, tags []string) {
+	payload := map[string]any{
+		"sessionId": session.SessionID,
+		"tags":      tags,
+		"metadata": map[string]any{
+			"projectId":       session.ProjectID,
+			"projectName":     session.ProjectName,
+			"runtimeRevision": session.RuntimeRevision,
+			"configHash":      session.ConfigHash,
+			"sourceKind":      string(session.SourceKind),
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	url := fmt.Sprintf("http://%s:%d/api/archive/start", session.APIHost, session.APIPort)
+	resp, err := forceHTTPClient.Post(url, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
 }
 
 func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSession) {
@@ -256,6 +286,60 @@ func (b *RealtimeRuntimeBinding) AckAllAlarms() error {
 		return err
 	}
 	return decodeForceResponse(resp, nil)
+}
+
+func resolveHistoryDir() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cacheDir, "DataFactory", "run_history"), nil
+}
+
+func (b *RealtimeRuntimeBinding) ListRunHistory() ([]map[string]any, error) {
+	dir, err := resolveHistoryDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return []map[string]any{}, nil
+	}
+	var runs []map[string]any
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		metaPath := filepath.Join(dir, e.Name(), "metadata.json")
+		data, err := os.ReadFile(metaPath)
+		if err != nil {
+			continue
+		}
+		var meta map[string]any
+		if json.Unmarshal(data, &meta) != nil {
+			continue
+		}
+		runs = append(runs, meta)
+	}
+	if runs == nil {
+		runs = []map[string]any{}
+	}
+	return runs, nil
+}
+
+func (b *RealtimeRuntimeBinding) DeleteRunHistory(sessionID string) error {
+	if strings.Contains(sessionID, "..") || strings.ContainsAny(sessionID, "/\\") {
+		return fmt.Errorf("非法会话 ID")
+	}
+	dir, err := resolveHistoryDir()
+	if err != nil {
+		return err
+	}
+	target := filepath.Join(dir, sessionID)
+	if _, err := os.Stat(target); err != nil {
+		return fmt.Errorf("历史运行不存在")
+	}
+	return os.RemoveAll(target)
 }
 
 func (b *RealtimeRuntimeBinding) Stop() error {

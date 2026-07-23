@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import os
 import queue
 import threading
 import time
@@ -195,6 +196,7 @@ class EngineBinding:
     _batches: Dict[str, WriteBatchRecord] = field(default_factory=dict)
     force_manager: Any = None
     alarm_manager: Any = None
+    archiver: Any = None
 
     def push_snapshot(self, snapshot: Dict[str, Any]) -> None:
         """由 standalone_main 的引擎线程每周期调用一次。
@@ -225,6 +227,14 @@ class EngineBinding:
                 self.alarm_manager.evaluate(snapshot)
             except Exception as e:
                 logger.error(f"alarm evaluate error: {e}")
+
+        # 6) 运行归档（异常不阻塞 Engine 周期）
+        if self.archiver is not None:
+            try:
+                st = snapshot.get("sim_time")
+                self.archiver.record(snapshot, float(st) if isinstance(st, (int, float)) else None)
+            except Exception as e:
+                logger.error(f"archive record error: {e}")
 
     def get_recent_snapshots(self, n: Optional[int]) -> List[Dict[str, Any]]:
         with self._buffer_lock:
@@ -724,6 +734,80 @@ def api_alarm_events(limit: Optional[int] = None) -> Dict[str, Any]:
     if b.alarm_manager is None:
         return {"ok": True, "events": []}
     return {"ok": True, "events": b.alarm_manager.events(limit)}
+
+
+# --------------------------------------------------------------------------- #
+# 运行归档                                                                     #
+# --------------------------------------------------------------------------- #
+
+def _history_base() -> str:
+    cache = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.cache")
+    return str(Path(cache) / "DataFactory" / "run_history")
+
+
+class ArchiveStartRequest(BaseModel):
+    sessionId: str
+    tags: List[str]
+    metadata: Dict[str, Any] = {}
+
+
+@app.post("/api/archive/start")
+def api_archive_start(req: ArchiveStartRequest) -> Dict[str, Any]:
+    from datacenter.run_archiver import RunArchiver
+    b = get_binding()
+    if b.archiver is not None:
+        try:
+            b.archiver.close()
+        except Exception:
+            pass
+    archiver = RunArchiver(_history_base(), req.sessionId, req.metadata, req.tags)
+    archiver.start()
+    b.archiver = archiver
+    return {"ok": True, "sessionId": req.sessionId, "tags": req.tags}
+
+
+@app.post("/api/archive/stop")
+def api_archive_stop() -> Dict[str, Any]:
+    b = get_binding()
+    if b.archiver is not None:
+        try:
+            b.archiver.close()
+        except Exception:
+            pass
+        b.archiver = None
+    return {"ok": True}
+
+
+@app.get("/api/history")
+def api_history_list() -> Dict[str, Any]:
+    from datacenter.run_archiver import RunHistory
+    h = RunHistory(_history_base())
+    return {"ok": True, "runs": h.list_runs(), "diskUsageBytes": h.disk_usage_bytes()}
+
+
+@app.get("/api/history/{session_id}/values")
+def api_history_values(session_id: str) -> Dict[str, Any]:
+    from datacenter.run_archiver import RunHistory
+    h = RunHistory(_history_base())
+    return {"ok": True, "values": h.read_values(session_id)}
+
+
+@app.post("/api/history/{session_id}/export")
+def api_history_export(session_id: str, req: ExportRequest) -> Dict[str, Any]:
+    from datacenter.run_archiver import RunHistory
+    h = RunHistory(_history_base())
+    n = h.export_csv(session_id, req.path)
+    return {"ok": True, "rows": n, "path": req.path}
+
+
+@app.delete("/api/history/{session_id}")
+def api_history_delete(session_id: str) -> Dict[str, Any]:
+    from datacenter.run_archiver import RunHistory
+    h = RunHistory(_history_base())
+    ok = h.delete_run(session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="历史运行不存在")
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- #
