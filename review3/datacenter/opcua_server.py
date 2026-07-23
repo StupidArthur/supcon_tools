@@ -60,6 +60,7 @@ class StandaloneOpcuaServer:
         config: OPCUAServerConfig,
         shared_data: Dict[str, float],
         cmd_queue: queue.Queue,
+        force_map: Optional[Dict[str, dict]] = None,
     ) -> None:
         """
         初始化 OPCUA Server
@@ -68,10 +69,12 @@ class StandaloneOpcuaServer:
             config: OPCUA Server 配置
             shared_data: 共享内存数据字典（引擎计算完每个周期后更新）
             cmd_queue: 命令队列（用于向引擎发送写值命令）
+            force_map: 输出强制映射（tag → {"mode": str, "value": float}）
         """
         self.config = config
         self._shared_data = shared_data
         self._cmd_queue = cmd_queue
+        self._force_map: Dict[str, dict] = force_map if force_map is not None else {}
 
         # OPCUA Server
         self.server: Optional[Server] = None
@@ -233,8 +236,19 @@ class StandaloneOpcuaServer:
         """轮询共享内存数据并更新 OPCUA 节点"""
         while self._running:
             try:
-                # 从共享内存读取数据
                 params = dict(self._shared_data)
+
+                if self._force_map:
+                    for tag, force in self._force_map.items():
+                        mode = force.get("mode", "follow")
+                        if mode == "follow":
+                            continue
+                        elif mode == "zero":
+                            params[tag] = 0.0
+                        elif mode == "fixed":
+                            params[tag] = float(force.get("value", 0.0))
+                        elif mode == "hold":
+                            params[tag] = float(force.get("value", params.get(tag, 0.0)))
 
                 if params:
                     await self._update_nodes(params)

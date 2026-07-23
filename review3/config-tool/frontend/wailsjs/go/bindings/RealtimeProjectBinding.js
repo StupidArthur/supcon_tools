@@ -6,6 +6,14 @@ export function AddSource(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['AddSource'](arg1);
 }
 
+export function ClearAllForces(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['ClearAllForces'](arg1, arg2);
+}
+
+export function ClearForce(arg1, arg2, arg3) {
+  return window['go']['bindings']['RealtimeProjectBinding']['ClearForce'](arg1, arg2, arg3);
+}
+
 export function CompileProject(arg1, arg2) {
   return window['go']['bindings']['RealtimeProjectBinding']['CompileProject'](arg1, arg2);
 }
@@ -16,6 +24,10 @@ export function CreateProject(arg1) {
 
 export function DeleteProject(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['DeleteProject'](arg1);
+}
+
+export function GetForces(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['GetForces'](arg1, arg2);
 }
 
 export function ListProjects() {
@@ -36,6 +48,10 @@ export function RenameProject(arg1, arg2) {
 
 export function SetContext(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['SetContext'](arg1);
+}
+
+export function SetForce(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['bindings']['RealtimeProjectBinding']['SetForce'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function UpdateReplicas(arg1, arg2, arg3) {

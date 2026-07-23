@@ -1,9 +1,14 @@
 package bindings
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"config-tool/internal/realtime"
 
@@ -73,6 +78,73 @@ func (b *RealtimeProjectBinding) ValidateProject(projectID string) (realtime.Val
 
 func (b *RealtimeProjectBinding) CompileProject(projectID, outputPath string) (string, error) {
 	return b.manager.CompileProject(b.ctx, projectID, outputPath)
+}
+
+type ForceSetRequest struct {
+	Tag   string   `json:"tag"`
+	Mode  string   `json:"mode"`
+	Value *float64 `json:"value,omitempty"`
+}
+
+type ForceEntry struct {
+	Mode  string  `json:"mode"`
+	Value float64 `json:"value,omitempty"`
+}
+
+var forceHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
+func (b *RealtimeProjectBinding) forceURL(apiHost string, apiPort int, path string) string {
+	return fmt.Sprintf("http://%s:%d%s", apiHost, apiPort, path)
+}
+
+func (b *RealtimeProjectBinding) SetForce(apiHost string, apiPort int, tag, mode string, value *float64) error {
+	reqBody := ForceSetRequest{Tag: tag, Mode: mode, Value: value}
+	data, _ := json.Marshal(reqBody)
+	resp, err := forceHTTPClient.Post(b.forceURL(apiHost, apiPort, "/api/force"), "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("设置强制失败: HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (b *RealtimeProjectBinding) ClearForce(apiHost string, apiPort int, tag string) error {
+	req, _ := http.NewRequest("DELETE", b.forceURL(apiHost, apiPort, "/api/force/"+tag), nil)
+	resp, err := forceHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (b *RealtimeProjectBinding) ClearAllForces(apiHost string, apiPort int) error {
+	req, _ := http.NewRequest("DELETE", b.forceURL(apiHost, apiPort, "/api/force"), nil)
+	resp, err := forceHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (b *RealtimeProjectBinding) GetForces(apiHost string, apiPort int) (map[string]ForceEntry, error) {
+	resp, err := forceHTTPClient.Get(b.forceURL(apiHost, apiPort, "/api/force"))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		OK     bool                  `json:"ok"`
+		Forces map[string]ForceEntry `json:"forces"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return result.Forces, nil
 }
 
 func ResolveRealtimeProjectsDir() (string, error) {
