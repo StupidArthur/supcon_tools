@@ -1,29 +1,26 @@
 /**
- * 导出对话框：选择文件格式（csv/xlsx/xls）、导出列（默认 YAML display_args）、Excel 工作表名。
+ * 导出对话框：选择文件格式（csv/xlsx）、导出列（默认 YAML display_args）、Excel 工作表名。
  *
  * 纯展示组件：自身不持有业务数据，导出动作通过 onExport 回调交给父组件。
- * 导出使用当前内存中的仿真 rows，按用户选择的列导出，不重新仿真。
+ * 展示的行数、列、默认选项全部来自传入的 ExportSession 快照（不重新从 Store 取数）；
+ * 导出使用会话快照中的内存 rows，按用户基于会话列选择的列导出，不重新仿真。
+ *
+ * xls 当前版本暂不支持（运行环境缺 xlwt），故不提供该选项。
  */
 import { useEffect, useState } from 'react'
-
-export type ExportFormat = 'csv' | 'xlsx' | 'xls'
+import { type ExportFormat, type ExportSession, sessionNumericColumns } from './exportSession'
 
 const FORMATS: Array<{ id: ExportFormat; label: string }> = [
   { id: 'csv', label: 'CSV' },
   { id: 'xlsx', label: 'Excel (xlsx)' },
-  { id: 'xls', label: 'Excel 97-2003 (xls)' },
 ]
 
 const DEFAULT_SHEET_NAME = '控制器'
 
 interface ExportDialogProps {
   open: boolean
-  /** 可选择的数值列 */
-  columns: string[]
-  /** 默认勾选的列（来自 YAML display_args） */
-  defaultSelected: string[]
-  /** 当前仿真结果行数（仅用于提示，不重新仿真） */
-  rowCount: number
+  /** 打开对话框时冻结的导出会话快照 */
+  session: ExportSession | null
   busy: boolean
   error: string | null
   onClose: () => void
@@ -31,20 +28,24 @@ interface ExportDialogProps {
 }
 
 export function ExportDialog(props: ExportDialogProps) {
-  const { open, columns, defaultSelected, rowCount, busy, error, onClose, onExport } = props
+  const { open, session, busy, error, onClose, onExport } = props
   const [format, setFormat] = useState<ExportFormat>('xlsx')
-  const [selected, setSelected] = useState<string[]>(defaultSelected)
+  const [selected, setSelected] = useState<string[]>([])
   const [sheetName, setSheetName] = useState(DEFAULT_SHEET_NAME)
 
+  const numericColumns = session ? sessionNumericColumns(session) : []
+
+  // 每次随会话打开时，用会话快照初始化（默认勾选来自 display_args，过滤到可用数值列）。
   useEffect(() => {
-    if (open) {
+    if (open && session) {
+      const avail = sessionNumericColumns(session)
       setFormat('xlsx')
-      setSelected(defaultSelected)
+      setSelected(session.selectedColumns.filter((c) => avail.includes(c)))
       setSheetName(DEFAULT_SHEET_NAME)
     }
-  }, [open, defaultSelected])
+  }, [open, session])
 
-  if (!open) return null
+  if (!open || !session) return null
 
   const toggle = (col: string) => {
     setSelected((cur) => (cur.includes(col) ? cur.filter((c) => c !== col) : [...cur, col]))
@@ -103,11 +104,11 @@ export function ExportDialog(props: ExportDialogProps) {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">导出列（默认按 YAML display_args）</span>
               <span className="text-muted-foreground">
-                {selected.length}/{columns.length}
+                {selected.length}/{numericColumns.length}
               </span>
             </div>
             <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-md border border-border p-2">
-              {columns.map((col) => (
+              {numericColumns.map((col) => (
                 <label
                   key={col}
                   className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-secondary/60"
@@ -116,7 +117,7 @@ export function ExportDialog(props: ExportDialogProps) {
                   <span className="font-mono">{col}</span>
                 </label>
               ))}
-              {columns.length === 0 ? <div className="text-muted-foreground">无可用数值列</div> : null}
+              {numericColumns.length === 0 ? <div className="text-muted-foreground">无可用数值列</div> : null}
             </div>
           </div>
 
@@ -128,7 +129,7 @@ export function ExportDialog(props: ExportDialogProps) {
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-border px-4 py-3 text-xs">
-          <span className="mr-auto text-muted-foreground">导出当前仿真结果：{rowCount} 行</span>
+          <span className="mr-auto text-muted-foreground">导出当前仿真结果：{session.rowCount} 行</span>
           <button
             type="button"
             onClick={onClose}

@@ -1063,10 +1063,13 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 	return args
 }
 
-// ExportRowsFormatted 将前端当前内存中的仿真结果行（不重新仿真）导出为 csv/xlsx/xls。
+// ExportRowsFormatted 将前端当前内存中的仿真结果行（不重新仿真）导出为 csv/xlsx。
 // columns 为要导出的有序列（含固定序号列 _cycle）；rows 为当前趋势图使用的同一份数据。
 //   - csv：Go 直接写出；
-//   - xlsx/xls：将 rows 写入临时 JSON，调用引擎侧 --convert-export 用 openpyxl/xlwt 转换。
+//   - xlsx：将 rows 写入临时 JSON，调用引擎侧 --convert-export 用 openpyxl 转换。
+//
+// xls 当前版本暂不支持（运行环境缺 xlwt），返回明确错误。
+// 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
 func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]any, exportPath string, format string, sheetName string) error {
 	if strings.TrimSpace(exportPath) == "" {
 		return fmt.Errorf("导出路径不能为空")
@@ -1076,13 +1079,14 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 	}
 	fmtLower := strings.ToLower(format)
 	switch fmtLower {
-	case "csv", "xlsx", "xls":
+	case "csv":
+		return b.ExportCSVRows(columns, rows, exportPath)
+	case "xlsx":
+		// 走引擎侧转换
+	case "xls":
+		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
 	default:
 		return fmt.Errorf("不支持的导出格式: %s", format)
-	}
-
-	if fmtLower == "csv" {
-		return b.ExportCSVRows(columns, rows, exportPath)
 	}
 
 	if err := b.ensureDataFactory(); err != nil {
@@ -1104,24 +1108,43 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 		return fmt.Errorf("写入导出临时文件失败: %w", err)
 	}
 
-	args := []string{"--convert-export", "--rows-json", rowsJSON, "--export", exportPath, "--format", fmtLower}
-	if sheetName != "" {
-		args = append(args, "--sheet-name", sheetName)
-	}
+	args := buildConvertExportArgs(rowsJSON, exportPath, fmtLower, sheetName)
 	cmd := b.dfLaunch.command(b.commandFactory, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("DataFactory 导出失败: %w\n%s", err, string(output))
+		// 失败信息包含实际转换器（DataFactory.exe 路径 或 Python + standalone_main.py），
+		// 并识别旧版 DataFactory 不支持 --convert-export 的情况，避免伪装成普通导出失败。
+		return fmt.Errorf("DataFactory 导出失败（转换器: %s）: %s", b.dfLaunch.displayPath(), convertExportErrorMessage(err, output))
 	}
 
 	info, err := os.Stat(exportPath)
 	if err != nil {
-		return fmt.Errorf("导出文件未生成: %w", err)
+		return fmt.Errorf("导出文件未生成（转换器: %s）: %w", b.dfLaunch.displayPath(), err)
 	}
 	if info.Size() == 0 {
-		return fmt.Errorf("导出文件为空")
+		return fmt.Errorf("导出文件为空（转换器: %s）", b.dfLaunch.displayPath())
 	}
 	return nil
+}
+
+// convertExportErrorMessage 生成导出转换失败信息：
+// 识别旧版 DataFactory 不支持 --convert-export 的情况（argparse 报 unrecognized arguments），
+// 给出明确升级提示；否则原样返回底层错误与输出，便于定位实际调用的运行时。
+func convertExportErrorMessage(err error, output []byte) string {
+	text := string(output)
+	if strings.Contains(text, "convert-export") && strings.Contains(text, "unrecognized arguments") {
+		return "当前 DataFactory 版本不支持内存结果导出，请更新 DataFactory.exe"
+	}
+	return fmt.Sprintf("%v\n%s", err, text)
+}
+
+// buildConvertExportArgs 构造 --convert-export 的 CLI 参数（纯函数，便于测试）。
+func buildConvertExportArgs(rowsJSON string, exportPath string, format string, sheetName string) []string {
+	args := []string{"--convert-export", "--rows-json", rowsJSON, "--export", exportPath, "--format", format}
+	if sheetName != "" {
+		args = append(args, "--sheet-name", sheetName)
+	}
+	return args
 }
 
 // validateBatchCSV 确认目标 CSV 存在、非空、且至少有一行数据（不只表头）。

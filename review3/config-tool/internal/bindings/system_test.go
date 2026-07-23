@@ -1081,3 +1081,110 @@ func TestBuildBatchExportArgsOmitsOptional(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
+func TestBuildConvertExportArgs(t *testing.T) {
+	got := buildConvertExportArgs("rows.json", "out.xlsx", "xlsx", "控制器")
+	want := []string{"--convert-export", "--rows-json", "rows.json", "--export", "out.xlsx", "--format", "xlsx", "--sheet-name", "控制器"}
+	if !equalStrings(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	got2 := buildConvertExportArgs("rows.json", "out.csv", "csv", "")
+	want2 := []string{"--convert-export", "--rows-json", "rows.json", "--export", "out.csv", "--format", "csv"}
+	if !equalStrings(got2, want2) {
+		t.Fatalf("got %v, want %v", got2, want2)
+	}
+}
+
+func sampleExportRows() []map[string]any {
+	return []map[string]any{
+		{"_cycle": 0, "value": 1.25},
+		{"_cycle": 1, "value": 2.5},
+	}
+}
+
+func TestExportRowsFormattedCSV(t *testing.T) {
+	b := NewSystemBinding()
+	out := filepath.Join(t.TempDir(), "out.csv")
+	if err := b.ExportRowsFormatted([]string{"_cycle", "value"}, sampleExportRows(), out, "csv", ""); err != nil {
+		t.Fatalf("csv export: %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "_cycle,value") || !strings.Contains(text, "1.25") || !strings.Contains(text, "2.5") {
+		t.Fatalf("unexpected csv: %q", text)
+	}
+}
+
+func TestExportRowsFormattedXLSUnsupported(t *testing.T) {
+	b := NewSystemBinding()
+	out := filepath.Join(t.TempDir(), "out.xls")
+	err := b.ExportRowsFormatted([]string{"_cycle", "value"}, sampleExportRows(), out, "xls", "")
+	if err == nil {
+		t.Fatal("expected error for xls")
+	}
+	if !strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+		t.Fatalf("expected clear xls error, got: %v", err)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatal("xls must not create a file")
+	}
+}
+
+func TestExportRowsFormattedNoBatchLease(t *testing.T) {
+	b := NewSystemBinding()
+	out := filepath.Join(t.TempDir(), "out.csv")
+	if err := b.ExportRowsFormatted([]string{"_cycle", "value"}, sampleExportRows(), out, "csv", ""); err != nil {
+		t.Fatalf("csv export: %v", err)
+	}
+	b.mu.Lock()
+	active := b.activeBatches
+	b.mu.Unlock()
+	if active != 0 {
+		t.Fatalf("export must not take a batch lease, activeBatches=%d", active)
+	}
+}
+
+// TestExportRowsFormattedRealChain 走真实调用链（SystemBinding → dfLaunch → python standalone_main.py），
+// 等价于正式 GUI 导出所使用的后端路径（仅缺 webview 点击层）。环境无法解析 DataFactory 时跳过。
+func TestExportRowsFormattedRealChain(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "standalone_main.py")); err != nil {
+		t.Skipf("standalone_main.py not found under %s: %v", repoRoot, err)
+	}
+	t.Setenv("SUPCON_TOOL_REPO_ROOT", repoRoot)
+	t.Setenv("SUPCON_DATAFACTORY_PATH", "")
+
+	b := NewSystemBinding()
+	if err := b.ensureDataFactory(); err != nil {
+		t.Skipf("DataFactory not resolvable: %v", err)
+	}
+	t.Logf("GetDataFactoryPath = %s", b.GetDataFactoryPath())
+
+	rows := sampleExportRows()
+	cols := []string{"_cycle", "value"}
+
+	xlsxPath := filepath.Join(t.TempDir(), "real.xlsx")
+	if err := b.ExportRowsFormatted(cols, rows, xlsxPath, "xlsx", "控制器"); err != nil {
+		t.Fatalf("xlsx real-chain export: %v", err)
+	}
+	info, err := os.Stat(xlsxPath)
+	if err != nil || info.Size() == 0 {
+		t.Fatalf("xlsx not produced: err=%v", err)
+	}
+	t.Logf("xlsx size = %d bytes", info.Size())
+
+	csvPath := filepath.Join(t.TempDir(), "real.csv")
+	if err := b.ExportRowsFormatted(cols, rows, csvPath, "csv", ""); err != nil {
+		t.Fatalf("csv real-chain export: %v", err)
+	}
+	csvData, _ := os.ReadFile(csvPath)
+	if !strings.Contains(string(csvData), "1.25") {
+		t.Fatalf("csv missing data: %q", string(csvData))
+	}
+}

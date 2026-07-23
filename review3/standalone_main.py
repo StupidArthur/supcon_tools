@@ -277,7 +277,10 @@ def run_instance(
 
 
 def _write_rows_export(rows, columns, output_path, fmt, sheet_name):
-    """将内存结果行（_cycle 序号列 + 数据列）写为 csv/xlsx/xls，不重新仿真。"""
+    """将内存结果行（_cycle 序号列 + 数据列）写为 csv/xlsx，不重新仿真。
+
+    xls 当前版本暂不支持（运行环境缺 xlwt），抛出明确错误，不暴露 ModuleNotFoundError。
+    """
     if fmt == "csv":
         import csv as _csv
         with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -297,17 +300,7 @@ def _write_rows_export(rows, columns, output_path, fmt, sheet_name):
         wb.save(output_path)
         return
     if fmt == "xls":
-        import xlwt
-        book = xlwt.Workbook(encoding="utf-8")
-        sheet = book.add_sheet((sheet_name or "控制器")[:31])
-        for j, c in enumerate(columns):
-            sheet.write(0, j, c)
-        for i, row in enumerate(rows, start=1):
-            for j, c in enumerate(columns):
-                v = row.get(c)
-                sheet.write(i, j, "" if v is None else v)
-        book.save(output_path)
-        return
+        raise ValueError("当前版本暂不支持 xls，请使用 xlsx 或 csv")
     raise ValueError(f"不支持的导出格式: {fmt}")
 
 

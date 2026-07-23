@@ -22,7 +22,14 @@ import {
 } from 'recharts'
 import { systemApi } from '../../lib/api'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
-import { ExportDialog, type ExportFormat } from './ExportDialog'
+import { ExportDialog } from './ExportDialog'
+import {
+  createExportSession,
+  type ExportFormat,
+  type ExportSession,
+  isNumericColumn,
+  validateExportSession,
+} from './exportSession'
 import { cleanupTempYAML, materializeYamlTextToTemp } from './materializeYamlDraft'
 import { useDslProjectStore } from './useDslProjectStore'
 import {
@@ -32,14 +39,6 @@ import {
 } from './useGenericSimStore'
 
 const COLORS = ['#3b82f6', '#06b6d4', '#f97316', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#6366f1']
-
-function isNumericColumn(rows: Array<Record<string, unknown>>, col: string): boolean {
-  for (const row of rows.slice(0, 50)) {
-    const v = row[col]
-    if (typeof v === 'number' && Number.isFinite(v)) return true
-  }
-  return false
-}
 
 interface ColumnStat {
   min: number
@@ -90,13 +89,15 @@ export function GenericSimPanel() {
   const fail = useGenericSimStore((s) => s.fail)
   const toggleColumn = useGenericSimStore((s) => s.toggleColumn)
   const hasDisplay = useGenericSimStore((s) => s.hasDisplayResult(projectId))
-  const exportable = useGenericSimStore((s) => s.hasExportableResult(projectId))
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
+  const boundRunId = useGenericSimStore((s) => s.boundRunId)
+  const boundYamlHash = useGenericSimStore((s) => s.boundYamlHash)
 
   const [preflightError, setPreflightError] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [exportSession, setExportSession] = useState<ExportSession | null>(null)
 
   const owned = boundProjectId === projectId
   const running = status === 'running' && owned
@@ -115,6 +116,20 @@ export function GenericSimPanel() {
     const id = setInterval(() => refreshStatus(), 1000)
     return () => clearInterval(id)
   }, [batchBusy, refreshStatus])
+
+  // 切换工程、重新开始仿真、清空结果都会改变结果身份（projectId/runId/yamlHash）：
+  // 此时关闭并废弃当前导出会话，避免导出到已变化的结果。
+  useEffect(() => {
+    if (!exportSession) return
+    if (
+      exportSession.projectId !== projectId ||
+      exportSession.runId !== boundRunId ||
+      exportSession.yamlHash !== boundYamlHash
+    ) {
+      setExportSession(null)
+      setExportOpen(false)
+    }
+  }, [projectId, boundRunId, boundYamlHash, exportSession])
 
   const numericColumns = useMemo(
     () =>
@@ -205,33 +220,68 @@ export function GenericSimPanel() {
     }
   }
 
+  // 打开导出窗口：冻结当前结果身份与数据为不可变会话快照。
+  const openExport = () => {
+    setExportError(null)
+    const s = useGenericSimStore.getState()
+    const session = createExportSession({
+      projectId,
+      boundRunId: s.boundRunId,
+      boundYamlHash: s.boundYamlHash,
+      columns: s.columns,
+      selectedColumns: s.selectedColumns,
+      rows: s.rows,
+    })
+    if (!session) return
+    setExportSession(session)
+    setExportOpen(true)
+  }
+
   const handleExport = async (opts: { format: ExportFormat; columns: string[]; sheetName: string }) => {
     setExportError(null)
-    if (!exportable) {
-      setExportError(stale && hasDisplay ? '结果已过期，禁止导出为当前工程结果' : '未运行成功，禁止导出')
+    const session = exportSession
+    if (!session) {
+      setExportError('导出会话已失效，请重新打开导出窗口')
+      return
+    }
+    // 调用后端前复查身份：projectId/runId/yamlHash/stale/归属，任一不匹配即取消、不创建文件。
+    const check = () => {
+      const cur = useGenericSimStore.getState()
+      return validateExportSession(session, {
+        projectId,
+        boundRunId: cur.boundRunId,
+        boundYamlHash: cur.boundYamlHash,
+        stale: cur.stale,
+        hasDisplayResult: cur.hasDisplayResult(projectId),
+      })
+    }
+    const invalidBefore = check()
+    if (invalidBefore) {
+      setExportError(invalidBefore)
       return
     }
     setExportBusy(true)
     try {
       const path = await systemApi.saveExportFile(opts.format)
       if (!path) return
-      // 对话框返回后复查身份与 stale：工程/run 改变或已过期则取消。
-      const cur = useGenericSimStore.getState()
-      if (!cur.hasExportableResult(projectId)) {
-        setExportError('工程已切换、结果已失效或已过期，取消导出')
+      // 原生保存对话框返回后再次复查（期间工程/run 可能已变化）。
+      const invalidAfter = check()
+      if (invalidAfter) {
+        setExportError(invalidAfter)
         return
       }
-      // 导出内容与趋势图完全一致：固定序号列 _cycle + 用户勾选列，全部来自当前内存 rows。
-      // 不重新仿真、不重新物化 YAML。
+      // 传给后端的数据只来自会话快照（session.rows）与用户基于会话列的选择。
+      // 后端调用开始后即使切换页面，也导出同一份快照，不会改成其他结果。
       const exportColumns = ['_cycle', ...opts.columns]
       await systemApi.exportRowsFormatted(
         exportColumns,
-        cur.rows as Array<Record<string, any>>,
+        session.rows as Array<Record<string, any>>,
         path,
         opts.format,
         opts.sheetName,
       )
       setExportOpen(false)
+      setExportSession(null)
     } catch (err: any) {
       setExportError(err?.message || String(err))
     } finally {
@@ -291,10 +341,7 @@ export function GenericSimPanel() {
         <div className="min-w-2 flex-1" />
         <button
           type="button"
-          onClick={() => {
-            setExportError(null)
-            setExportOpen(true)
-          }}
+          onClick={openExport}
           disabled={!hasDisplay}
           className="rounded-md border border-border bg-card px-3 py-1.5 transition-colors hover:bg-secondary disabled:opacity-40 disabled:hover:bg-card"
           data-testid="sim-export-button"
@@ -406,12 +453,13 @@ export function GenericSimPanel() {
 
       <ExportDialog
         open={exportOpen}
-        columns={numericColumns}
-        defaultSelected={selectedColumns}
-        rowCount={rows.length}
+        session={exportSession}
         busy={exportBusy}
         error={exportError}
-        onClose={() => setExportOpen(false)}
+        onClose={() => {
+          setExportOpen(false)
+          setExportSession(null)
+        }}
         onExport={(opts) => void handleExport(opts)}
       />
     </div>
