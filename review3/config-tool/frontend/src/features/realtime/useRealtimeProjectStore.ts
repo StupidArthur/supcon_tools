@@ -97,25 +97,23 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
         set({ loading: false })
         return
       }
+      const v = view as any
+      if (v.applied === false) {
+        set({
+          duplicates: v.validation?.duplicates || [],
+          loading: false,
+        })
+        return
+      }
       set({
-        currentProject: view.project as any,
-        instances: (view.validation as any)?.instances || [],
+        currentProject: v.project,
+        instances: v.validation?.instances || [],
         duplicates: [],
         loading: false,
       })
       await get().refreshProjects()
     } catch (e: any) {
-      const msg = String(e)
-      if (msg.includes('DUPLICATE_INSTANCE_NAMES') || msg.includes('实例名称重复')) {
-        try {
-          const validation = await realtimeProjectApi.validateProject(projectId)
-          set({ duplicates: (validation as any).duplicates || [], loading: false })
-        } catch {
-          set({ error: msg, loading: false })
-        }
-      } else {
-        set({ error: msg, loading: false })
-      }
+      set({ error: String(e), loading: false })
     }
   },
 
@@ -123,9 +121,10 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
     set({ loading: true, error: null })
     try {
       const view = await realtimeProjectApi.removeSource(projectId, sourceId)
+      const v = view as any
       set({
-        currentProject: view.project as any,
-        instances: (view.validation as any)?.instances || [],
+        currentProject: v.project,
+        instances: v.validation?.instances || [],
         duplicates: [],
         loading: false,
       })
@@ -139,25 +138,23 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
     set({ loading: true, error: null, duplicates: [] })
     try {
       const view = await realtimeProjectApi.updateReplicas(projectId, sourceId, replicas)
+      const v = view as any
+      if (v.applied === false) {
+        set({
+          duplicates: v.validation?.duplicates || [],
+          loading: false,
+        })
+        return false
+      }
       set({
-        currentProject: view.project as any,
-        instances: (view.validation as any)?.instances || [],
+        currentProject: v.project,
+        instances: v.validation?.instances || [],
         duplicates: [],
         loading: false,
       })
       return true
     } catch (e: any) {
-      const msg = String(e)
-      if (msg.includes('DUPLICATE_INSTANCE_NAMES') || msg.includes('实例名称重复')) {
-        try {
-          const validation = await realtimeProjectApi.validateProject(projectId)
-          set({ duplicates: (validation as any).duplicates || [], loading: false })
-        } catch {
-          set({ error: msg, loading: false })
-        }
-      } else {
-        set({ error: msg, loading: false })
-      }
+      set({ error: String(e), loading: false })
       return false
     }
   },

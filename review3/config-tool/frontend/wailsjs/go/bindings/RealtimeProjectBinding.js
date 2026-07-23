@@ -50,8 +50,8 @@ export function SetContext(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['SetContext'](arg1);
 }
 
-export function SetForce(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['bindings']['RealtimeProjectBinding']['SetForce'](arg1, arg2, arg3, arg4, arg5);
+export function SetForce(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['bindings']['RealtimeProjectBinding']['SetForce'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function UpdateReplicas(arg1, arg2, arg3) {

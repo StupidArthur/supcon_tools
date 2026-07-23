@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,14 +82,16 @@ func (b *RealtimeProjectBinding) CompileProject(projectID, outputPath string) (s
 }
 
 type ForceSetRequest struct {
-	Tag   string   `json:"tag"`
-	Mode  string   `json:"mode"`
-	Value *float64 `json:"value,omitempty"`
+	Tag      string   `json:"tag"`
+	Mode     string   `json:"mode"`
+	Value    *float64 `json:"value,omitempty"`
+	Duration *float64 `json:"duration,omitempty"`
 }
 
 type ForceEntry struct {
-	Mode  string  `json:"mode"`
-	Value float64 `json:"value,omitempty"`
+	Mode      string  `json:"mode"`
+	Value     float64 `json:"value,omitempty"`
+	ExpiresAt float64 `json:"expires_at,omitempty"`
 }
 
 var forceHTTPClient = &http.Client{Timeout: 5 * time.Second}
@@ -97,16 +100,44 @@ func (b *RealtimeProjectBinding) forceURL(apiHost string, apiPort int, path stri
 	return fmt.Sprintf("http://%s:%d%s", apiHost, apiPort, path)
 }
 
-func (b *RealtimeProjectBinding) SetForce(apiHost string, apiPort int, tag, mode string, value *float64) error {
-	reqBody := ForceSetRequest{Tag: tag, Mode: mode, Value: value}
-	data, _ := json.Marshal(reqBody)
+func decodeForceResponse(resp *http.Response, out any) error {
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		var errBody struct {
+			Detail string `json:"detail"`
+		}
+		if json.Unmarshal(body, &errBody) == nil && errBody.Detail != "" {
+			return fmt.Errorf("%s", errBody.Detail)
+		}
+		return fmt.Errorf("强制操作失败: HTTP %d", resp.StatusCode)
+	}
+	if out != nil {
+		if err := json.Unmarshal(body, out); err != nil {
+			return fmt.Errorf("解析强制响应失败: %w", err)
+		}
+	}
+	return nil
+}
+
+func (b *RealtimeProjectBinding) SetForce(apiHost string, apiPort int, tag, mode string, value *float64, duration *float64) error {
+	reqBody := ForceSetRequest{Tag: tag, Mode: mode, Value: value, Duration: duration}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("序列化请求失败: %w", err)
+	}
 	resp, err := forceHTTPClient.Post(b.forceURL(apiHost, apiPort, "/api/force"), "application/json", bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("设置强制失败: HTTP %d", resp.StatusCode)
+	var out struct {
+		OK bool `json:"ok"`
+	}
+	if err := decodeForceResponse(resp, &out); err != nil {
+		return err
+	}
+	if !out.OK {
+		return fmt.Errorf("设置强制失败")
 	}
 	return nil
 }
@@ -117,8 +148,7 @@ func (b *RealtimeProjectBinding) ClearForce(apiHost string, apiPort int, tag str
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	return nil
+	return decodeForceResponse(resp, nil)
 }
 
 func (b *RealtimeProjectBinding) ClearAllForces(apiHost string, apiPort int) error {
@@ -127,8 +157,7 @@ func (b *RealtimeProjectBinding) ClearAllForces(apiHost string, apiPort int) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	return nil
+	return decodeForceResponse(resp, nil)
 }
 
 func (b *RealtimeProjectBinding) GetForces(apiHost string, apiPort int) (map[string]ForceEntry, error) {
@@ -136,13 +165,18 @@ func (b *RealtimeProjectBinding) GetForces(apiHost string, apiPort int) (map[str
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 	var result struct {
 		OK     bool                  `json:"ok"`
 		Forces map[string]ForceEntry `json:"forces"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeForceResponse(resp, &result); err != nil {
 		return nil, err
+	}
+	if !result.OK {
+		return nil, fmt.Errorf("获取强制状态失败")
+	}
+	if result.Forces == nil {
+		result.Forces = map[string]ForceEntry{}
 	}
 	return result.Forces, nil
 }

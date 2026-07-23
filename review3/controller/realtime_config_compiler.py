@@ -164,27 +164,39 @@ def _build_rename_map(original_names: List[str], replica_index: int) -> Dict[str
 
 
 def _rewrite_reference(ref: str, rename: Dict[str, str]) -> str:
-    if "." in ref:
-        instance_part, attr_part = ref.split(".", 1)
-    else:
-        instance_part = ref
-        attr_part = None
-
+    """重写结构化引用 instance.attr 或 instance.attr[-N]，只替换实例段。"""
+    import re
+    m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)(.*)$", ref)
+    if not m:
+        return ref
+    instance_part, rest = m.group(1), m.group(2)
     new_instance = rename.get(instance_part, instance_part)
-    if attr_part is not None:
-        return f"{new_instance}.{attr_part}"
-    return new_instance
+    return new_instance + rest
+
+
+_IDENT_RE = None
 
 
 def _rewrite_expression(expr: str, rename: Dict[str, str]) -> str:
+    """
+    单 pass 重写表达式/公式中的实例引用。
+
+    用 \\b 匹配最长标识符 token（pid_1 作为一个整体），
+    命中 rename 映射则替换，否则保留。单 pass 避免 pid→pid_1
+    与 pid_1→pid_1_1 的次序串扰。
+    """
     if not expr:
         return expr
-    import re
-    for old_name, new_name in rename.items():
-        if old_name == new_name:
-            continue
-        expr = re.sub(rf"\b{re.escape(old_name)}\b", new_name, expr)
-    return expr
+    global _IDENT_RE
+    if _IDENT_RE is None:
+        import re
+        _IDENT_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
+
+    def _repl(m):
+        token = m.group(1)
+        return rename.get(token, token)
+
+    return _IDENT_RE.sub(_repl, expr)
 
 
 def _replicate_program_item(
@@ -195,14 +207,20 @@ def _replicate_program_item(
     original_name = str(new_item["name"])
     new_item["name"] = rename.get(original_name, original_name)
 
-    if "inputs" in new_item and new_item["inputs"]:
+    if new_item.get("inputs"):
         new_inputs = {}
         for port, ref in new_item["inputs"].items():
             new_inputs[port] = _rewrite_reference(str(ref), rename)
         new_item["inputs"] = new_inputs
 
-    if "expression" in new_item and new_item["expression"]:
+    if new_item.get("expression"):
         new_item["expression"] = _rewrite_expression(str(new_item["expression"]), rename)
+
+    if new_item.get("formula"):
+        new_item["formula"] = _rewrite_expression(str(new_item["formula"]), rename)
+
+    if new_item.get("source"):
+        new_item["source"] = _rewrite_reference(str(new_item["source"]), rename)
 
     return new_item
 

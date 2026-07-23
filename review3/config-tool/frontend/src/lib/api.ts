@@ -97,8 +97,8 @@ export const realtimeProjectApi = {
   validateProject: (projectId: string) => RealtimeProjectBinding.ValidateProject(projectId),
   compileProject: (projectId: string, outputPath: string) =>
     RealtimeProjectBinding.CompileProject(projectId, outputPath),
-  setForce: (apiHost: string, apiPort: number, tag: string, mode: string, value?: number) =>
-    RealtimeProjectBinding.SetForce(apiHost, apiPort, tag, mode, value ?? null),
+  setForce: (apiHost: string, apiPort: number, tag: string, mode: string, value?: number, duration?: number) =>
+    RealtimeProjectBinding.SetForce(apiHost, apiPort, tag, mode, value ?? null, duration ?? null),
   clearForce: (apiHost: string, apiPort: number, tag: string) =>
     RealtimeProjectBinding.ClearForce(apiHost, apiPort, tag),
   clearAllForces: (apiHost: string, apiPort: number) =>

@@ -53,6 +53,7 @@ type ValidationResult struct {
 }
 
 type ProjectView struct {
+	Applied    bool             `json:"applied"`
 	Project    Project          `json:"project"`
 	Validation ValidationResult `json:"validation"`
 }

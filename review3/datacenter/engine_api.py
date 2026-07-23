@@ -181,7 +181,7 @@ class EngineBinding:
     _latest_snapshot_lock: threading.Lock = field(default_factory=threading.Lock)
     _batch_lock: threading.Lock = field(default_factory=threading.Lock)
     _batches: Dict[str, WriteBatchRecord] = field(default_factory=dict)
-    force_map: Dict[str, dict] = field(default_factory=dict)
+    force_manager: Any = None
 
     def push_snapshot(self, snapshot: Dict[str, Any]) -> None:
         """由 standalone_main 的引擎线程每周期调用一次。
@@ -542,45 +542,61 @@ class ForceSetRequest(BaseModel):
     tag: str
     mode: str = Field(..., description="follow | hold | zero | fixed")
     value: Optional[float] = None
+    duration: Optional[float] = Field(default=None, description="持续时间（秒），到期自动恢复 follow")
+
+
+def _refresh_valid_tags(b: "EngineBinding") -> None:
+    """从最新 snapshot 推导权威可发布数值位号集合。"""
+    if b.force_manager is None:
+        return
+    with b._latest_snapshot_lock:
+        snap = b._latest_snapshot
+    if not snap:
+        return
+    tags = {k for k, v in snap.items()
+            if not k.startswith("_") and isinstance(v, (int, float))
+            and not isinstance(v, bool)}
+    b.force_manager.set_valid_tags(tags)
 
 
 @app.post("/api/force")
 def api_force_set(req: ForceSetRequest) -> Dict[str, Any]:
+    from datacenter.force_manager import ForceError
     b = get_binding()
-    if req.mode not in ("follow", "hold", "zero", "fixed"):
-        raise HTTPException(status_code=400, detail=f"无效模式: {req.mode}")
-    if req.mode == "follow":
-        b.force_map.pop(req.tag, None)
-    else:
-        entry: dict = {"mode": req.mode}
-        if req.mode == "hold":
-            entry["value"] = req.value if req.value is not None else b.shared_data.get(req.tag, 0.0)
-        elif req.mode == "fixed":
-            if req.value is None:
-                raise HTTPException(status_code=400, detail="fixed 模式必须提供 value")
-            entry["value"] = req.value
-        b.force_map[req.tag] = entry
-    return {"ok": True, "tag": req.tag, "mode": req.mode}
+    if b.force_manager is None:
+        raise HTTPException(status_code=503, detail="强制层未启用")
+    _refresh_valid_tags(b)
+    try:
+        entry = b.force_manager.set_force(req.tag, req.mode, req.value, req.duration)
+    except ForceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "tag": req.tag, "force": entry}
 
 
 @app.delete("/api/force/{tag}")
 def api_force_clear(tag: str) -> Dict[str, Any]:
     b = get_binding()
-    b.force_map.pop(tag, None)
+    if b.force_manager is None:
+        raise HTTPException(status_code=503, detail="强制层未启用")
+    b.force_manager.clear_force(tag)
     return {"ok": True, "tag": tag}
 
 
 @app.delete("/api/force")
 def api_force_clear_all() -> Dict[str, Any]:
     b = get_binding()
-    b.force_map.clear()
+    if b.force_manager is None:
+        raise HTTPException(status_code=503, detail="强制层未启用")
+    b.force_manager.clear_all()
     return {"ok": True}
 
 
 @app.get("/api/force")
 def api_force_list() -> Dict[str, Any]:
     b = get_binding()
-    return {"ok": True, "forces": dict(b.force_map)}
+    if b.force_manager is None:
+        return {"ok": True, "forces": {}}
+    return {"ok": True, "forces": b.force_manager.snapshot()}
 
 
 # --------------------------------------------------------------------------- #

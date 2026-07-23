@@ -367,6 +367,89 @@ class TestCompileProject:
         ]
         assert names == expected
 
+    def test_expression_formula_rewritten(self, tmp_path):
+        yaml_content = textwrap.dedent("""\
+            clock:
+              mode: GENERATOR
+              cycle_time: 0.5
+            program:
+              - name: tank
+                type: CYLINDRICAL_TANK
+                params:
+                  height: 1.2
+              - name: expr1
+                type: Expression
+                formula: tank.level * 2
+        """)
+        p = tmp_path / "expr.yaml"
+        p.write_text(yaml_content, encoding="utf-8")
+        sources = [SourceSpec(source_id="s1", source_file=str(p), replicas=2)]
+        result = compile_project(sources)
+        expr1_1 = next(x for x in result["program"] if x["name"] == "expr1_1")
+        assert expr1_1["formula"] == "tank_1.level * 2"
+        expr1_0 = next(x for x in result["program"] if x["name"] == "expr1")
+        assert expr1_0["formula"] == "tank.level * 2"
+
+    def test_lag_source_rewritten(self, tmp_path):
+        yaml_content = textwrap.dedent("""\
+            clock:
+              mode: GENERATOR
+              cycle_time: 0.5
+            program:
+              - name: tank
+                type: CYLINDRICAL_TANK
+                params:
+                  height: 1.2
+              - name: lag1
+                type: Lag
+                source: tank.level
+                delay: 1
+        """)
+        p = tmp_path / "lag.yaml"
+        p.write_text(yaml_content, encoding="utf-8")
+        sources = [SourceSpec(source_id="s1", source_file=str(p), replicas=2)]
+        result = compile_project(sources)
+        lag1_1 = next(x for x in result["program"] if x["name"] == "lag1_1")
+        assert lag1_1["source"] == "tank_1.level"
+
+    def test_no_cross_wiring_with_prefixed_names(self, tmp_path):
+        # 验证单 pass 重写不会把 pid_1 误当作 pid 的前缀串扰。
+        # 直接在重写函数层面验证次序安全。
+        from controller.realtime_config_compiler import _rewrite_expression
+        rename = {"pid": "pid_1", "pid_1": "pid_1_1", "tank": "tank_1"}
+        assert _rewrite_expression("pid.PV + pid_1.PV", rename) == "pid_1.PV + pid_1_1.PV"
+        assert _rewrite_expression("tank.level * 2", rename) == "tank_1.level * 2"
+
+    def test_self_replica_prefix_conflict_detected(self, tmp_path):
+        # DSL 含 pid 和 pid_1，副本 1 把 pid→pid_1 与原 pid_1 冲突，应被拒绝。
+        yaml_content = textwrap.dedent("""\
+            clock:
+              mode: GENERATOR
+              cycle_time: 0.5
+            program:
+              - name: tank
+                type: CYLINDRICAL_TANK
+                params:
+                  height: 1.2
+              - name: pid
+                type: PID
+                params:
+                  PB: 50.0
+                inputs:
+                  PV: tank.level
+              - name: pid_1
+                type: PID
+                params:
+                  PB: 40.0
+                inputs:
+                  PV: tank.level
+        """)
+        p = tmp_path / "prefixed.yaml"
+        p.write_text(yaml_content, encoding="utf-8")
+        sources = [SourceSpec(source_id="s1", source_file=str(p), replicas=2)]
+        with pytest.raises(ValueError, match="冲突"):
+            compile_project(sources)
+
 
 class TestCompileCLI:
     def _run_compile(self, payload: dict) -> subprocess.CompletedProcess:

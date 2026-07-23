@@ -107,7 +107,7 @@ func (m *Manager) AddSource(ctx context.Context, projectID, yamlPath string) (Pr
 	}
 	if !result.Valid {
 		m.storage.RemoveSourceFile(projectID, sourceID)
-		return ProjectView{}, NewDuplicateError(result)
+		return ProjectView{Applied: false, Project: p, Validation: result}, nil
 	}
 
 	p.Sources = candidate
@@ -116,10 +116,10 @@ func (m *Manager) AddSource(ctx context.Context, projectID, yamlPath string) (Pr
 		return ProjectView{}, err
 	}
 
-	return ProjectView{Project: p, Validation: result}, nil
+	return ProjectView{Applied: true, Project: p, Validation: result}, nil
 }
 
-func (m *Manager) RemoveSource(_ context.Context, projectID, sourceID string) (ProjectView, error) {
+func (m *Manager) RemoveSource(ctx context.Context, projectID, sourceID string) (ProjectView, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -145,13 +145,18 @@ func (m *Manager) RemoveSource(_ context.Context, projectID, sourceID string) (P
 	if p.Sources == nil {
 		p.Sources = []Source{}
 	}
+
+	result, err := m.validateCandidate(ctx, projectID, p.Sources)
+	if err != nil {
+		return ProjectView{}, err
+	}
+
 	if err := m.storage.SaveProject(p); err != nil {
 		return ProjectView{}, err
 	}
 	m.storage.RemoveSourceFile(projectID, sourceID)
 
-	result := m.localValidation(p.Sources)
-	return ProjectView{Project: p, Validation: result}, nil
+	return ProjectView{Applied: true, Project: p, Validation: result}, nil
 }
 
 func (m *Manager) UpdateReplicas(ctx context.Context, projectID, sourceID string, replicas int) (ProjectView, error) {
@@ -186,7 +191,7 @@ func (m *Manager) UpdateReplicas(ctx context.Context, projectID, sourceID string
 		return ProjectView{}, err
 	}
 	if !result.Valid {
-		return ProjectView{}, NewDuplicateError(result)
+		return ProjectView{Applied: false, Project: p, Validation: result}, nil
 	}
 
 	p.Sources = candidate
@@ -194,7 +199,7 @@ func (m *Manager) UpdateReplicas(ctx context.Context, projectID, sourceID string
 		return ProjectView{}, err
 	}
 
-	return ProjectView{Project: p, Validation: result}, nil
+	return ProjectView{Applied: true, Project: p, Validation: result}, nil
 }
 
 func (m *Manager) ValidateProject(ctx context.Context, projectID string) (ValidationResult, error) {

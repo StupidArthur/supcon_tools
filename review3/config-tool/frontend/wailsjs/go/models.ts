@@ -981,6 +981,7 @@ export namespace realtime {
 		}
 	}
 	export class ProjectView {
+	    applied: boolean;
 	    project: Project;
 	    validation: ValidationResult;
 	
@@ -990,6 +991,7 @@ export namespace realtime {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.applied = source["applied"];
 	        this.project = this.convertValues(source["project"], Project);
 	        this.validation = this.convertValues(source["validation"], ValidationResult);
 	    }

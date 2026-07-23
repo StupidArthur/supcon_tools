@@ -60,7 +60,7 @@ class StandaloneOpcuaServer:
         config: OPCUAServerConfig,
         shared_data: Dict[str, float],
         cmd_queue: queue.Queue,
-        force_map: Optional[Dict[str, dict]] = None,
+        force_manager=None,
     ) -> None:
         """
         初始化 OPCUA Server
@@ -69,12 +69,12 @@ class StandaloneOpcuaServer:
             config: OPCUA Server 配置
             shared_data: 共享内存数据字典（引擎计算完每个周期后更新）
             cmd_queue: 命令队列（用于向引擎发送写值命令）
-            force_map: 输出强制映射（tag → {"mode": str, "value": float}）
+            force_manager: 输出强制管理器（可选），每轮在锁内读取强制快照
         """
         self.config = config
         self._shared_data = shared_data
         self._cmd_queue = cmd_queue
-        self._force_map: Dict[str, dict] = force_map if force_map is not None else {}
+        self._force_manager = force_manager
 
         # OPCUA Server
         self.server: Optional[Server] = None
@@ -238,17 +238,8 @@ class StandaloneOpcuaServer:
             try:
                 params = dict(self._shared_data)
 
-                if self._force_map:
-                    for tag, force in self._force_map.items():
-                        mode = force.get("mode", "follow")
-                        if mode == "follow":
-                            continue
-                        elif mode == "zero":
-                            params[tag] = 0.0
-                        elif mode == "fixed":
-                            params[tag] = float(force.get("value", 0.0))
-                        elif mode == "hold":
-                            params[tag] = float(force.get("value", params.get(tag, 0.0)))
+                if self._force_manager is not None:
+                    params = self._force_manager.apply(params)
 
                 if params:
                     await self._update_nodes(params)

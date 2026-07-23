@@ -206,7 +206,7 @@ def run_instance(
     cycle_time_override: float = None,
     on_snapshot: Optional[Callable[[Dict[str, Any]], None]] = None,
     engine_holder: Optional[Dict[str, Any]] = None,
-    force_map: Optional[Dict[str, dict]] = None,
+    force_manager=None,
 ) -> Tuple[threading.Thread, threading.Thread, StandaloneOpcuaServer, threading.Event, Dict[str, float]]:
     """
     运行一个引擎+OPCUA 实例。
@@ -252,8 +252,10 @@ def run_instance(
         config=opcua_config,
         shared_data=shared_data,
         cmd_queue=cmd_queue,
-        force_map=force_map,
+        force_manager=force_manager,
     )
+    if force_manager is not None:
+        force_manager.bind_runtime(shared_data)
     print(f"[OPCUA:{instance_name}] Server instance created at {opcua_config.server_url}")
 
     # 启动 OPCUA Server（内部创建后台线程运行 asyncio 循环）
@@ -830,12 +832,13 @@ def main() -> None:
         if args.api:
             # 延迟导入：避免未启用 --api 时也要装 fastapi/uvicorn
             from datacenter.engine_api import EngineBinding
-            force_map: Dict[str, dict] = {}
+            from datacenter.force_manager import ForceManager
+            force_manager = ForceManager()
             api_binding = EngineBinding(
                 instance_name=instance_name,
                 engine=None,  # 引擎在 run_engine_thread 里建好后通过 holder 注入
                 shared_data={},
-                force_map=force_map,
+                force_manager=force_manager,
             )
 
             def _on_snapshot(snap: Dict[str, Any]) -> None:
@@ -850,7 +853,7 @@ def main() -> None:
                 cycle_time_override=args.cycle_time,
                 on_snapshot=_on_snapshot,
                 engine_holder=engine_holder,
-                force_map=force_map,
+                force_manager=force_manager,
             )
             # 等引擎线程创建出 engine 实例
             for _ in range(50):

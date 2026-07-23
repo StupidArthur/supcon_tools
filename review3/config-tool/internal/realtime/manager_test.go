@@ -153,16 +153,18 @@ func TestAddSourceDuplicateNoResidue(t *testing.T) {
 	p, _ := m.CreateProject(ctx, "proj")
 	yamlPath := writeYAML(t, t.TempDir(), "tank.yaml", tankYAML)
 
-	_, err := m.AddSource(ctx, p.ID, yamlPath)
-	if err == nil {
-		t.Fatal("expected duplicate error")
+	view, err := m.AddSource(ctx, p.ID, yamlPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	ve, ok := err.(*ValidationError)
-	if !ok {
-		t.Fatalf("expected ValidationError, got %T", err)
+	if view.Applied {
+		t.Fatal("expected Applied=false on duplicate")
 	}
-	if ve.Code != "DUPLICATE_INSTANCE_NAMES" {
-		t.Fatalf("expected DUPLICATE_INSTANCE_NAMES, got %s", ve.Code)
+	if view.Validation.Valid {
+		t.Fatal("expected candidate validation invalid")
+	}
+	if len(view.Validation.Duplicates) == 0 {
+		t.Fatal("expected candidate duplicates to be returned")
 	}
 
 	reloaded, _ := m.OpenProject(ctx, p.ID)
@@ -217,9 +219,15 @@ func TestUpdateReplicasDuplicateKeepsOld(t *testing.T) {
 	sourceID := view.Project.Sources[0].ID
 
 	fc.result = duplicateResult()
-	_, err := m.UpdateReplicas(ctx, p.ID, sourceID, 10)
-	if err == nil {
-		t.Fatal("expected duplicate error")
+	view2, err := m.UpdateReplicas(ctx, p.ID, sourceID, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if view2.Applied {
+		t.Fatal("expected Applied=false on duplicate")
+	}
+	if len(view2.Validation.Duplicates) == 0 {
+		t.Fatal("expected candidate duplicates to be returned")
 	}
 
 	reloaded, _ := m.OpenProject(ctx, p.ID)

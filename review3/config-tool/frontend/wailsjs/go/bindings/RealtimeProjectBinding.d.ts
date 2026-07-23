@@ -28,7 +28,7 @@ export function RenameProject(arg1:string,arg2:string):Promise<realtime.Project>
 
 export function SetContext(arg1:context.Context):Promise<void>;
 
-export function SetForce(arg1:string,arg2:number,arg3:string,arg4:string,arg5:any):Promise<void>;
+export function SetForce(arg1:string,arg2:number,arg3:string,arg4:string,arg5:any,arg6:any):Promise<void>;
 
 export function UpdateReplicas(arg1:string,arg2:string,arg3:number):Promise<realtime.ProjectView>;
 

@@ -15,13 +15,14 @@ export function RuntimeTagTable() {
   const apiPort = useRuntimeStore((s) => s.apiPort)
   const [filter, setFilter] = useState('')
   const [forces, setForces] = useState<Record<string, ForceEntry>>({})
+  const [forceError, setForceError] = useState<string | null>(null)
 
   const refreshForces = useCallback(async () => {
     try {
       const f = await realtimeProjectApi.getForces(apiHost, apiPort) as any
       setForces(f || {})
-    } catch {
-      // ignore
+    } catch (e: any) {
+      setForceError(String(e))
     }
   }, [apiHost, apiPort])
 
@@ -32,7 +33,7 @@ export function RuntimeTagTable() {
   const tags = useMemo(() => {
     if (!rawSnapshot) return []
     const entries = Object.entries(rawSnapshot)
-      .filter(([k]) => !k.startsWith('_') && k !== 'cycle_count' && k !== 'sim_time')
+      .filter(([k, v]) => !k.startsWith('_') && typeof v === 'number')
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => a.name.localeCompare(b.name))
     if (!filter) return entries
@@ -40,21 +41,23 @@ export function RuntimeTagTable() {
     return entries.filter((e) => e.name.toLowerCase().includes(lower))
   }, [rawSnapshot, filter])
 
-  const handleForce = async (tag: string, mode: string, value?: number) => {
+  const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {
+    setForceError(null)
     try {
-      await realtimeProjectApi.setForce(apiHost, apiPort, tag, mode, value)
+      await realtimeProjectApi.setForce(apiHost, apiPort, tag, mode, value, duration)
       await refreshForces()
-    } catch {
-      // ignore
+    } catch (e: any) {
+      setForceError(String(e))
     }
   }
 
   const handleClearForce = async (tag: string) => {
+    setForceError(null)
     try {
       await realtimeProjectApi.clearForce(apiHost, apiPort, tag)
       await refreshForces()
-    } catch {
-      // ignore
+    } catch (e: any) {
+      setForceError(String(e))
     }
   }
 
@@ -149,15 +152,25 @@ export function RuntimeTagTable() {
                       <>
                         <button
                           type="button"
-                          onClick={() => void handleForce(tag.name, 'hold', typeof tag.value === 'number' ? tag.value : 0)}
+                          onClick={() => {
+                            const d = prompt('持续时间（秒，留空=永久）：', '')
+                            if (d === null) return
+                            const dur = d.trim() === '' ? undefined : parseFloat(d)
+                            void handleForce(tag.name, 'hold', undefined, dur)
+                          }}
                           className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                          title="保持当前值"
+                          title="保持当前输出（后端原子捕获）"
                         >
                           H
                         </button>
                         <button
                           type="button"
-                          onClick={() => void handleForce(tag.name, 'zero')}
+                          onClick={() => {
+                            const d = prompt('持续时间（秒，留空=永久）：', '')
+                            if (d === null) return
+                            const dur = d.trim() === '' ? undefined : parseFloat(d)
+                            void handleForce(tag.name, 'zero', undefined, dur)
+                          }}
                           className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
                           title="置零"
                         >
@@ -167,7 +180,11 @@ export function RuntimeTagTable() {
                           type="button"
                           onClick={() => {
                             const v = prompt('固定值：', '0')
-                            if (v !== null) void handleForce(tag.name, 'fixed', parseFloat(v) || 0)
+                            if (v === null) return
+                            const d = prompt('持续时间（秒，留空=永久）：', '')
+                            if (d === null) return
+                            const dur = d.trim() === '' ? undefined : parseFloat(d)
+                            void handleForce(tag.name, 'fixed', parseFloat(v) || 0, dur)
                           }}
                           className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
                           title="固定值"
@@ -183,6 +200,12 @@ export function RuntimeTagTable() {
           </tbody>
         </table>
       </div>
+      {forceError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive" data-testid="force-error">
+          强制操作失败：{forceError}
+          <button type="button" onClick={() => setForceError(null)} className="ml-2 underline">关闭</button>
+        </div>
+      ) : null}
     </section>
   )
 }
