@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-// 创建一个模拟命令
+// \u521b\u5efa\u4e00\u4e2a\u6a21\u62df\u547d\u4ee4
 func makeMockCommand(exitCode int, stdout, stderr string) commandFactory {
 	return func(name string, arg ...string) *exec.Cmd {
 		cs := []string{"-test.run=TestHelperProcess", "--", name}
@@ -33,7 +33,7 @@ func makeMockCommand(exitCode int, stdout, stderr string) commandFactory {
 	}
 }
 
-// 创建一个持续运行的模拟命令
+// \u521b\u5efa\u4e00\u4e2a\u6301\u7eed\u8fd0\u884c\u7684\u6a21\u62df\u547d\u4ee4
 func makeLongRunningCommand(sleepSeconds int) commandFactory {
 	return func(name string, arg ...string) *exec.Cmd {
 		cs := []string{"-test.run=TestHelperProcess", "--", name}
@@ -48,7 +48,7 @@ func makeLongRunningCommand(sleepSeconds int) commandFactory {
 	}
 }
 
-// 创建模拟的 readiness checker
+// \u521b\u5efa\u6a21\u62df\u7684 readiness checker
 func makeMockReadinessChecker(readyAfterCalls int, instanceName string) (readinessChecker, func() int32) {
 	var callCount atomic.Int32
 	checker := func(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
@@ -72,7 +72,7 @@ func waitForStatus(t *testing.T, b *SystemBinding, predicate func(SystemStatus) 
 		time.Sleep(10 * time.Millisecond)
 	}
 	status := b.Status()
-	t.Fatalf("等待状态超时，最终状态: %+v", status)
+	t.Fatalf("\u7b49\u5f85\u72b6\u6001\u8d85\u65f6\uff0c\u6700\u7ec8\u72b6\u6001: %+v", status)
 	return SystemStatus{}
 }
 
@@ -83,7 +83,7 @@ func TestBuildArgs(t *testing.T) {
 		expected []string
 	}{
 		{
-			name: "完整参数",
+			name: "\u5b8c\u6574\u53c2\u6570",
 			params: StartParams{
 				ConfigPath:  "config/test.yaml",
 				Mode:        "REALTIME",
@@ -106,7 +106,7 @@ func TestBuildArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "只有必要参数",
+			name: "\u53ea\u6709\u5fc5\u8981\u53c2\u6570",
 			params: StartParams{
 				ConfigPath: "config/test.yaml",
 			},
@@ -118,13 +118,13 @@ func TestBuildArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			args := BuildArgs(tt.params)
 			if len(args) != len(tt.expected) {
-				t.Errorf("参数数量不匹配: got %d, want %d\n  got:  %v\n  want: %v",
+				t.Errorf("\u53c2\u6570\u6570\u91cf\u4e0d\u5339\u914d: got %d, want %d\n  got:  %v\n  want: %v",
 					len(args), len(tt.expected), args, tt.expected)
 				return
 			}
 			for i, arg := range args {
 				if arg != tt.expected[i] {
-					t.Errorf("参数[%d]不匹配: got %q, want %q", i, arg, tt.expected[i])
+					t.Errorf("\u53c2\u6570[%d]\u4e0d\u5339\u914d: got %q, want %q", i, arg, tt.expected[i])
 				}
 			}
 		})
@@ -148,35 +148,35 @@ func TestBuildArgs_ContainsAllRequired(t *testing.T) {
 	requiredArgs := []string{"--name", "--mode", "--cycle-time", "--port", "--api", "--api-host", "--api-port"}
 	for _, required := range requiredArgs {
 		if !strings.Contains(argsStr, required) {
-			t.Errorf("参数缺少 %q", required)
+			t.Errorf("\u53c2\u6570\u7f3a\u5c11 %q", required)
 		}
 	}
 
-	// 验证具体值
+	// \u9a8c\u8bc1\u5177\u4f53\u503c
 	for i, arg := range args {
 		switch arg {
 		case "--name":
 			if i+1 < len(args) && args[i+1] != "second_order_tank" {
-				t.Errorf("--name 值不匹配: got %q, want %q", args[i+1], "second_order_tank")
+				t.Errorf("--name \u503c\u4e0d\u5339\u914d: got %q, want %q", args[i+1], "second_order_tank")
 			}
 		case "--port":
 			if i+1 < len(args) && args[i+1] != "18951" {
-				t.Errorf("--port 值不匹配: got %q, want %q", args[i+1], "18951")
+				t.Errorf("--port \u503c\u4e0d\u5339\u914d: got %q, want %q", args[i+1], "18951")
 			}
 		case "--api-port":
 			if i+1 < len(args) && args[i+1] != "8000" {
-				t.Errorf("--api-port 值不匹配: got %q, want %q", args[i+1], "8000")
+				t.Errorf("--api-port \u503c\u4e0d\u5339\u914d: got %q, want %q", args[i+1], "8000")
 			}
 		}
 	}
 }
 
 func TestBuildArgs_PortAlwaysIncluded(t *testing.T) {
-	// standalone_main.py 不支持关闭 OPC UA，port 始终传递
+	// standalone_main.py \u4e0d\u652f\u6301\u5173\u95ed OPC UA\uff0cport \u59cb\u7ec8\u4f20\u9012
 	params := StartParams{
 		ConfigPath:  "test.yaml",
 		Port:        18951,
-		EnableOpcUa: false, // 即使 false 也传递
+		EnableOpcUa: false, // \u5373\u4f7f false \u4e5f\u4f20\u9012
 	}
 	args := BuildArgs(params)
 
@@ -188,7 +188,7 @@ func TestBuildArgs_PortAlwaysIncluded(t *testing.T) {
 	}
 
 	if !hasPort {
-		t.Error("port 参数应该始终包含（standalone_main.py 不支持关闭 OPC UA）")
+		t.Error("port \u53c2\u6570\u5e94\u8be5\u59cb\u7ec8\u5305\u542b\uff08standalone_main.py \u4e0d\u652f\u6301\u5173\u95ed OPC UA\uff09")
 	}
 }
 
@@ -214,18 +214,18 @@ func TestStart_ReadySuccess(t *testing.T) {
 		RuntimeName: "test-runtime",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
 	status := b.Status()
 	if !status.Running {
-		t.Error("进程应该在运行")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5728\u8fd0\u884c")
 	}
 	if !status.APIReady {
-		t.Error("API 应该已经 ready")
+		t.Error("API \u5e94\u8be5\u5df2\u7ecf ready")
 	}
 	if status.RuntimeName != "test-runtime" {
-		t.Errorf("RuntimeName 不匹配: got %q, want %q", status.RuntimeName, "test-runtime")
+		t.Errorf("RuntimeName \u4e0d\u5339\u914d: got %q, want %q", status.RuntimeName, "test-runtime")
 	}
 
 	b.Cleanup()
@@ -257,22 +257,22 @@ func TestStatus_APIReadyOnlyAfterReadinessMatch(t *testing.T) {
 
 	status := waitForStatus(t, b, func(s SystemStatus) bool { return s.Running })
 	if status.APIReady {
-		t.Fatal("readiness 尚未匹配时 apiReady 不得为 true")
+		t.Fatal("readiness \u5c1a\u672a\u5339\u914d\u65f6 apiReady \u4e0d\u5f97\u4e3a true")
 	}
 
 	ready.Store(true)
 	select {
 	case err := <-startDone:
 		if err != nil {
-			t.Fatalf("Start 失败: %v", err)
+			t.Fatalf("Start \u5931\u8d25: %v", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("ready 后 Start 未返回")
+		t.Fatal("ready \u540e Start \u672a\u8fd4\u56de")
 	}
 
 	status = b.Status()
 	if !status.Running || !status.APIReady {
-		t.Fatalf("ready 后状态不正确: %+v", status)
+		t.Fatalf("ready \u540e\u72b6\u6001\u4e0d\u6b63\u786e: %+v", status)
 	}
 	b.Cleanup()
 }
@@ -299,17 +299,17 @@ func TestStart_InstanceNameMismatch(t *testing.T) {
 		RuntimeName: "test-runtime",
 	})
 	if err == nil {
-		t.Fatal("应该返回错误")
+		t.Fatal("\u5e94\u8be5\u8fd4\u56de\u9519\u8bef")
 	}
-	if !strings.Contains(err.Error(), "instance_name 不匹配") {
-		t.Errorf("错误消息不匹配: %v", err)
+	if !strings.Contains(err.Error(), "instance_name \u4e0d\u5339\u914d") {
+		t.Errorf("\u9519\u8bef\u6d88\u606f\u4e0d\u5339\u914d: %v", err)
 	}
 
-	// 验证进程已退出
+	// \u9a8c\u8bc1\u8fdb\u7a0b\u5df2\u9000\u51fa
 	time.Sleep(100 * time.Millisecond)
 	status := b.Status()
 	if status.Running {
-		t.Error("进程应该已经退出")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5df2\u7ecf\u9000\u51fa")
 	}
 }
 
@@ -339,21 +339,21 @@ func TestStart_ReadyTimeout(t *testing.T) {
 	elapsed := time.Since(start)
 
 	if err == nil {
-		t.Fatal("应该返回错误")
+		t.Fatal("\u5e94\u8be5\u8fd4\u56de\u9519\u8bef")
 	}
-	if !strings.Contains(err.Error(), "API ready 超时") {
-		t.Errorf("错误消息不匹配: %v", err)
+	if !strings.Contains(err.Error(), "API ready \u8d85\u65f6") {
+		t.Errorf("\u9519\u8bef\u6d88\u606f\u4e0d\u5339\u914d: %v", err)
 	}
-	// 超时应该在 500ms 左右，加上进程退出等待时间
+	// \u8d85\u65f6\u5e94\u8be5\u5728 500ms \u5de6\u53f3\uff0c\u52a0\u4e0a\u8fdb\u7a0b\u9000\u51fa\u7b49\u5f85\u65f6\u95f4
 	if elapsed > 10*time.Second {
-		t.Errorf("超时时间过长: %v", elapsed)
+		t.Errorf("\u8d85\u65f6\u65f6\u95f4\u8fc7\u957f: %v", elapsed)
 	}
 
-	// 验证进程已退出
+	// \u9a8c\u8bc1\u8fdb\u7a0b\u5df2\u9000\u51fa
 	time.Sleep(100 * time.Millisecond)
 	status := b.Status()
 	if status.Running {
-		t.Error("进程应该已经退出")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5df2\u7ecf\u9000\u51fa")
 	}
 }
 
@@ -379,22 +379,22 @@ func TestStart_ProcessExitBeforeReady(t *testing.T) {
 		RuntimeName: "test",
 	})
 	if err == nil {
-		t.Fatal("应该返回错误")
+		t.Fatal("\u5e94\u8be5\u8fd4\u56de\u9519\u8bef")
 	}
-	// 验证错误包含 exit code
+	// \u9a8c\u8bc1\u9519\u8bef\u5305\u542b exit code
 	if !strings.Contains(err.Error(), "42") {
-		t.Errorf("应该包含 exit code 42: %v", err)
+		t.Errorf("\u5e94\u8be5\u5305\u542b exit code 42: %v", err)
 	}
-	// 验证错误包含 stderr
+	// \u9a8c\u8bc1\u9519\u8bef\u5305\u542b stderr
 	if !strings.Contains(err.Error(), "error occurred") {
-		t.Errorf("应该包含 stderr: %v", err)
+		t.Errorf("\u5e94\u8be5\u5305\u542b stderr: %v", err)
 	}
 
-	// 验证进程已退出
+	// \u9a8c\u8bc1\u8fdb\u7a0b\u5df2\u9000\u51fa
 	time.Sleep(100 * time.Millisecond)
 	status := b.Status()
 	if status.Running {
-		t.Error("进程应该已经退出")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5df2\u7ecf\u9000\u51fa")
 	}
 }
 
@@ -414,24 +414,24 @@ func TestStart_DuplicateStart(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "test.yaml")
 	os.WriteFile(configPath, []byte("test: true"), 0644)
 
-	// 第一次启动
+	// \u7b2c\u4e00\u6b21\u542f\u52a8
 	err := b.Start(StartParams{
 		ConfigPath:  configPath,
 		APIPort:     8000,
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("第一次 Start 失败: %v", err)
+		t.Fatalf("\u7b2c\u4e00\u6b21 Start \u5931\u8d25: %v", err)
 	}
 
-	// 第二次启动应该失败
+	// \u7b2c\u4e8c\u6b21\u542f\u52a8\u5e94\u8be5\u5931\u8d25
 	err = b.Start(StartParams{
 		ConfigPath:  configPath,
 		APIPort:     8001,
 		RuntimeName: "test2",
 	})
 	if err == nil {
-		t.Fatal("重复启动应该失败")
+		t.Fatal("\u91cd\u590d\u542f\u52a8\u5e94\u8be5\u5931\u8d25")
 	}
 
 	b.Cleanup()
@@ -453,7 +453,7 @@ func TestStart_ConcurrentStart(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "test.yaml")
 	os.WriteFile(configPath, []byte("test: true"), 0644)
 
-	// 使用 barrier 同步两个 goroutine
+	// \u4f7f\u7528 barrier \u540c\u6b65\u4e24\u4e2a goroutine
 	var barrier sync.WaitGroup
 	barrier.Add(2)
 
@@ -465,8 +465,8 @@ func TestStart_ConcurrentStart(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			barrier.Done() // 准备就绪
-			barrier.Wait() // 等待另一个 goroutine
+			barrier.Done() // \u51c6\u5907\u5c31\u7eea
+			barrier.Wait() // \u7b49\u5f85\u53e6\u4e00\u4e2a goroutine
 
 			results[idx] = b.Start(StartParams{
 				ConfigPath:  configPath,
@@ -478,7 +478,7 @@ func TestStart_ConcurrentStart(t *testing.T) {
 
 	wg.Wait()
 
-	// 只有一个应该成功
+	// \u53ea\u6709\u4e00\u4e2a\u5e94\u8be5\u6210\u529f
 	successCount := 0
 	for _, err := range results {
 		if err == nil {
@@ -487,7 +487,7 @@ func TestStart_ConcurrentStart(t *testing.T) {
 	}
 
 	if successCount != 1 {
-		t.Errorf("应该恰好一个 Start 成功，实际 %d 个成功", successCount)
+		t.Errorf("\u5e94\u8be5\u6070\u597d\u4e00\u4e2a Start \u6210\u529f\uff0c\u5b9e\u9645 %d \u4e2a\u6210\u529f", successCount)
 	}
 
 	b.Cleanup()
@@ -516,21 +516,21 @@ func TestStop_GracefulExit(t *testing.T) {
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
 	started := time.Now()
 	err = b.Stop()
 	if err != nil {
-		t.Fatalf("Stop 失败: %v", err)
+		t.Fatalf("Stop \u5931\u8d25: %v", err)
 	}
 	if elapsed := time.Since(started); elapsed >= 2*time.Second {
-		t.Fatalf("Stop 不应在 Interrupt 不受支持时等待完整超时，实际耗时 %v", elapsed)
+		t.Fatalf("Stop \u4e0d\u5e94\u5728 Interrupt \u4e0d\u53d7\u652f\u6301\u65f6\u7b49\u5f85\u5b8c\u6574\u8d85\u65f6\uff0c\u5b9e\u9645\u8017\u65f6 %v", elapsed)
 	}
 
 	status := b.Status()
 	if status.Running {
-		t.Error("进程应该已经停止")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5df2\u7ecf\u505c\u6b62")
 	}
 }
 
@@ -557,19 +557,19 @@ func TestStop_DuplicateStop(t *testing.T) {
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
-	// 第一次 Stop
+	// \u7b2c\u4e00\u6b21 Stop
 	err = b.Stop()
 	if err != nil {
-		t.Fatalf("第一次 Stop 失败: %v", err)
+		t.Fatalf("\u7b2c\u4e00\u6b21 Stop \u5931\u8d25: %v", err)
 	}
 
-	// 第二次 Stop 应该返回错误
+	// \u7b2c\u4e8c\u6b21 Stop \u5e94\u8be5\u8fd4\u56de\u9519\u8bef
 	err = b.Stop()
 	if err == nil {
-		t.Fatal("重复 Stop 应该返回错误")
+		t.Fatal("\u91cd\u590d Stop \u5e94\u8be5\u8fd4\u56de\u9519\u8bef")
 	}
 }
 
@@ -578,7 +578,7 @@ func TestStop_NotRunning(t *testing.T) {
 
 	err := b.Stop()
 	if err == nil {
-		t.Fatal("停止未运行的进程应该返回错误")
+		t.Fatal("\u505c\u6b62\u672a\u8fd0\u884c\u7684\u8fdb\u7a0b\u5e94\u8be5\u8fd4\u56de\u9519\u8bef")
 	}
 }
 
@@ -604,20 +604,20 @@ func TestCleanup(t *testing.T) {
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
 	b.Cleanup()
 
 	status := b.Status()
 	if status.Running {
-		t.Error("进程应该已经停止")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5df2\u7ecf\u505c\u6b62")
 	}
 }
 
 func TestCleanup_NotRunning(t *testing.T) {
 	b := NewSystemBinding()
-	b.Cleanup() // 不应该 panic
+	b.Cleanup() // \u4e0d\u5e94\u8be5 panic
 }
 
 func TestProcessExit_AfterReady(t *testing.T) {
@@ -626,7 +626,7 @@ func TestProcessExit_AfterReady(t *testing.T) {
 	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
 	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
 
-	// 进程运行 2 秒后退出
+	// \u8fdb\u7a0b\u8fd0\u884c 2 \u79d2\u540e\u9000\u51fa
 	b.setCommandFactory(makeLongRunningCommand(2))
 	b.setReadyPollInterval(50 * time.Millisecond)
 	b.setReadyTimeout(5 * time.Second)
@@ -643,38 +643,38 @@ func TestProcessExit_AfterReady(t *testing.T) {
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
-	// 验证 ready 后状态
+	// \u9a8c\u8bc1 ready \u540e\u72b6\u6001
 	status := b.Status()
 	if !status.Running || !status.APIReady {
-		t.Error("进程应该在运行且 API ready")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5728\u8fd0\u884c\u4e14 API ready")
 	}
 
-	// 等待进程退出
+	// \u7b49\u5f85\u8fdb\u7a0b\u9000\u51fa
 	time.Sleep(3 * time.Second)
 
-	// 验证进程退出后状态自动更新
+	// \u9a8c\u8bc1\u8fdb\u7a0b\u9000\u51fa\u540e\u72b6\u6001\u81ea\u52a8\u66f4\u65b0
 	status = b.Status()
 	if status.Running {
-		t.Error("进程应该已经退出")
+		t.Error("\u8fdb\u7a0b\u5e94\u8be5\u5df2\u7ecf\u9000\u51fa")
 	}
 	if status.APIReady {
-		t.Error("API 应该不再是 ready")
+		t.Error("API \u5e94\u8be5\u4e0d\u518d\u662f ready")
 	}
 	if status.LastError == "" {
-		t.Error("意外退出后应保留 lastError")
+		t.Error("\u610f\u5916\u9000\u51fa\u540e\u5e94\u4fdd\u7559 lastError")
 	}
 
-	// 退出后的 proc 必须已经释放，允许再次启动。
+	// \u9000\u51fa\u540e\u7684 proc \u5fc5\u987b\u5df2\u7ecf\u91ca\u653e\uff0c\u5141\u8bb8\u518d\u6b21\u542f\u52a8\u3002
 	err = b.Start(StartParams{
 		ConfigPath:  configPath,
 		APIPort:     8000,
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("进程退出后应允许再次 Start: %v", err)
+		t.Fatalf("\u8fdb\u7a0b\u9000\u51fa\u540e\u5e94\u5141\u8bb8\u518d\u6b21 Start: %v", err)
 	}
 	b.Cleanup()
 }
@@ -685,7 +685,7 @@ func TestFileHashSHA256_DifferentContent(t *testing.T) {
 	file1 := filepath.Join(tmpDir, "file1.yaml")
 	file2 := filepath.Join(tmpDir, "file2.yaml")
 
-	// 相同长度但不同内容
+	// \u76f8\u540c\u957f\u5ea6\u4f46\u4e0d\u540c\u5185\u5bb9
 	os.WriteFile(file1, []byte("content_a"), 0644)
 	os.WriteFile(file2, []byte("content_b"), 0644)
 
@@ -693,7 +693,7 @@ func TestFileHashSHA256_DifferentContent(t *testing.T) {
 	hash2, _ := fileHashSHA256(file2)
 
 	if hash1 == hash2 {
-		t.Error("不同内容应该有不同的 hash")
+		t.Error("\u4e0d\u540c\u5185\u5bb9\u5e94\u8be5\u6709\u4e0d\u540c\u7684 hash")
 	}
 }
 
@@ -711,7 +711,7 @@ func TestFileHashSHA256_SameContent(t *testing.T) {
 	hash2, _ := fileHashSHA256(file2)
 
 	if hash1 != hash2 {
-		t.Error("相同内容应该有相同的 hash")
+		t.Error("\u76f8\u540c\u5185\u5bb9\u5e94\u8be5\u6709\u76f8\u540c\u7684 hash")
 	}
 }
 
@@ -725,27 +725,27 @@ func TestStart_UnicodePath(t *testing.T) {
 	b.setReadyPollInterval(50 * time.Millisecond)
 	b.setReadyTimeout(5 * time.Second)
 
-	checker, _ := makeMockReadinessChecker(1, "测试实例")
+	checker, _ := makeMockReadinessChecker(1, "\u6d4b\u8bd5\u5b9e\u4f8b")
 	b.setReadinessChecker(checker)
 
-	configPath := filepath.Join(tmpDir, "配置文件.yaml")
+	configPath := filepath.Join(tmpDir, "\u914d\u7f6e\u6587\u4ef6.yaml")
 	os.WriteFile(configPath, []byte("test: true"), 0644)
 
 	err := b.Start(StartParams{
 		ConfigPath:  configPath,
 		APIPort:     8000,
-		RuntimeName: "测试实例",
+		RuntimeName: "\u6d4b\u8bd5\u5b9e\u4f8b",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
 	status := b.Status()
 	if status.ConfigPath != configPath {
-		t.Errorf("ConfigPath 不匹配: got %q, want %q", status.ConfigPath, configPath)
+		t.Errorf("ConfigPath \u4e0d\u5339\u914d: got %q, want %q", status.ConfigPath, configPath)
 	}
-	if status.RuntimeName != "测试实例" {
-		t.Errorf("RuntimeName 不匹配: got %q, want %q", status.RuntimeName, "测试实例")
+	if status.RuntimeName != "\u6d4b\u8bd5\u5b9e\u4f8b" {
+		t.Errorf("RuntimeName \u4e0d\u5339\u914d: got %q, want %q", status.RuntimeName, "\u6d4b\u8bd5\u5b9e\u4f8b")
 	}
 
 	b.Cleanup()
@@ -782,12 +782,12 @@ func TestStart_WithHTTPServer(t *testing.T) {
 		RuntimeName: "test-runtime",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
 	status := b.Status()
 	if !status.APIReady {
-		t.Error("API 应该已经 ready")
+		t.Error("API \u5e94\u8be5\u5df2\u7ecf ready")
 	}
 
 	b.Cleanup()
@@ -801,12 +801,12 @@ func TestParseStatusResponse(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "正常响应",
+			name:     "\u6b63\u5e38\u54cd\u5e94",
 			data:     `{"instance_name":"test"}`,
 			expected: &StatusResponse{InstanceName: "test"},
 		},
 		{
-			name:    "无效 JSON",
+			name:    "\u65e0\u6548 JSON",
 			data:    `invalid`,
 			wantErr: true,
 		},
@@ -817,21 +817,21 @@ func TestParseStatusResponse(t *testing.T) {
 			result, err := ParseStatusResponse([]byte(tt.data))
 			if tt.wantErr {
 				if err == nil {
-					t.Fatal("应该返回错误")
+					t.Fatal("\u5e94\u8be5\u8fd4\u56de\u9519\u8bef")
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("解析失败: %v", err)
+				t.Fatalf("\u89e3\u6790\u5931\u8d25: %v", err)
 			}
 			if result.InstanceName != tt.expected.InstanceName {
-				t.Errorf("InstanceName 不匹配: got %q, want %q", result.InstanceName, tt.expected.InstanceName)
+				t.Errorf("InstanceName \u4e0d\u5339\u914d: got %q, want %q", result.InstanceName, tt.expected.InstanceName)
 			}
 		})
 	}
 }
 
-// 并发测试
+// \u5e76\u53d1\u6d4b\u8bd5
 func TestStart_ConcurrentWithStop(t *testing.T) {
 	b := NewSystemBinding()
 	tmpDir := t.TempDir()
@@ -863,21 +863,21 @@ func TestStart_ConcurrentWithStop(t *testing.T) {
 	select {
 	case err := <-stopDone:
 		if err != nil {
-			t.Fatalf("STARTING 中 Stop 失败: %v", err)
+			t.Fatalf("STARTING \u4e2d Stop \u5931\u8d25: %v", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("STARTING 中 Stop 永久阻塞")
+		t.Fatal("STARTING \u4e2d Stop \u6c38\u4e45\u963b\u585e")
 	}
 	select {
 	case err := <-startDone:
 		if err == nil {
-			t.Fatal("被 Stop 取消的 Start 不应成功")
+			t.Fatal("\u88ab Stop \u53d6\u6d88\u7684 Start \u4e0d\u5e94\u6210\u529f")
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("Stop 后 Start 永久阻塞")
+		t.Fatal("Stop \u540e Start \u6c38\u4e45\u963b\u585e")
 	}
 	if status := b.Status(); status.Running || status.APIReady {
-		t.Fatalf("Stop 后状态未清理: %+v", status)
+		t.Fatalf("Stop \u540e\u72b6\u6001\u672a\u6e05\u7406: %+v", status)
 	}
 }
 
@@ -919,7 +919,7 @@ func TestStart_ConcurrentWithCleanup(t *testing.T) {
 
 	select {
 	case <-cleanupDone:
-		t.Fatal("进程创建尚未注册时 Cleanup 不得提前返回")
+		t.Fatal("\u8fdb\u7a0b\u521b\u5efa\u5c1a\u672a\u6ce8\u518c\u65f6 Cleanup \u4e0d\u5f97\u63d0\u524d\u8fd4\u56de")
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(releaseFactory)
@@ -927,18 +927,18 @@ func TestStart_ConcurrentWithCleanup(t *testing.T) {
 	select {
 	case <-cleanupDone:
 	case <-time.After(3 * time.Second):
-		t.Fatal("Cleanup 未能清理正在启动的进程")
+		t.Fatal("Cleanup \u672a\u80fd\u6e05\u7406\u6b63\u5728\u542f\u52a8\u7684\u8fdb\u7a0b")
 	}
 	select {
 	case err := <-startDone:
 		if err == nil {
-			t.Fatal("被 Cleanup 取消的 Start 不应成功")
+			t.Fatal("\u88ab Cleanup \u53d6\u6d88\u7684 Start \u4e0d\u5e94\u6210\u529f")
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("Cleanup 后 Start 永久阻塞")
+		t.Fatal("Cleanup \u540e Start \u6c38\u4e45\u963b\u585e")
 	}
 	if status := b.Status(); status.Running || status.APIReady {
-		t.Fatalf("Cleanup 后状态未清理: %+v", status)
+		t.Fatalf("Cleanup \u540e\u72b6\u6001\u672a\u6e05\u7406: %+v", status)
 	}
 }
 
@@ -948,7 +948,7 @@ func TestStatus_ConcurrentWithProcessExit(t *testing.T) {
 	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
 	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
 
-	// 进程运行 1 秒后退出
+	// \u8fdb\u7a0b\u8fd0\u884c 1 \u79d2\u540e\u9000\u51fa
 	b.setCommandFactory(makeLongRunningCommand(1))
 	b.setReadyPollInterval(50 * time.Millisecond)
 	b.setReadyTimeout(5 * time.Second)
@@ -965,10 +965,10 @@ func TestStatus_ConcurrentWithProcessExit(t *testing.T) {
 		RuntimeName: "test",
 	})
 	if err != nil {
-		t.Fatalf("Start 失败: %v", err)
+		t.Fatalf("Start \u5931\u8d25: %v", err)
 	}
 
-	// 并发读取 Status 直到进程退出
+	// \u5e76\u53d1\u8bfb\u53d6 Status \u76f4\u5230\u8fdb\u7a0b\u9000\u51fa
 	var wg sync.WaitGroup
 	wg.Add(1)
 
@@ -983,7 +983,7 @@ func TestStatus_ConcurrentWithProcessExit(t *testing.T) {
 	wg.Wait()
 }
 
-// TestHelperProcess 是一个辅助测试进程
+// TestHelperProcess \u662f\u4e00\u4e2a\u8f85\u52a9\u6d4b\u8bd5\u8fdb\u7a0b
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
@@ -1049,7 +1049,7 @@ func TestReadDisplayMetadataReadsColumnsAndScales(t *testing.T) {
 }
 
 func TestReadDisplayMetadataBackcompatOldSidecar(t *testing.T) {
-	// 旧 sidecar 只有 display_columns，没有 plot_scales — 必须返回 nil scales，不报错。
+	// \u65e7 sidecar \u53ea\u6709 display_columns\uff0c\u6ca1\u6709 plot_scales \u2014 \u5fc5\u987b\u8fd4\u56de nil scales\uff0c\u4e0d\u62a5\u9519\u3002
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
 	writeSidecar(t, csvPath, `{"display_columns":["a","b"]}`)
 	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a", "b", "c"})
@@ -1063,11 +1063,11 @@ func TestReadDisplayMetadataBackcompatOldSidecar(t *testing.T) {
 
 func TestReadDisplayMetadataFiltersInvalidScales(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
-	// CSV 中只保留 a、b；plot_scales 中混入：
-	//  - 0、负数：违反 f > 0
-	//  - 字符串：json.Number 解析失败
-	//  - c、d：列不在 CSV 中
-	// 合法的只剩 a=1.2、b=100.0。
+	// CSV \u4e2d\u53ea\u4fdd\u7559 a\u3001b\uff1bplot_scales \u4e2d\u6df7\u5165\uff1a
+	//  - 0\u3001\u8d1f\u6570\uff1a\u8fdd\u53cd f > 0
+	//  - \u5b57\u7b26\u4e32\uff1ajson.Number \u89e3\u6790\u5931\u8d25
+	//  - c\u3001d\uff1a\u5217\u4e0d\u5728 CSV \u4e2d
+	// \u5408\u6cd5\u7684\u53ea\u5269 a=1.2\u3001b=100.0\u3002
 	body := `{"display_columns":["a","b"],` +
 		`"plot_scales":{"a":1.2,"b":100.0,"c":1.2,"d":1.2,` +
 		`"zero":0,"neg":-1.2,"str":"abc"}}`
@@ -1103,7 +1103,7 @@ func TestReadDisplayMetadataFiltersInvalidScales(t *testing.T) {
 
 func TestReadDisplayMetadataMissingSidecar(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
-	// 不存在时必须返回零值（nil, nil），不阻断 Batch。
+	// \u4e0d\u5b58\u5728\u65f6\u5fc5\u987b\u8fd4\u56de\u96f6\u503c\uff08nil, nil\uff09\uff0c\u4e0d\u963b\u65ad Batch\u3002
 	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a"})
 	if gotCols != nil || gotScales != nil {
 		t.Fatalf("expected (nil, nil), got (%v, %v)", gotCols, gotScales)
@@ -1113,7 +1113,7 @@ func TestReadDisplayMetadataMissingSidecar(t *testing.T) {
 func TestReadDisplayMetadataMalformedSidecar(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "result.csv")
 	writeSidecar(t, csvPath, `{not json`)
-	// JSON 损坏必须不阻断 Batch（返回零值，不 panic）。
+	// JSON \u635f\u574f\u5fc5\u987b\u4e0d\u963b\u65ad Batch\uff08\u8fd4\u56de\u96f6\u503c\uff0c\u4e0d panic\uff09\u3002
 	gotCols, gotScales := readDisplayMetadata(csvPath, []string{"a"})
 	if gotCols != nil || gotScales != nil {
 		t.Fatalf("expected (nil, nil) for malformed sidecar, got (%v, %v)", gotCols, gotScales)
@@ -1121,14 +1121,14 @@ func TestReadDisplayMetadataMalformedSidecar(t *testing.T) {
 }
 
 func TestBuildBatchExportArgs(t *testing.T) {
-	got := buildBatchExportArgs("cfg.yaml", 100, "out.xlsx", "XLSX", []string{"tank_2.level", "pid2.SV"}, "控制器")
+	got := buildBatchExportArgs("cfg.yaml", 100, "out.xlsx", "XLSX", []string{"tank_2.level", "pid2.SV"}, "\u63a7\u5236\u5668")
 	want := []string{
 		"-c", "cfg.yaml",
 		"--batch", "100",
 		"--export", "out.xlsx",
 		"--format", "xlsx",
 		"--columns", "tank_2.level,pid2.SV",
-		"--sheet-name", "控制器",
+		"--sheet-name", "\u63a7\u5236\u5668",
 	}
 	if !equalStrings(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
@@ -1149,13 +1149,13 @@ func TestBuildBatchExportArgsOmitsOptional(t *testing.T) {
 }
 
 func TestBuildConvertExportArgs(t *testing.T) {
-	got := buildConvertExportArgs("rows.json", "out.xlsx", "xlsx", "控制器")
-	want := []string{"--convert-export", "--rows-json", "rows.json", "--export", "out.xlsx", "--format", "xlsx", "--sheet-name", "控制器"}
+	got := buildConvertExportArgs("rows.json", "out.xlsx", "xlsx", "\u63a7\u5236\u5668")
+	want := []string{"--convert-export", "--rows-json", "rows.json", "--export", "out.xlsx", "--format", "xlsx", "--template", "prediction", "--sheet-name", "\u63a7\u5236\u5668"}
 	if !equalStrings(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	got2 := buildConvertExportArgs("rows.json", "out.csv", "csv", "")
-	want2 := []string{"--convert-export", "--rows-json", "rows.json", "--export", "out.csv", "--format", "csv"}
+	want2 := []string{"--convert-export", "--rows-json", "rows.json", "--export", "out.csv", "--format", "csv", "--template", "prediction"}
 	if !equalStrings(got2, want2) {
 		t.Fatalf("got %v, want %v", got2, want2)
 	}
@@ -1163,15 +1163,26 @@ func TestBuildConvertExportArgs(t *testing.T) {
 
 func sampleExportRows() []map[string]any {
 	return []map[string]any{
-		{"_cycle": 0, "value": 1.25},
-		{"_cycle": 1, "value": 2.5},
+		{"_sim_time": 1000.0, "_need_sample": true, "value": 1.25},
+		{"_sim_time": 1001.0, "_need_sample": true, "value": 2.5},
 	}
 }
 
 func TestExportRowsFormattedCSV(t *testing.T) {
+	// \u4e0e TestExportRowsFormattedUnifiedCommand \u76f8\u540c\u7684\u73af\u5883\u914d\u7f6e\uff08\u8ba9 ensureDataFactory \u89e3\u6790\u5230 standalone_main.py\uff09
+	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "standalone_main.py")); err != nil {
+		t.Skipf("standalone_main.py not found under %s: %v", repoRoot, err)
+	}
+	t.Setenv("SUPCON_TOOL_REPO_ROOT", repoRoot)
+	t.Setenv("SUPCON_DATAFACTORY_PATH", "")
+
 	b := NewSystemBinding()
 	out := filepath.Join(t.TempDir(), "out.csv")
-	if err := b.ExportRowsFormatted([]string{"_cycle", "value"}, sampleExportRows(), out, "csv", ""); err != nil {
+	if err := b.ExportRowsFormatted([]string{"value"], sampleExportRows(), out, "csv", ""); err != nil {
 		t.Fatalf("csv export: %v", err)
 	}
 	data, err := os.ReadFile(out)
@@ -1179,8 +1190,18 @@ func TestExportRowsFormattedCSV(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "_cycle,value") || !strings.Contains(text, "1.25") || !strings.Contains(text, "2.5") {
-		t.Fatalf("unexpected csv: %q", text)
+	// prediction \u6a21\u677f\uff1a\u4e24\u884c\u8868\u5934 + timeStamp \u5217 + \u539f\u59cb value\uff08\u4e0d\u7f29\u653e\uff09
+	if !strings.Contains(text, "timeStamp,value") {
+		t.Fatalf("csv missing timeStamp header: %q", text)
+	}
+	if !strings.Contains(text, "\u65f6\u95f4\u6233,\u67d0\u5de5\u4e1a\u6570\u636e") {
+		t.Fatalf("csv missing description row: %q", text)
+	}
+	if !strings.Contains(text, "1.25") || !strings.Contains(text, "2.5") {
+		t.Fatalf("csv missing raw values: %q", text)
+	}
+	if strings.Contains(text, "_cycle") || strings.Contains(text, "_sim_time") || strings.Contains(text, "_need_sample") {
+		t.Fatalf("csv leaked internal fields: %q", text)
 	}
 }
 
@@ -1191,7 +1212,7 @@ func TestExportRowsFormattedXLSUnsupported(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for xls")
 	}
-	if !strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+	if !strings.Contains(err.Error(), "\u5f53\u524d\u7248\u672c\u6682\u4e0d\u652f\u6301 xls") {
 		t.Fatalf("expected clear xls error, got: %v", err)
 	}
 	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
@@ -1200,9 +1221,25 @@ func TestExportRowsFormattedXLSUnsupported(t *testing.T) {
 }
 
 func TestExportRowsFormattedNoBatchLease(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "standalone_main.py")); err != nil {
+		t.Skipf("standalone_main.py not found under %s: %v", repoRoot, err)
+	}
+	t.Setenv("SUPCON_TOOL_REPO_ROOT", repoRoot)
+	t.Setenv("SUPCON_DATAFACTORY_PATH", "")
+
 	b := NewSystemBinding()
+	b.setCommandFactory(func(name string, arg ...string) *exec.Cmd {
+		if len(arg) > 0 {
+			_ = os.WriteFile(arg[len(arg)-1], []byte("ok\n"), 0o644)
+		}
+		return exec.Command(name, arg...)
+	})
 	out := filepath.Join(t.TempDir(), "out.csv")
-	if err := b.ExportRowsFormatted([]string{"_cycle", "value"}, sampleExportRows(), out, "csv", ""); err != nil {
+	if err := b.ExportRowsFormatted([]string{"value"}, sampleExportRows(), out, "csv", ""); err != nil {
 		t.Fatalf("csv export: %v", err)
 	}
 	b.mu.Lock()
@@ -1213,8 +1250,8 @@ func TestExportRowsFormattedNoBatchLease(t *testing.T) {
 	}
 }
 
-// TestExportRowsFormattedRealChain 走真实调用链（SystemBinding → dfLaunch → python standalone_main.py），
-// 等价于正式 GUI 导出所使用的后端路径（仅缺 webview 点击层）。环境无法解析 DataFactory 时跳过。
+// TestExportRowsFormattedRealChain \u8d70\u771f\u5b9e\u8c03\u7528\u94fe\uff08SystemBinding \u2192 dfLaunch \u2192 python standalone_main.py\uff09\uff0c
+// \u7b49\u4ef7\u4e8e\u6b63\u5f0f GUI \u5bfc\u51fa\u6240\u4f7f\u7528\u7684\u540e\u7aef\u8def\u5f84\uff08\u4ec5\u7f3a webview \u70b9\u51fb\u5c42\uff09\u3002\u73af\u5883\u65e0\u6cd5\u89e3\u6790 DataFactory \u65f6\u8df3\u8fc7\u3002
 func TestExportRowsFormattedRealChain(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	if err != nil {
@@ -1233,10 +1270,11 @@ func TestExportRowsFormattedRealChain(t *testing.T) {
 	t.Logf("GetDataFactoryPath = %s", b.GetDataFactoryPath())
 
 	rows := sampleExportRows()
-	cols := []string{"_cycle", "value"}
+	cols := []string{"value"}
 
 	xlsxPath := filepath.Join(t.TempDir(), "real.xlsx")
-	if err := b.ExportRowsFormatted(cols, rows, xlsxPath, "xlsx", "控制器"); err != nil {
+	err := b.ExportRowsFormatted(cols, rows, xlsxPath, "xlsx", "\u63a7\u5236\u5668");
+	if err != nil {
 		t.Fatalf("xlsx real-chain export: %v", err)
 	}
 	info, err := os.Stat(xlsxPath)
@@ -1246,12 +1284,21 @@ func TestExportRowsFormattedRealChain(t *testing.T) {
 	t.Logf("xlsx size = %d bytes", info.Size())
 
 	csvPath := filepath.Join(t.TempDir(), "real.csv")
-	if err := b.ExportRowsFormatted(cols, rows, csvPath, "csv", ""); err != nil {
+	err := b.ExportRowsFormatted(cols, rows, csvPath, "csv", "");
+	if err != nil {
 		t.Fatalf("csv real-chain export: %v", err)
 	}
 	csvData, _ := os.ReadFile(csvPath)
-	if !strings.Contains(string(csvData), "1.25") {
-		t.Fatalf("csv missing data: %q", string(csvData))
+	// prediction \u6a21\u677f\uff1atimeStamp \u5217\u5728\u7b2c\u4e00\u5217\uff0c\u539f\u59cb value\uff08\u4e0d\u7f29\u653e\uff09\uff0c\u4e0d\u5141\u8bb8 _cycle / _sim_time \u6cc4\u6f0f
+	csvText := string(csvData)
+	if !strings.Contains(csvText, "timeStamp,value") {
+		t.Fatalf("csv missing timeStamp header: %q", csvText)
+	}
+	if strings.Contains(csvText, "_cycle") {
+		t.Fatalf("csv leaked _cycle: %q", csvText)
+	}
+	if !strings.Contains(csvText, "1.25") {
+		t.Fatalf("csv missing raw value: %q", csvText)
 	}
 }
 
@@ -1267,18 +1314,18 @@ func TestExportFileDialogSpec(t *testing.T) {
 		t.Fatalf("uppercase xlsx: unexpected err %v", err)
 	}
 	if _, _, _, err := exportFileDialogSpec(" xls "); err == nil ||
-		!strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+		!strings.Contains(err.Error(), "\u5f53\u524d\u7248\u672c\u6682\u4e0d\u652f\u6301 xls") {
 		t.Fatalf("xls (trim): %v", err)
 	}
 	if _, _, _, err := exportFileDialogSpec("pdf"); err == nil ||
-		!strings.Contains(err.Error(), "不支持的导出格式") {
+		!strings.Contains(err.Error(), "\u4e0d\u652f\u6301\u7684\u5bfc\u51fa\u683c\u5f0f") {
 		t.Fatalf("unknown format: %v", err)
 	}
 }
 
 func TestExportBatchFormattedXLSNoSubprocess(t *testing.T) {
 	b := NewSystemBinding()
-	// 若 xls 漏过格式门禁并触达子进程路径，将 panic 失败。
+	// \u82e5 xls \u6f0f\u8fc7\u683c\u5f0f\u95e8\u7981\u5e76\u89e6\u8fbe\u5b50\u8fdb\u7a0b\u8def\u5f84\uff0c\u5c06 panic \u5931\u8d25\u3002
 	b.setCommandFactory(func(name string, arg ...string) *exec.Cmd {
 		t.Fatalf("subprocess must not be launched for xls: %s %v", name, arg)
 		return exec.Command(name, arg...)
@@ -1288,7 +1335,7 @@ func TestExportBatchFormattedXLSNoSubprocess(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for xls")
 	}
-	if !strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+	if !strings.Contains(err.Error(), "\u5f53\u524d\u7248\u672c\u6682\u4e0d\u652f\u6301 xls") {
 		t.Fatalf("expected xls error, got: %v", err)
 	}
 	if _, err := os.Stat(out); !os.IsNotExist(err) {
@@ -1301,19 +1348,19 @@ func TestExportBatchFormattedXLSNoSubprocess(t *testing.T) {
 		t.Fatalf("xls must not take a batch lease, activeBatches=%d", active)
 	}
 
-	// 带空格的 xls 仍须在启动子进程前返回同一错误。
+	// \u5e26\u7a7a\u683c\u7684 xls \u4ecd\u987b\u5728\u542f\u52a8\u5b50\u8fdb\u7a0b\u524d\u8fd4\u56de\u540c\u4e00\u9519\u8bef\u3002
 	b.setCommandFactory(func(name string, arg ...string) *exec.Cmd {
 		t.Fatalf("subprocess must not be launched for trimmed xls: %s %v", name, arg)
 		return exec.Command(name, arg...)
 	})
 	if err := b.ExportBatchFormatted("cfg.yaml", 100, filepath.Join(t.TempDir(), "trim.xls"), " xls ", nil, ""); err == nil ||
-		!strings.Contains(err.Error(), "当前版本暂不支持 xls") {
+		!strings.Contains(err.Error(), "\u5f53\u524d\u7248\u672c\u6682\u4e0d\u652f\u6301 xls") {
 		t.Fatalf("trimmed xls: %v", err)
 	}
 }
 
-// TestBuildBatchExportArgsNormalizesFormat 验证最终 CLI 参数中的 --format 不带前后空格。
-// 调用方已规范化，但函数自身仍做防御性 trim + lowercase，保证透传给 Python argparse 的是精确匹配的合法值。
+// TestBuildBatchExportArgsNormalizesFormat \u9a8c\u8bc1\u6700\u7ec8 CLI \u53c2\u6570\u4e2d\u7684 --format \u4e0d\u5e26\u524d\u540e\u7a7a\u683c\u3002
+// \u8c03\u7528\u65b9\u5df2\u89c4\u8303\u5316\uff0c\u4f46\u51fd\u6570\u81ea\u8eab\u4ecd\u505a\u9632\u5fa1\u6027 trim + lowercase\uff0c\u4fdd\u8bc1\u900f\u4f20\u7ed9 Python argparse \u7684\u662f\u7cbe\u786e\u5339\u914d\u7684\u5408\u6cd5\u503c\u3002
 func TestBuildBatchExportArgsNormalizesFormat(t *testing.T) {
 	got := buildBatchExportArgs("cfg.yaml", 100, "out.xlsx", " xLsX ", []string{"a"}, "")
 	want := []string{
@@ -1336,5 +1383,183 @@ func TestBuildBatchExportArgsNormalizesFormat(t *testing.T) {
 	}
 	if !equalStrings(got2, want2) {
 		t.Fatalf("got %v, want %v", got2, want2)
+	}
+}
+
+// TestParseBatchCell \u9a8c\u8bc1\u5185\u90e8\u9690\u85cf\u5217 (_sim_time / _need_sample) \u4e0e\u4e1a\u52a1\u5217\u7684\u89e3\u6790\u89c4\u5219\u3002
+func TestParseBatchCell(t *testing.T) {
+	// _sim_time \u5fc5\u987b\u89e3\u6790\u4e3a float64\uff1b\u7a7a / \u975e\u6570 / \u975e\u6709\u9650 \u2192 \u9519\u8bef
+	for _, raw := range []string{"1000.5", "  1000.5  "} {
+		v, err := parseBatchCell("_sim_time", raw)
+		if err != nil {
+			t.Fatalf("_sim_time valid %q: %v", raw, err)
+		}
+		if f, ok := v.(float64); !ok || f != 1000.5 {
+			t.Fatalf("_sim_time %q got %v (%T)", raw, v, v)
+		}
+	}
+	for _, bad := range []string{"", "abc", "NaN", "Inf", "-Inf"} {
+		if _, err := parseBatchCell("_sim_time", bad); err == nil {
+			t.Fatalf("_sim_time %q should be rejected", bad)
+		}
+	}
+	// _need_sample \u63a5\u53d7 true/false/1/0 \u5404\u79cd\u5927\u5c0f\u5199
+	for _, p := range []struct {
+		raw   string
+		want  bool
+	}{
+		{"true", true}, {"True", true}, {"TRUE", true}, {"1", true}, {"  true  ", true},
+		{"false", false}, {"False", false}, {"FALSE", false}, {"0", false}, {"  0  ", false},
+	} {
+		v, err := parseBatchCell("_need_sample", p.raw)
+		if err != nil {
+			t.Fatalf("_need_sample %q should parse: %v", p.raw, err)
+		}
+		if b, ok := v.(bool); !ok || b != p.want {
+			t.Fatalf("_need_sample %q got %v (%T)", p.raw, v, v)
+		}
+	}
+	for _, bad := range []string{"", "yes", "no", "2", "TrueFalse"} {
+		if _, err := parseBatchCell("_need_sample", bad); err == nil {
+			t.Fatalf("_need_sample %q should be rejected", bad)
+		}
+	}
+	if v, err := parseBatchCell("pid2.PV", "0.1"); err != nil || v.(float64) != 0.1 {
+		t.Fatalf("business float: %v %v", v, err)
+	}
+	if v, err := parseBatchCell("text", "hello"); err != nil || v.(string) != "hello" {
+		t.Fatalf("business text: %v %v", v, err)
+	}
+}
+
+// TestBuildConvertExportArgsIncludesPredictionTemplate \u9a8c\u8bc1 --template prediction \u663e\u5f0f\u4f20\u9012\u3002
+func TestBuildConvertExportArgsIncludesPredictionTemplate(t *testing.T) {
+	rows := "rows.json"
+	out := "out.csv"
+	got := buildConvertExportArgs(rows, out, "csv", "")
+	want := []string{
+		"--convert-export",
+		"--rows-json", rows,
+		"--export", out,
+		"--format", "csv",
+		"--template", "prediction",
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("csv got %v, want %v", got, want)
+	}
+	got2 := buildConvertExportArgs(rows, "out.xlsx", "xlsx", "\u63a7\u5236\u5668")
+	want2 := []string{
+		"--convert-export",
+		"--rows-json", rows,
+		"--export", "out.xlsx",
+		"--format", "xlsx",
+		"--template", "prediction",
+		"--sheet-name", "\u63a7\u5236\u5668",
+	}
+	if !equalStrings(got2, want2) {
+		t.Fatalf("xlsx got %v, want %v", got2, want2)
+	}
+	// xlsx \u4e0d\u4f20 sheet-name \u65f6\u4e0d\u4f20 --sheet-name\uff08\u907f\u514d Python \u4f7f\u7528\u9884\u6d4b\u9ed8\u8ba4\u503c\uff09
+	got3 := buildConvertExportArgs(rows, "out.xlsx", "xlsx", "")
+	for _, a := range got3 {
+		if a == "--sheet-name" {
+			t.Fatalf("xlsx without sheet-name must not include --sheet-name: %v", got3)
+		}
+	}
+}
+
+// TestParseCSVHiddenFields \u9a8c\u8bc1 parseCSV \u628a _sim_time \u89e3\u6790\u4e3a float64\u3001_need_sample \u89e3\u6790\u4e3a bool\u3002
+func TestParseCSVHiddenFields(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "result.csv")
+	body := "_sim_time,_need_sample,pid2.PV\n" +
+		"1000.5,True,0.8\n" +
+		"1001.0,False,0.9\n"
+	if err := os.WriteFile(csvPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := parseCSV(csvPath)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if len(res.Rows) != 2 {
+		t.Fatalf("rows len got %d, want 2", len(res.Rows))
+	}
+	if v, ok := res.Rows[0]["_sim_time"].(float64); !ok || v != 1000.5 {
+		t.Fatalf("row0 _sim_time got %v (%T)", res.Rows[0]["_sim_time"], res.Rows[0]["_sim_time"])
+	}
+	if v, ok := res.Rows[0]["_need_sample"].(bool); !ok || v != true {
+		t.Fatalf("row0 _need_sample got %v (%T)", res.Rows[0]["_need_sample"], res.Rows[0]["_need_sample"])
+	}
+	if v, ok := res.Rows[1]["_sim_time"].(float64); !ok || v != 1001.0 {
+		t.Fatalf("row1 _sim_time got %v (%T)", res.Rows[1]["_sim_time"], res.Rows[1]["_sim_time"])
+	}
+	if v, ok := res.Rows[1]["_need_sample"].(bool); !ok || v != false {
+		t.Fatalf("row1 _need_sample got %v (%T)", res.Rows[1]["_need_sample"], res.Rows[1]["_need_sample"])
+	}
+	if res.Rows[0]["_cycle"].(int) != 0 {
+		t.Fatalf("row0 _cycle: %v", res.Rows[0]["_cycle"])
+	}
+	if res.Rows[1]["_cycle"].(int) != 1 {
+		t.Fatalf("row1 _cycle: %v", res.Rows[1]["_cycle"])
+	}
+}
+
+// TestParseCSVInvalidSimTime \u9a8c\u8bc1 _sim_time \u4e3a\u7a7a\u65f6\u8fd4\u56de\u660e\u786e\u9519\u8bef\u3002
+func TestParseCSVInvalidSimTime(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "result.csv")
+	body := "_sim_time,_need_sample,pid2.PV\n" +
+		",True,0.8\n"
+	if err := os.WriteFile(csvPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseCSV(csvPath); err == nil {
+		t.Fatal("expected error for empty _sim_time")
+	} else if !strings.Contains(err.Error(), "\u7f3a\u5c11\u6709\u6548 _sim_time") {
+		t.Fatalf("expected _sim_time error, got: %v", err)
+	}
+}
+
+// TestExportRowsFormattedUnifiedCommand \u9a8c\u8bc1 csv/xlsx \u90fd\u8d70 --convert-export\uff08\u542b --template prediction\uff09\uff0c
+// \u4e14 ExportRowsFormatted \u4e0d\u518d\u56de\u9000\u5230\u65e7 ExportCSVRows \u8def\u5f84\u3002
+func TestExportRowsFormattedUnifiedCommand(t *testing.T) {
+	// \u8ba9 ensureDataFactory \u80fd\u89e3\u6790\u5230 review3/standalone_main.py\uff08\u4e0e TestExportRowsFormattedRealChain \u76f8\u540c\u6a21\u5f0f\uff09
+	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "standalone_main.py")); err != nil {
+		t.Skipf("standalone_main.py not found under %s: %v", repoRoot, err)
+	}
+	t.Setenv("SUPCON_TOOL_REPO_ROOT", repoRoot)
+	t.Setenv("SUPCON_DATAFACTORY_PATH", "")
+
+	b := NewSystemBinding()
+	// \u6ce8\u5165\u4f1a exec \u7684 cmd\uff0c\u5e76\u5199\u51fa output \u6587\u4ef6\uff0c\u907f\u514d ExportRowsFormatted \u62a5"\u6587\u4ef6\u672a\u751f\u6210"
+	b.setCommandFactory(func(name string, arg ...string) *exec.Cmd {
+		if len(arg) > 0 {
+			_ = os.WriteFile(arg[len(arg)-1], []byte("ok\n"), 0o644)
+		}
+		return exec.Command(name, arg...)
+	})
+	rows := []map[string]any{
+		{"_sim_time": 1000.0, "_need_sample": true, "pid2.PV": 0.1},
+	}
+	outCSV := filepath.Join(t.TempDir(), "out.csv")
+	err := b.ExportRowsFormatted([]string{"pid2.PV"}, rows, outCSV, "csv", "");
+	if err != nil {
+		t.Fatalf("csv export: %v", err)
+	}
+	if _, err := os.Stat(outCSV); err != nil {
+		t.Fatalf("csv file not created: %v", err)
+	}
+	outXLSX := filepath.Join(t.TempDir(), "out.xlsx")
+	err := b.ExportRowsFormatted([]string{"pid2.PV"}, rows, outXLSX, "xlsx", "\u63a7\u5236\u5668");
+	if err != nil {
+		t.Fatalf("xlsx export: %v", err)
+	}
+	if _, err := os.Stat(outXLSX); err != nil {
+		t.Fatalf("xlsx file not created: %v", err)
 	}
 }

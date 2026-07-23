@@ -991,7 +991,7 @@ func readDisplayMetadata(
 	// 兼容旧版（只含 display_columns）与新版（含 plot_scales）的 sidecar。
 	// plot_scales 解析为 interface{} 以容忍混合值（数字/字符串），按条目单独判断。
 	var payload struct {
-		DisplayColumns []string `json:"display_columns"`
+		DisplayColumns []string               `json:"display_columns"`
 		PlotScales     map[string]interface{} `json:"plot_scales,omitempty"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
@@ -1151,6 +1151,15 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 //
 // xls 当前版本暂不支持（运行环境缺 xlwt），返回明确错误。
 // 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
+// ExportRowsFormatted 将冻结的仿真结果按 prediction 模板导出。
+// columns 只包含用户选择的业务信号（前端 sanitizeExportColumns 已过滤内部列），
+// rows 是当前内存结果快照（包含 _sim_time / _need_sample 等内部元数据）。
+// CSV 与 XLSX 均通过 DataFactory Python 转换器（--convert-export）生成，保证：
+//   - 两行表头（timeStamp / 时间戳 + 某工业数据）
+//   - 时间列使用 datetime.fromtimestamp 格式化为 %Y-%m-%d %H:%M:%S
+//   - 仅导出 need_sample=true 的行
+//   - 列顺序与采样筛选在两种格式之间一致
+// 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
 func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]any, exportPath string, format string, sheetName string) error {
 	if strings.TrimSpace(exportPath) == "" {
 		return fmt.Errorf("导出路径不能为空")
@@ -1160,10 +1169,7 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 	}
 	fmtLower := strings.ToLower(strings.TrimSpace(format))
 	switch fmtLower {
-	case "csv":
-		return b.ExportCSVRows(columns, rows, exportPath)
-	case "xlsx":
-		// 走引擎侧转换
+	case "csv", "xlsx":
 	case "xls":
 		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
 	default:
@@ -1219,10 +1225,21 @@ func convertExportErrorMessage(err error, output []byte) string {
 	return fmt.Sprintf("%v\n%s", err, text)
 }
 
+// defaultExportTemplate 是当前唯一的导出模板（data_factory_server 标准）。
+// 不依赖 Python argparse 的隐含默认值，避免未来默认值变化导致格式漂移。
+const defaultExportTemplate = "prediction"
+
 // buildConvertExportArgs 构造 --convert-export 的 CLI 参数（纯函数，便于测试）。
+// 显式传入 --template prediction + 仅在 xlsx 时传 --sheet-name（CSV 不需要工作表名）。
 func buildConvertExportArgs(rowsJSON string, exportPath string, format string, sheetName string) []string {
-	args := []string{"--convert-export", "--rows-json", rowsJSON, "--export", exportPath, "--format", format}
-	if sheetName != "" {
+	args := []string{
+		"--convert-export",
+		"--rows-json", rowsJSON,
+		"--export", exportPath,
+		"--format", format,
+		"--template", defaultExportTemplate,
+	}
+	if strings.EqualFold(format, "xlsx") && sheetName != "" {
 		args = append(args, "--sheet-name", sheetName)
 	}
 	return args
@@ -1284,11 +1301,11 @@ func parseCSV(path string) (BatchResult, error) {
 			if i >= len(headers) {
 				break
 			}
-			if f, err := strconv.ParseFloat(value, 64); err == nil {
-				row[headers[i]] = f
-			} else {
-				row[headers[i]] = value
+			parsed, err := parseBatchCell(headers[i], value)
+			if err != nil {
+				return BatchResult{}, fmt.Errorf("第 %d 行字段 %s 解析失败: %w", rowIdx+1, headers[i], err)
 			}
+			row[headers[i]] = parsed
 		}
 		rows = append(rows, row)
 		rowIdx++
@@ -1302,6 +1319,40 @@ func parseCSV(path string) (BatchResult, error) {
 		Columns: append([]string{"_cycle"}, headers...),
 		Rows:    rows,
 	}, nil
+}
+
+// parseBatchCell 按列名决定如何解析 CSV 单元格的字符串值（纯函数，便于测试）。
+//   - "_need_sample"：必须解析为 bool；接受 "true"/"false"/"1"/"0"（大小写不敏感）；
+//     缺失或非法时返回明确错误，不静默回退 false。
+//   - "_sim_time"：必须解析为有限 float64；缺失或非数值返回 "缺少有效 _sim_time" 错误。
+//   - 其他业务列：优先 ParseFloat；失败时保留原字符串（不丢失文本信号）。
+func parseBatchCell(header string, value string) (any, error) {
+	switch header {
+	case "_need_sample":
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		switch normalized {
+		case "true", "1":
+			return true, nil
+		case "false", "0":
+			return false, nil
+		default:
+			return nil, fmt.Errorf("缺少有效 _need_sample")
+		}
+	case "_sim_time":
+		f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil {
+			return nil, fmt.Errorf("缺少有效 _sim_time")
+		}
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, fmt.Errorf("缺少有效 _sim_time")
+		}
+		return f, nil
+	default:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+			return f, nil
+		}
+		return value, nil
+	}
 }
 
 // fileHashSHA256 计算文件 SHA-256 hash

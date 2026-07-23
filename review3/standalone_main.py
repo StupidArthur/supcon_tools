@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import os
 import queue
 import sys
@@ -276,28 +277,106 @@ def run_instance(
     return engine_thread, opcua_thread, server, stop_event, shared_data
 
 
-def _write_rows_export(rows, columns, output_path, fmt, sheet_name):
-    """将内存结果行（_cycle 序号列 + 数据列）写为 csv/xlsx，不重新仿真。
+def _coerce_sim_time(value, row_index: int) -> float:
+    """将 _sim_time 字段安全解析为有限 float；缺失或非法即报错（不静默回退到行号或当前时间）。"""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"第 {row_index + 1} 行缺少有效 _sim_time")
+    if not math.isfinite(result):
+        raise ValueError(f"第 {row_index + 1} 行的 _sim_time 不是有限数")
+    return result
 
-    xls 当前版本暂不支持（运行环境缺 xlwt），抛出明确错误，不暴露 ModuleNotFoundError。
+
+def _coerce_need_sample(value, row_index: int) -> bool:
+    """将 _need_sample 字段安全解析为 bool（接受原生 bool / 0,1 / 字符串 'true'/'false'）。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1"}:
+            return True
+        if normalized in {"false", "0"}:
+            return False
+    raise ValueError(f"第 {row_index + 1} 行缺少有效 _need_sample")
+
+
+def _rows_to_export_snapshots(rows, columns):
+    """重建符合 data_factory_server CSVExporter/ExcelExporter 期望的 snapshot 形态：
+    - 过滤 _ 前缀内部列与重复列，保持用户传入顺序；
+    - 每行提取 sim_time / need_sample 并重建为 {'sim_time', 'need_sample', ...信号} 形态；
+    - 校验时间戳与采样标记，缺失或非法时抛出明确错误；
+    - 缺失采样行（need_sample=True 行数为 0）时抛出明确错误。
+
+    返回 (snapshots, clean_columns)。
     """
+    clean_columns = []
+    seen = set()
+    for column in columns:
+        name = str(column).strip()
+        if not name or name.startswith("_") or name in seen:
+            continue
+        seen.add(name)
+        clean_columns.append(name)
+
+    if not clean_columns:
+        raise ValueError("没有可导出的业务数据列")
+
+    snapshots = []
+    sampled_count = 0
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise ValueError(f"第 {index + 1} 行不是对象")
+        snapshot = {
+            "sim_time": _coerce_sim_time(row.get("_sim_time"), index),
+            "need_sample": _coerce_need_sample(row.get("_need_sample"), index),
+        }
+        for col in clean_columns:
+            snapshot[col] = row.get(col)
+        snapshots.append(snapshot)
+        if snapshot["need_sample"]:
+            sampled_count += 1
+
+    if sampled_count == 0:
+        raise ValueError("当前结果没有可导出的采样数据")
+
+    return snapshots, clean_columns
+
+
+def _write_rows_export(
+    rows, columns, output_path, fmt, sheet_name, template_name="prediction"
+):
+    """按 prediction 模板（两行表头 + datetime.fromtimestamp 时间戳 + 仅 need_sample 行）
+    生成 csv/xlsx。xls 当前版本暂不支持（运行环境缺 xlwt），抛出明确错误，不暴露 ModuleNotFoundError。
+
+    rows/columns 来自前端的冻结结果：每行至少含 _sim_time 与 _need_sample；columns 仅含用户选择的业务信号列。
+    """
+    snapshots, clean_columns = _rows_to_export_snapshots(rows, columns)
+
+    from components.export_templates import (
+        CSVExporter,
+        ExcelExporter,
+        TemplateManager,
+    )
+
+    template = TemplateManager().load_template(template_name)
+
     if fmt == "csv":
-        import csv as _csv
-        with open(output_path, "w", newline="", encoding="utf-8") as f:
-            w = _csv.writer(f)
-            w.writerow(columns)
-            for row in rows:
-                w.writerow(["" if row.get(c) is None else row.get(c) for c in columns])
+        exporter = CSVExporter(template)
+        exporter.export(snapshots, output_path, column_keys=clean_columns)
         return
     if fmt == "xlsx":
-        from openpyxl import Workbook
-        wb = Workbook()
-        ws = wb.active
-        ws.title = (sheet_name or "控制器")[:31]
-        ws.append(columns)
-        for row in rows:
-            ws.append([row.get(c) for c in columns])
-        wb.save(output_path)
+        exporter = ExcelExporter(
+            template,
+            file_format="xlsx",
+            sheet_name=sheet_name or template.sheet_name,
+        )
+        exporter.export(snapshots, output_path, column_keys=clean_columns)
         return
     if fmt == "xls":
         raise ValueError("当前版本暂不支持 xls，请使用 xlsx 或 csv")
@@ -527,22 +606,31 @@ def main() -> None:
             )
             sys.exit(0)
 
-        # 裸 CSV（供趋势图展示）：全部数据列 + display.json sidecar
+        # 内部传输用裸 CSV：保留 _sim_time / _need_sample 两个隐藏列作为后续导出器时间戳/采样筛选的来源；
+        # 其余引擎元数据全部排除；展示列与导出列顺序由 display.json + 前端选择决定。
         import csv
         if results:
-            # 获取所有键
-            keys = set()
-            for r in results:
-                keys.update(r.keys())
+            excluded_snapshot_fields = {
+                # 引擎内部元数据
+                "cycle_count", "need_sample", "sim_time", "time_str", "exec_ratio",
+                # 内部诊断字段（与 _ 开头等价，CSV 显式排除便于阅读）
+                "_consecutive_failures", "_safe_state",
+            }
+            signal_keys = sorted(
+                key for key in results[0].keys()
+                if key not in excluded_snapshot_fields
+            )
+            fieldnames = ["_sim_time", "_need_sample", *signal_keys]
 
-            # 过滤掉内部元数据
-            exclude_keys = {"cycle_count", "need_sample", "time_str", "sim_time", "exec_ratio"}
-            export_keys = sorted([k for k in keys if k not in exclude_keys])
-
-            with open(output_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=export_keys, extrasaction='ignore')
+            with open(output_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
                 writer.writeheader()
-                writer.writerows(results)
+                for snapshot in results:
+                    writer.writerow({
+                        "_sim_time": snapshot.get("sim_time"),
+                        "_need_sample": bool(snapshot.get("need_sample", False)),
+                        **{col: snapshot.get(col) for col in signal_keys},
+                    })
 
             # 默认绘图列与绘图缩放（ref）：均来自 DSL display_args（引擎权威实现）。
             # 写为 CSV 旁的 sidecar，供组态工具前端做默认选中与画布缩放，避免前端自行猜测。
