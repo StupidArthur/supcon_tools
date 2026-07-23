@@ -3,8 +3,10 @@ display_args → 趋势图绘图缩放（[ref]）的引擎行为短测试。
 
 验证 DSL display_args 中带 [ref] 的属性会被 get_plot_scales() 输出对应 ref，
 不带 [ref] 的属性（default ref=100）也存在；外部调用方据此绘图的 plotValue=raw×100/ref。
+引擎层 step() 不缩放原始值，缩放由前端表现层负责。
 """
 
+import math
 import pathlib
 import sys
 
@@ -28,7 +30,7 @@ program:
   - name: tank
     type: CYLINDRICAL_TANK
     inputs:
-      outlet_flow: source_flow
+      inlet_flow: source_flow
     display_args:
       - "level[1.2]"
   - name: pid
@@ -78,7 +80,7 @@ program:
   - name: tank
     type: CYLINDRICAL_TANK
     inputs:
-      outlet_flow: source_flow
+      inlet_flow: source_flow
     display_args:
       - "level[1.2]"
   - name: source_flow
@@ -88,10 +90,25 @@ program:
     parser = DSLParser()
     config = parser.parse(dsl_yaml)
     engine = UnifiedEngine.from_program_config(config)
-    snaps = engine.run_generator(3)
-    # 原始 level 由物理仿真给出，没有被 display_args 的 [1.2] 在引擎层缩放
-    last_level = snaps[-1]["tank.level"]
-    # 反断言：未在 0~1.2 区间内做截断/线性化
-    assert isinstance(last_level, float)
+    # 跑较多周期让 tank 进水，确保存在非零、非 ref 的快照可用于断言
+    snaps = engine.run_generator(50)
+    assert len(snaps) == 50
+    assert all("tank.level" in s for s in snaps)
+    # 每个原始 level 都是有限浮点数
+    assert all(
+        isinstance(s["tank.level"], float) and math.isfinite(s["tank.level"])
+        for s in snaps
+    )
+    # 选取至少一个非零原始快照：原始 tank.level 与其按 ref 计算的"缩放值"必须不同，
+    # 否则引擎层做了 ref 缩放（违反表现层职责）。
+    ref = engine.get_plot_scales()["tank.level"]
+    nonzero = [s for s in snaps if abs(s["tank.level"]) > 1e-9]
+    assert len(nonzero) > 0, "expected at least one nonzero level snapshot"
+    for s in nonzero:
+        raw = s["tank.level"]
+        scaled = raw * 100 / ref
+        assert abs(raw - scaled) > 1e-9, (
+            f"engine should output raw tank.level; got raw={raw}, ref*scale={scaled}"
+        )
     # get_plot_scales 给出 ref
     assert engine.get_plot_scales()["tank.level"] == 1.2

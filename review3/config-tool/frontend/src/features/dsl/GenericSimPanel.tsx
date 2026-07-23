@@ -201,10 +201,10 @@ export function GenericSimPanel() {
       }
       tempPath = await materializeYamlTextToTemp(yamlSnapshot)
       const result = await systemApi.runBatch(tempPath, n)
-      const resultColumns = (result as any).columns || []
-      const resultRows = ((result as any).rows || []) as Array<Record<string, unknown>>
-      const displayColumns = ((result as any).displayColumns || []) as string[]
-      const resultPlotScales = ((result as any).plotScales || {}) as Record<string, number>
+      const resultColumns = result.columns ?? []
+      const resultRows = (result.rows ?? []) as Array<Record<string, unknown>>
+      const displayColumns = result.displayColumns ?? []
+      const resultPlotScales = result.plotScales ?? {}
       const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
       succeed({
         projectId,
