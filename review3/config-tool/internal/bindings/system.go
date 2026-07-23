@@ -1144,14 +1144,7 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 	return args
 }
 
-// ExportRowsFormatted 将前端当前内存中的仿真结果行（不重新仿真）导出为 csv/xlsx。
-// columns 为要导出的有序列（含固定序号列 _cycle）；rows 为当前趋势图使用的同一份数据。
-//   - csv：Go 直接写出；
-//   - xlsx：将 rows 写入临时 JSON，调用引擎侧 --convert-export 用 openpyxl 转换。
-//
-// xls 当前版本暂不支持（运行环境缺 xlwt），返回明确错误。
-// 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
-// ExportRowsFormatted 将冻结的仿真结果按 prediction 模板导出。
+// ExportRowsFormatted 将冻结的仿真结果按 prediction 模板导出为 csv/xlsx。
 // columns 只包含用户选择的业务信号（前端 sanitizeExportColumns 已过滤内部列），
 // rows 是当前内存结果快照（包含 _sim_time / _need_sample 等内部元数据）。
 // CSV 与 XLSX 均通过 DataFactory Python 转换器（--convert-export）生成，保证：
@@ -1159,6 +1152,8 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 //   - 时间列使用 datetime.fromtimestamp 格式化为 %Y-%m-%d %H:%M:%S
 //   - 仅导出 need_sample=true 的行
 //   - 列顺序与采样筛选在两种格式之间一致
+//
+// xls 当前版本暂不支持（运行环境缺 xlwt），返回明确错误。
 // 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
 func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]any, exportPath string, format string, sheetName string) error {
 	if strings.TrimSpace(exportPath) == "" {

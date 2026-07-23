@@ -9,7 +9,7 @@
  */
 import { useEffect, useState } from 'react'
 import { type ExportFormat } from '../../lib/exportTypes'
-import { type ExportSession, sessionNumericColumns } from './exportSession'
+import { type ExportSession, countSampledRows, sessionNumericColumns } from './exportSession'
 
 const FORMATS: Array<{ id: ExportFormat; label: string }> = [
   { id: 'csv', label: 'CSV' },
@@ -130,7 +130,7 @@ export function ExportDialog(props: ExportDialogProps) {
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-border px-4 py-3 text-xs">
-          <span className="mr-auto text-muted-foreground">导出当前仿真结果：{session.rowCount} 行</span>
+          <span className="mr-auto text-muted-foreground">导出采样数据：{countSampledRows(session.rows)} 行 · 仿真周期：{session.rowCount}</span>
           <button
             type="button"
             onClick={onClose}

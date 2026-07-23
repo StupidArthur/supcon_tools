@@ -86,3 +86,70 @@ export function sessionNumericColumns(session: ExportSession): string[] {
     (c) => c !== '_cycle' && !c.startsWith('_') && isNumericColumn(session.rows, c),
   )
 }
+
+const INTERNAL_RESULT_COLUMNS = new Set([
+  '_cycle',
+  '_sim_time',
+  '_need_sample',
+])
+
+export function sanitizeExportColumns(columns: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const rawColumn of columns) {
+    const column = rawColumn.trim()
+
+    if (!column) continue
+    if (column.startsWith('_')) continue
+    if (INTERNAL_RESULT_COLUMNS.has(column)) continue
+    if (seen.has(column)) continue
+
+    seen.add(column)
+    result.push(column)
+  }
+
+  return result
+}
+
+export function validateExportRowMetadata(
+  rows: Array<Record<string, unknown>>,
+): string | null {
+  if (rows.length === 0) {
+    return '当前没有可导出的仿真结果'
+  }
+
+  let sampledCount = 0
+
+  for (const row of rows) {
+    const simTime = row._sim_time
+    const needSample = row._need_sample
+
+    if (typeof simTime !== 'number' || !Number.isFinite(simTime)) {
+      return '当前结果缺少标准时间戳元数据，请重新运行仿真'
+    }
+
+    if (typeof needSample !== 'boolean') {
+      return '当前结果缺少采样标记，请重新运行仿真'
+    }
+
+    if (needSample) {
+      sampledCount += 1
+    }
+  }
+
+  if (sampledCount === 0) {
+    return '当前结果没有可导出的采样数据'
+  }
+
+  return null
+}
+
+export function countSampledRows(
+  rows: Array<Record<string, unknown>>,
+): number {
+  return rows.reduce(
+    (count, row) => count + (row._need_sample === true ? 1 : 0),
+    0,
+  )
+}

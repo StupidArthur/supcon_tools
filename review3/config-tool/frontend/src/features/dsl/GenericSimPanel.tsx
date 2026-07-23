@@ -29,6 +29,8 @@ import {
   createExportSession,
   type ExportSession,
   isNumericColumn,
+  sanitizeExportColumns,
+  validateExportRowMetadata,
   validateExportSession,
 } from './exportSession'
 import { cleanupTempYAML, materializeYamlTextToTemp } from './materializeYamlDraft'
@@ -275,19 +277,30 @@ export function GenericSimPanel() {
       setExportError(invalidBefore)
       return
     }
+    const metadataError = validateExportRowMetadata(session.rows)
+    if (metadataError) {
+      setExportError(metadataError)
+      return
+    }
+    const exportColumns = sanitizeExportColumns(opts.columns)
+    if (exportColumns.length === 0) {
+      setExportError('请选择至少一个可导出的数据列')
+      return
+    }
     setExportBusy(true)
     try {
       const path = await systemApi.saveExportFile(opts.format)
       if (!path) return
-      // 原生保存对话框返回后再次复查（期间工程/run 可能已变化）。
       const invalidAfter = check()
       if (invalidAfter) {
         setExportError(invalidAfter)
         return
       }
-      // 传给后端的数据只来自会话快照（session.rows）与用户基于会话列的选择。
-      // 后端调用开始后即使切换页面，也导出同一份快照，不会改成其他结果。
-      const exportColumns = ['_cycle', ...opts.columns]
+      const metadataErrorAfter = validateExportRowMetadata(session.rows)
+      if (metadataErrorAfter) {
+        setExportError(metadataErrorAfter)
+        return
+      }
       await systemApi.exportRowsFormatted(
         exportColumns,
         session.rows as Array<Record<string, any>>,

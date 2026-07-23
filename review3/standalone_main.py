@@ -394,7 +394,7 @@ def _run_convert_export(args):
     columns = payload.get("columns", [])
     rows = payload.get("rows", [])
     fmt = (args.format or "csv").lower()
-    _write_rows_export(rows, columns, args.export, fmt, args.sheet_name or "控制器")
+    _write_rows_export(rows, columns, args.export, fmt, args.sheet_name or "控制器", template_name=args.template or "prediction")
     print(f"Done! Converted {len(rows)} rows to {args.export} ({fmt})")
 
 

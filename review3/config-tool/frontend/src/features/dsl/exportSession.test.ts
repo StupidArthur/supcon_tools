@@ -1,11 +1,14 @@
 /**
- * 导出会话纯逻辑测试：快照冻结 + 身份校验。
+ * 导出会话纯逻辑测试：快照冻结 + 身份校验 + 列清洗 + 元数据校验。
  */
 import { describe, expect, it } from 'vitest'
 import {
+  countSampledRows,
   createExportSession,
   EXPORT_SESSION_INVALID_MESSAGE,
+  sanitizeExportColumns,
   sessionNumericColumns,
+  validateExportRowMetadata,
   validateExportSession,
 } from './exportSession'
 
@@ -98,5 +101,82 @@ describe('sessionNumericColumns', () => {
       }),
     )!
     expect(sessionNumericColumns(session)).toEqual(['a'])
+  })
+})
+
+describe('sanitizeExportColumns', () => {
+  it('filters internal columns, trims, deduplicates, preserves order', () => {
+    expect(
+      sanitizeExportColumns([
+        '_cycle',
+        'pid2.MV',
+        '_sim_time',
+        'pid2.PV',
+        '',
+        ' pid2.SV ',
+        '_need_sample',
+        'pid2.MV',
+      ]),
+    ).toEqual(['pid2.MV', 'pid2.PV', 'pid2.SV'])
+  })
+
+  it('preserves input order without sorting', () => {
+    expect(sanitizeExportColumns(['z', 'a', 'm'])).toEqual(['z', 'a', 'm'])
+  })
+})
+
+describe('validateExportRowMetadata', () => {
+  it('returns null for valid metadata', () => {
+    expect(
+      validateExportRowMetadata([
+        { _cycle: 0, _sim_time: 1000, _need_sample: true, 'pid2.PV': 0.8 },
+      ]),
+    ).toBeNull()
+  })
+
+  it('returns error for empty rows', () => {
+    expect(validateExportRowMetadata([])).toBe('当前没有可导出的仿真结果')
+  })
+
+  it('returns error when _sim_time is missing', () => {
+    expect(
+      validateExportRowMetadata([{ _cycle: 0, _need_sample: true }]),
+    ).toBe('当前结果缺少标准时间戳元数据，请重新运行仿真')
+  })
+
+  it('returns error when _sim_time is NaN', () => {
+    expect(
+      validateExportRowMetadata([{ _sim_time: NaN, _need_sample: true }]),
+    ).toBe('当前结果缺少标准时间戳元数据，请重新运行仿真')
+  })
+
+  it('returns error when _sim_time is Infinity', () => {
+    expect(
+      validateExportRowMetadata([{ _sim_time: Infinity, _need_sample: true }]),
+    ).toBe('当前结果缺少标准时间戳元数据，请重新运行仿真')
+  })
+
+  it('returns error when _need_sample is missing', () => {
+    expect(
+      validateExportRowMetadata([{ _sim_time: 1000 }]),
+    ).toBe('当前结果缺少采样标记，请重新运行仿真')
+  })
+
+  it('returns error when no sampled rows', () => {
+    expect(
+      validateExportRowMetadata([{ _sim_time: 1000, _need_sample: false }]),
+    ).toBe('当前结果没有可导出的采样数据')
+  })
+})
+
+describe('countSampledRows', () => {
+  it('counts rows with _need_sample === true', () => {
+    expect(
+      countSampledRows([
+        { _need_sample: true },
+        { _need_sample: false },
+        { _need_sample: true },
+      ]),
+    ).toBe(2)
   })
 })
