@@ -34,6 +34,10 @@ export function DeleteProject(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['DeleteProject'](arg1);
 }
 
+export function GetDashboard(arg1) {
+  return window['go']['bindings']['RealtimeProjectBinding']['GetDashboard'](arg1);
+}
+
 export function GetForces(arg1, arg2) {
   return window['go']['bindings']['RealtimeProjectBinding']['GetForces'](arg1, arg2);
 }
@@ -56,6 +60,10 @@ export function RemoveSource(arg1, arg2) {
 
 export function RenameProject(arg1, arg2) {
   return window['go']['bindings']['RealtimeProjectBinding']['RenameProject'](arg1, arg2);
+}
+
+export function SaveDashboard(arg1, arg2) {
+  return window['go']['bindings']['RealtimeProjectBinding']['SaveDashboard'](arg1, arg2);
 }
 
 export function SetContext(arg1) {

@@ -104,6 +104,9 @@ export const realtimeProjectApi = {
   deleteAlarmRule: (projectId: string, alarmId: string) =>
     RealtimeProjectBinding.DeleteAlarmRule(projectId, alarmId),
   validateAlarmRules: (projectId: string) => RealtimeProjectBinding.ValidateAlarmRules(projectId),
+  getDashboard: (projectId: string) => RealtimeProjectBinding.GetDashboard(projectId),
+  saveDashboard: (projectId: string, dashboard: any) =>
+    RealtimeProjectBinding.SaveDashboard(projectId, dashboard),
   setForce: (apiHost: string, apiPort: number, tag: string, mode: string, value?: number, duration?: number) =>
     RealtimeProjectBinding.SetForce(apiHost, apiPort, tag, mode, value ?? null, duration ?? null),
   clearForce: (apiHost: string, apiPort: number, tag: string) =>

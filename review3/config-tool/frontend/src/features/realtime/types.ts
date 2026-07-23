@@ -64,3 +64,34 @@ export interface AlarmRule {
   enabled: boolean
   message: string
 }
+
+export type DashboardWidgetType =
+  | 'value'
+  | 'gauge'
+  | 'lamp'
+  | 'trend'
+  | 'write'
+  | 'alarm-list'
+  | 'text'
+
+export interface DashboardWidget {
+  id: string
+  type: DashboardWidgetType
+  tag: string
+  x: number
+  y: number
+  w: number
+  h: number
+  options: Record<string, any>
+}
+
+export interface DashboardPage {
+  id: string
+  name: string
+  widgets: DashboardWidget[]
+}
+
+export interface Dashboard {
+  version: number
+  pages: DashboardPage[]
+}

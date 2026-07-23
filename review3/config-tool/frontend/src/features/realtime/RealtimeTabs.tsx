@@ -1,11 +1,14 @@
+export type RealtimeTab = 'config' | 'run' | 'dashboard'
+
 interface RealtimeTabsProps {
-  value: 'config' | 'run'
-  onChange: (tab: 'config' | 'run') => void
+  value: RealtimeTab
+  onChange: (tab: RealtimeTab) => void
 }
 
-const tabs: { key: 'config' | 'run'; label: string }[] = [
+const tabs: { key: RealtimeTab; label: string }[] = [
   { key: 'config', label: '组态' },
   { key: 'run', label: '运行' },
+  { key: 'dashboard', label: '画面' },
 ]
 
 export function RealtimeTabs({ value, onChange }: RealtimeTabsProps) {

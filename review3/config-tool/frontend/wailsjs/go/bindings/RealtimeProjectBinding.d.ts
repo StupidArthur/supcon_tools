@@ -20,6 +20,8 @@ export function DeleteAlarmRule(arg1:string,arg2:string):Promise<Array<realtime.
 
 export function DeleteProject(arg1:string):Promise<void>;
 
+export function GetDashboard(arg1:string):Promise<realtime.Dashboard>;
+
 export function GetForces(arg1:string,arg2:number):Promise<bindings.ForceState>;
 
 export function ListAlarmRules(arg1:string):Promise<Array<realtime.AlarmRule>>;
@@ -31,6 +33,8 @@ export function OpenProject(arg1:string):Promise<realtime.Project>;
 export function RemoveSource(arg1:string,arg2:string):Promise<realtime.ProjectView>;
 
 export function RenameProject(arg1:string,arg2:string):Promise<realtime.Project>;
+
+export function SaveDashboard(arg1:string,arg2:realtime.Dashboard):Promise<realtime.Dashboard>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 

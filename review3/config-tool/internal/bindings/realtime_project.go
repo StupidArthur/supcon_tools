@@ -97,6 +97,14 @@ func (b *RealtimeProjectBinding) ValidateAlarmRules(projectID string) error {
 	return b.manager.ValidateAlarmRules(b.ctx, projectID)
 }
 
+func (b *RealtimeProjectBinding) GetDashboard(projectID string) (realtime.Dashboard, error) {
+	return b.manager.GetDashboard(b.ctx, projectID)
+}
+
+func (b *RealtimeProjectBinding) SaveDashboard(projectID string, d realtime.Dashboard) (realtime.Dashboard, error) {
+	return b.manager.SaveDashboard(b.ctx, projectID, d)
+}
+
 func (b *RealtimeProjectBinding) CompileProject(projectID, outputPath string) (string, error) {
 	return b.manager.CompileProject(b.ctx, projectID, outputPath)
 }
