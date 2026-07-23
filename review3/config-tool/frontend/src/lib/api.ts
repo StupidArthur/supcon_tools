@@ -8,6 +8,7 @@ import * as ConfigBinding from '../../wailsjs/go/bindings/ConfigBinding'
 import * as SystemBinding from '../../wailsjs/go/bindings/SystemBinding'
 import * as TemplateConfigBinding from '../../wailsjs/go/bindings/TemplateConfigBinding'
 import * as RealtimeProjectBinding from '../../wailsjs/go/bindings/RealtimeProjectBinding'
+import * as RealtimeRuntimeBinding from '../../wailsjs/go/bindings/RealtimeRuntimeBinding'
 import type { ExportFormat } from './exportTypes'
 
 // 模板领域类型集中在 features/templates/types.ts，这里只暴露运行时 API。
@@ -105,4 +106,14 @@ export const realtimeProjectApi = {
     RealtimeProjectBinding.ClearAllForces(apiHost, apiPort),
   getForces: (apiHost: string, apiPort: number) =>
     RealtimeProjectBinding.GetForces(apiHost, apiPort),
+}
+
+export const realtimeRuntimeApi = {
+  startProject: (projectId: string, options: any) =>
+    RealtimeRuntimeBinding.StartProject(projectId, options),
+  startSingleYAML: (configPath: string, options: any) =>
+    RealtimeRuntimeBinding.StartSingleYAML(configPath, options),
+  stop: () => RealtimeRuntimeBinding.Stop(),
+  getSession: () => RealtimeRuntimeBinding.GetSession(),
+  getProjectRevision: (projectId: string) => RealtimeRuntimeBinding.GetProjectRevision(projectId),
 }

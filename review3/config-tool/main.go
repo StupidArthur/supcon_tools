@@ -38,6 +38,7 @@ func main() {
 			container.SystemBinding,
 			container.TemplateConfigBinding,
 			container.RealtimeProjectBinding,
+			container.RealtimeRuntimeBinding,
 		},
 	})
 	if err != nil {

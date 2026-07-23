@@ -1062,6 +1062,66 @@ export namespace realtime {
 		    return a;
 		}
 	}
+	export class RealtimeRunSession {
+	    sessionId: string;
+	    sourceKind: string;
+	    projectId?: string;
+	    projectName?: string;
+	    sourcePath?: string;
+	    runtimeRevision: string;
+	    compiledConfigPath: string;
+	    configHash: string;
+	    runtimeName: string;
+	    cycleTime: number;
+	    opcUaPort: number;
+	    apiHost: string;
+	    apiPort: number;
+	    startedAt: string;
+	    state: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RealtimeRunSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.sourceKind = source["sourceKind"];
+	        this.projectId = source["projectId"];
+	        this.projectName = source["projectName"];
+	        this.sourcePath = source["sourcePath"];
+	        this.runtimeRevision = source["runtimeRevision"];
+	        this.compiledConfigPath = source["compiledConfigPath"];
+	        this.configHash = source["configHash"];
+	        this.runtimeName = source["runtimeName"];
+	        this.cycleTime = source["cycleTime"];
+	        this.opcUaPort = source["opcUaPort"];
+	        this.apiHost = source["apiHost"];
+	        this.apiPort = source["apiPort"];
+	        this.startedAt = source["startedAt"];
+	        this.state = source["state"];
+	    }
+	}
+	export class RealtimeStartOptions {
+	    cycleTime: number;
+	    opcUaPort: number;
+	    apiHost: string;
+	    apiPort: number;
+	    runtimeName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RealtimeStartOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cycleTime = source["cycleTime"];
+	        this.opcUaPort = source["opcUaPort"];
+	        this.apiHost = source["apiHost"];
+	        this.apiPort = source["apiPort"];
+	        this.runtimeName = source["runtimeName"];
+	    }
+	}
 	
 
 }

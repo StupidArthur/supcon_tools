@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { realtimeProjectApi, systemApi } from '../../lib/api'
+import { realtimeRuntimeApi, systemApi } from '../../lib/api'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { useDslProjectStore } from '../dsl/useDslProjectStore'
 import { useGenericSimStore } from '../dsl/useGenericSimStore'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
+import { useRealtimeRunSessionStore } from './useRealtimeRunSessionStore'
 import { RuntimeTagTable } from './RuntimeTagTable'
 
 export function RealtimeRunPage() {
@@ -22,6 +23,14 @@ export function RealtimeRunPage() {
 
   const currentProject = useRealtimeProjectStore((s) => s.currentProject)
 
+  const session = useRealtimeRunSessionStore((s) => s.session)
+  const sessionLoading = useRealtimeRunSessionStore((s) => s.loading)
+  const sessionError = useRealtimeRunSessionStore((s) => s.error)
+  const refreshSession = useRealtimeRunSessionStore((s) => s.refresh)
+  const startProject = useRealtimeRunSessionStore((s) => s.startProject)
+  const startSingleYaml = useRealtimeRunSessionStore((s) => s.startSingleYaml)
+  const stopSession = useRealtimeRunSessionStore((s) => s.stop)
+
   const offlineRunning = useGenericSimStore((s) => s.status === 'running')
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
 
@@ -31,6 +40,7 @@ export function RealtimeRunPage() {
   const [apiPort, setApiPort] = useState(8000)
   const [showAdvancedPorts, setShowAdvancedPorts] = useState(false)
   const [error, setError] = useState('')
+  const [currentRevision, setCurrentRevision] = useState<string | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   const isDirty = yamlDirty
@@ -43,7 +53,19 @@ export function RealtimeRunPage() {
       if (p) setDfPath(p)
     })
     refreshStatus()
-  }, [refreshStatus, setDfPath])
+    void refreshSession()
+  }, [refreshStatus, setDfPath, refreshSession])
+
+  useEffect(() => {
+    if (!currentProject) {
+      setCurrentRevision(null)
+      return
+    }
+    realtimeRuntimeApi
+      .getProjectRevision(currentProject.id)
+      .then((r) => setCurrentRevision(r))
+      .catch(() => setCurrentRevision(null))
+  }, [currentProject])
 
   useEffect(() => {
     if (!batchBusy) return
@@ -58,12 +80,14 @@ export function RealtimeRunPage() {
   useEffect(() => {
     const rtStore = useRuntimeStore.getState()
     if (dfStatus.running && dfStatus.apiReady) {
-      rtStore.setEndpoint(apiHost, apiPort)
+      const host = session?.apiHost || apiHost
+      const port = session?.apiPort || apiPort
+      rtStore.setEndpoint(host, port)
       void rtStore.connect()
     } else if (!dfStatus.running) {
       rtStore.disconnect()
     }
-  }, [dfStatus.running, dfStatus.apiReady, apiHost, apiPort])
+  }, [dfStatus.running, dfStatus.apiReady, apiHost, apiPort, session])
 
   const openDsl = async () => {
     const path = await systemApi.openYAMLFile()
@@ -100,33 +124,22 @@ export function RealtimeRunPage() {
       setError('实时运行使用已保存的 DSL，请先保存。')
       return
     }
-    try {
-      const p = await systemApi.getDataFactoryPath()
-      if (p) setDfPath(p)
-      await systemApi.start({
-        configPath: filePath,
-        mode: 'REALTIME',
-        cycleTime,
-        port,
-        apiHost,
-        apiPort,
-        runtimeName: 'default',
-        enableOpcUa: true,
-      })
-      refreshStatus()
-    } catch (e: any) {
-      setError(String(e))
-    }
+    const p = await systemApi.getDataFactoryPath()
+    if (p) setDfPath(p)
+    const ok = await startSingleYaml(filePath, {
+      cycleTime,
+      opcUaPort: port,
+      apiHost,
+      apiPort,
+      runtimeName: 'default',
+    })
+    if (ok) refreshStatus()
   }
 
   const handleStop = async () => {
     setError('')
-    try {
-      await systemApi.stop()
-      refreshStatus()
-    } catch (e: any) {
-      setError(String(e))
-    }
+    await stopSession()
+    refreshStatus()
   }
 
   const handleStartProject = async () => {
@@ -137,25 +150,16 @@ export function RealtimeRunPage() {
       setError('离线批量任务正在运行，禁止启动实时运行')
       return
     }
-    try {
-      const p = await systemApi.getDataFactoryPath()
-      if (p) setDfPath(p)
-      const tmpPath = `realtime_compiled_${currentProject.id}.yaml`
-      const compiledPath = await realtimeProjectApi.compileProject(currentProject.id, tmpPath)
-      await systemApi.start({
-        configPath: compiledPath,
-        mode: 'REALTIME',
-        cycleTime,
-        port,
-        apiHost,
-        apiPort,
-        runtimeName: currentProject.name,
-        enableOpcUa: true,
-      })
-      refreshStatus()
-    } catch (e: any) {
-      setError(String(e))
-    }
+    const p = await systemApi.getDataFactoryPath()
+    if (p) setDfPath(p)
+    const ok = await startProject(currentProject.id, {
+      cycleTime,
+      opcUaPort: port,
+      apiHost,
+      apiPort,
+      runtimeName: currentProject.name,
+    })
+    if (ok) refreshStatus()
   }
 
   return (
@@ -167,6 +171,31 @@ export function RealtimeRunPage() {
             基于实时工程或已保存 DSL 启动实时实例并提供 OPC UA Server。与 DSL 离线仿真互斥。
           </p>
         </div>
+
+        {session ? (
+          <section className="space-y-1 rounded-md border border-green-300 bg-green-50 p-3" data-testid="realtime-session-card">
+            <div className="text-xs font-medium">
+              正在运行：{session.sourceKind === 'project' ? session.projectName : session.sourcePath}
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+              <span>来源：{session.sourceKind === 'project' ? '实时工程' : '单 YAML'}</span>
+              <span>运行版本：{session.runtimeRevision || '—'}</span>
+              <span>配置哈希：{session.configHash ? session.configHash.slice(0, 8) : '—'}</span>
+              <span>启动时间：{session.startedAt || '—'}</span>
+              <span>周期：{session.cycleTime} 秒</span>
+              <span>OPC UA：{session.opcUaPort}</span>
+              <span>REST/WS：{session.apiHost}:{session.apiPort}</span>
+            </div>
+          </section>
+        ) : null}
+
+        {session && session.sourceKind === 'project' && currentProject &&
+          currentProject.id === session.projectId &&
+          currentRevision && currentRevision !== session.runtimeRevision ? (
+          <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="realtime-config-changed">
+            当前工程组态已修改。正在运行的仍是启动时版本，停止并重新启动后生效。
+          </div>
+        ) : null}
 
         {currentProject ? (
           <section className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3" data-testid="realtime-project-run">
@@ -315,10 +344,14 @@ export function RealtimeRunPage() {
           </div>
         </div>
 
-        {error ? (
+        {(error || sessionError) ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-            {error}
+            {error || sessionError}
           </div>
+        ) : null}
+
+        {sessionLoading ? (
+          <div className="text-xs text-muted-foreground">处理中...</div>
         ) : null}
 
         <RuntimeTagTable />

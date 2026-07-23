@@ -16,6 +16,7 @@ type Container struct {
 	SystemBinding          *bindings.SystemBinding
 	TemplateConfigBinding  *bindings.TemplateConfigBinding
 	RealtimeProjectBinding *bindings.RealtimeProjectBinding
+	RealtimeRuntimeBinding *bindings.RealtimeRuntimeBinding
 }
 
 func NewContainer() (*Container, error) {
@@ -40,7 +41,14 @@ func NewContainer() (*Container, error) {
 	manager := realtime.NewManager(storage, compiler)
 	realtimeBinding := bindings.NewRealtimeProjectBinding(manager)
 
-	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding, templateBinding, realtimeBinding)
+	sessionRoot, err := realtime.ResolveSessionRoot()
+	if err != nil {
+		return nil, err
+	}
+	sessionManager := realtime.NewSessionManager(sessionRoot)
+	runtimeBinding := bindings.NewRealtimeRuntimeBinding(manager, systemBinding, sessionManager)
+
+	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding, templateBinding, realtimeBinding, runtimeBinding)
 
 	return &Container{
 		Lifecycle:              lifecycle,
@@ -49,6 +57,7 @@ func NewContainer() (*Container, error) {
 		SystemBinding:          systemBinding,
 		TemplateConfigBinding:  templateBinding,
 		RealtimeProjectBinding: realtimeBinding,
+		RealtimeRuntimeBinding: runtimeBinding,
 	}, nil
 }
 

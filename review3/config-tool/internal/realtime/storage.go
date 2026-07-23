@@ -146,6 +146,15 @@ func (s *ProjectStorage) ProjectExists(id string) bool {
 	return err == nil
 }
 
+// AlarmsPath 返回工程报警配置文件路径及是否存在（阶段七引入）。
+func (s *ProjectStorage) AlarmsPath(id string) (string, bool) {
+	p := filepath.Join(s.projectDir(id), "alarms.yaml")
+	if _, err := os.Stat(p); err == nil {
+		return p, true
+	}
+	return p, false
+}
+
 func atomicWriteYAML(path string, v any) error {
 	data, err := yaml.Marshal(v)
 	if err != nil {
