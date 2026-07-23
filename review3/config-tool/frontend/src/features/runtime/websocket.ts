@@ -22,7 +22,7 @@ export type WsMessageHandler = (msg: ParsedWsMessage) => void
 export type StateHandler = (state: ConnectionState) => void
 
 export type ParsedWsMessage =
-  | { type: 'snapshot'; snapshot: ReturnType<typeof mapApiSnapshot> }
+  | { type: 'snapshot'; snapshot: ReturnType<typeof mapApiSnapshot>; raw: Record<string, unknown> }
   | { type: 'heartbeat'; ts: number }
   | { type: 'unknown'; raw: unknown }
 
@@ -112,7 +112,7 @@ export function createRuntimeWs(
     // 不读取 message.data，也不额外解包一层。
     if (typeof msg.cycle_count === 'number' || 'valve_1.current_opening' in msg || 'tank_2.level' in msg) {
       const snap = mapApiSnapshot(msg as Record<string, number | string | boolean>, Date.now())
-      onMessage({ type: 'snapshot', snapshot: snap })
+      onMessage({ type: 'snapshot', snapshot: snap, raw: msg })
       return
     }
     onMessage({ type: 'unknown', raw })

@@ -3,7 +3,9 @@ import { realtimeProjectApi, systemApi } from '../../lib/api'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { useDslProjectStore } from '../dsl/useDslProjectStore'
 import { useGenericSimStore } from '../dsl/useGenericSimStore'
+import { useRuntimeStore } from '../runtime/useRuntimeStore'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
+import { RuntimeTagTable } from './RuntimeTagTable'
 
 export function RealtimeRunPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
@@ -52,6 +54,16 @@ export function RealtimeRunPage() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [dfLogs])
+
+  useEffect(() => {
+    const rtStore = useRuntimeStore.getState()
+    if (dfStatus.running && dfStatus.apiReady) {
+      rtStore.setEndpoint(apiHost, apiPort)
+      void rtStore.connect()
+    } else if (!dfStatus.running) {
+      rtStore.disconnect()
+    }
+  }, [dfStatus.running, dfStatus.apiReady, apiHost, apiPort])
 
   const openDsl = async () => {
     const path = await systemApi.openYAMLFile()
@@ -308,6 +320,8 @@ export function RealtimeRunPage() {
             {error}
           </div>
         ) : null}
+
+        <RuntimeTagTable />
 
         <section className="space-y-1">
           <div className="flex items-center justify-between">

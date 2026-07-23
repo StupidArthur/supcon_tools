@@ -60,6 +60,7 @@ export interface RuntimeStoreState {
   cycleTime: number
   // 最新真实 snapshot
   latestSnapshot: RuntimeSnapshot | null
+  rawSnapshot: Record<string, unknown> | null
   snapshotReceivedAt: number | null
   lastHeartbeatAt: number | null
   stale: boolean
@@ -162,6 +163,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     apiReady: false,
     cycleTime: 0.5,
     latestSnapshot: null,
+    rawSnapshot: null,
     snapshotReceivedAt: null,
     lastHeartbeatAt: null,
     stale: false,
@@ -284,11 +286,10 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
           if (get().connectGeneration !== myGen) return
           if (msg.type === 'snapshot') {
             set((prev) => {
-              // 真实 snapshot 才追加；心跳不会进入此分支。
-              // stale 显示冻结由 UI 负责；收到新真实帧时更新并解除 stale。
               prev.trendBuffer.push(msg.snapshot, prev.trendTags)
               return {
                 latestSnapshot: msg.snapshot,
+                rawSnapshot: msg.raw,
                 snapshotReceivedAt: Date.now(),
                 stale: false,
                 lastHeartbeatAt: null,
@@ -373,6 +374,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         apiReady: false,
         cycleTime: 0.5,
         latestSnapshot: null,
+        rawSnapshot: null,
         snapshotReceivedAt: null,
         lastHeartbeatAt: null,
         stale: false,
