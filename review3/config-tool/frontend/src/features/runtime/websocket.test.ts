@@ -452,3 +452,160 @@ describe('createRuntimeWs auth token', () => {
     ws.stop()
   })
 })
+
+describe('createRuntimeWs subscription protocol', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+    vi.stubGlobal('WebSocket', FakeWebSocket as any)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sends subscribe message on open when setSubscription called before start', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription(['tank_2.level', 'pid2.SV', 'tank_2.level']) // 含重复
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    // 必须发送了去重 + 排序后的订阅
+    expect(sock.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: ['pid2.SV', 'tank_2.level'] }),
+    )
+    ws.stop()
+  })
+
+  it('sends subscribe message when setSubscription called after open', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    sock.sentMessages = [] // 清空，只看后续 setSubscription
+    ws.setSubscription(['tank_2.level'])
+    expect(sock.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: ['tank_2.level'] }),
+    )
+    ws.stop()
+  })
+
+  it('re-sends subscription after reconnect', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription(['pid2.PV'])
+    await ws.start()
+    const sock1 = FakeWebSocket.instances[0]
+    sock1.triggerOpen()
+    expect(sock1.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: ['pid2.PV'] }),
+    )
+    // 模拟服务端断开
+    sock1.triggerServerClose()
+    // 等待指数退避（默认 1s）
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    const sock2 = FakeWebSocket.instances[1]
+    expect(sock2).toBeDefined()
+    sock2.triggerOpen()
+    // 重连后必须重发
+    expect(sock2.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: ['pid2.PV'] }),
+    )
+    ws.stop()
+  })
+
+  it('null subscription means full payload (no filter)', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription(null)
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    expect(sock.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: null }),
+    )
+    ws.stop()
+  })
+
+  it('limits subscription to MAX_SUBSCRIPTION_TAGS', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    const big = Array.from({ length: 6000 }, (_, i) => `tag${i}`)
+    ws.setSubscription(big)
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    const sent = sock.sentMessages.find((m) => m.includes('"type":"subscribe"'))
+    const parsed = JSON.parse(sent!)
+    expect(parsed.tags.length).toBe(5000)
+    ws.stop()
+  })
+
+  it('handles subscribed control message without going to snapshot', async () => {
+    const messages: any[] = []
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      (m) => messages.push(m),
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    sock.triggerMessage({ type: 'subscribed', tags: ['a', 'b'] })
+    expect(messages.length).toBe(1)
+    expect(messages[0].type).toBe('subscribed')
+    expect(messages[0].tags).toEqual(['a', 'b'])
+    ws.stop()
+  })
+
+  it('handles error control message', async () => {
+    const messages: any[] = []
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      (m) => messages.push(m),
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    sock.triggerMessage({ type: 'error', code: 'TOO_MANY_SUBSCRIPTIONS', message: 'too many' })
+    expect(messages.length).toBe(1)
+    expect(messages[0].type).toBe('error')
+    expect(messages[0].code).toBe('TOO_MANY_SUBSCRIPTIONS')
+    ws.stop()
+  })
+
+  it('stop() clears pending subscription', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription(['tank_2.level'])
+    ws.stop()
+    expect(ws.getSubscription()).toBeNull()
+  })
+})

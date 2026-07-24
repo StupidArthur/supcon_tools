@@ -90,6 +90,11 @@ export interface RuntimeStoreState {
   lastError: string | null
   // 当前活跃的 connect generation；disconnect/重连递增
   connectGeneration: number
+  // 阶段 D3：订阅来源聚合。各组件 registerSubscription(source, tags)；
+  // 实际 WS 发送的并集见 getActiveSubscriptionUnion()，避免互相覆盖。
+  subscriptionSources: Record<string, string[]>
+  /** 最近一次服务端 ack 的订阅列表（来自 {type:'subscribed'} 消息）。 */
+  lastAcknowledgedSubscription: string[] | null
 
   // Actions
   setEndpoint: (host: string, port: number, token?: string) => void
@@ -104,6 +109,8 @@ export interface RuntimeStoreState {
     patch: Partial<Pick<RuntimeWriteEvent, 'status' | 'confirmedAt'>>,
   ) => void
   recomputeQuality: () => void
+  /** 阶段 D3：注册某个组件的订阅 tag 集合；source 是稳定 id。 */
+  registerSubscription: (source: string, tags: string[]) => void
   connect: () => Promise<void>
   disconnect: () => void
   // 每秒调用一次检查 stale
@@ -114,6 +121,22 @@ export interface RuntimeStoreState {
 
 const DEFAULT_API_HOST = '127.0.0.1'
 const DEFAULT_API_PORT = 8000
+
+// computeSubscriptionUnion 计算所有来源的 tag 并集 + 排序。
+// 单一来源为空时整体视为 null（全量），便于后台把不必要的过滤移除。
+function computeSubscriptionUnion(sources: Record<string, string[]>): string[] | null {
+  const sets: string[][] = Object.values(sources)
+  if (sets.length === 0) return null
+  const out = new Set<string>()
+  for (const tags of sets) {
+    if (!Array.isArray(tags)) continue
+    for (const t of tags) {
+      if (typeof t === 'string' && t.length > 0) out.add(t)
+    }
+  }
+  if (out.size === 0) return null
+  return Array.from(out).sort()
+}
 
 export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
   let ws: RuntimeWs | null = null
@@ -194,11 +217,15 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     },
     lastError: null,
     connectGeneration: 0,
+    subscriptionSources: {},
+    lastAcknowledgedSubscription: null,
 
     setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
     setApiReady: (ready) => set({ apiReady: ready }),
     setTrendTags: (tags) => {
       set({ trendTags: tags })
+      // 趋势选择变化也要反映到订阅
+      get().registerSubscription('trend', tags)
     },
     setSeriesVisibility: (tag, visible) => {
       set((prev) => ({
@@ -240,6 +267,19 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         >,
       })
       set({ quality })
+    },
+
+    // 阶段 D3：注册/更新一个组件的订阅 tag 集合。多次注册同一 source 会覆盖。
+    // union 一旦变化，ws 立即收到新的 setSubscription。
+    registerSubscription: (source, tags) => {
+      set((prev) => {
+        const next = { ...prev.subscriptionSources, [source]: tags }
+        return { subscriptionSources: next }
+      })
+      const union = computeSubscriptionUnion(get().subscriptionSources)
+      if (ws) {
+        ws.setSubscription(union)
+      }
     },
 
     connect: async () => {
@@ -323,6 +363,12 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
           } else if (msg.type === 'heartbeat') {
             // 心跳：只更新 lastHeartbeatAt，不替换 latestSnapshot，不追加趋势。
             set({ lastHeartbeatAt: Date.now() })
+          } else if (msg.type === 'subscribed') {
+            // 服务端确认订阅：记录 ack 列表，便于排查。
+            set({ lastAcknowledgedSubscription: msg.tags })
+          } else if (msg.type === 'error') {
+            // 服务端推送订阅错误（如 TOO_MANY_SUBSCRIPTIONS）；记录到 lastError。
+            set({ lastError: `[${msg.code}] ${msg.message}` })
           } else {
             // unknown：忽略
           }
@@ -344,6 +390,10 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         },
       )
       ws = runtimeWs
+      // 阶段 D3：创建 ws 后立即把当前订阅并集推过去。
+      // 如果 setTrendTags/其他组件调用过 registerSubscription，这里就有内容。
+      const initialUnion = computeSubscriptionUnion(get().subscriptionSources)
+      runtimeWs.setSubscription(initialUnion)
       startStaleCheck()
       await runtimeWs.start()
       if (get().connectGeneration !== myGen) runtimeWs.stop()

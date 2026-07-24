@@ -229,4 +229,24 @@ describe('useRuntimeStore', () => {
     const headers = statusCall![1]?.headers as Record<string, string> | undefined
     expect(headers?.Authorization).toBe('Bearer in-memory-token')
   })
+
+  it('registerSubscription stores source tags in subscriptionSources', () => {
+    useRuntimeStore.getState().registerSubscription('trend', ['tank_2.level', 'pid2.SV'])
+    useRuntimeStore.getState().registerSubscription('dashboard', ['valve_1.current_opening'])
+    const sources = useRuntimeStore.getState().subscriptionSources
+    expect(sources.trend).toEqual(['tank_2.level', 'pid2.SV'])
+    expect(sources.dashboard).toEqual(['valve_1.current_opening'])
+  })
+
+  it('setTrendTags also updates trend subscription', () => {
+    useRuntimeStore.getState().setTrendTags(['pid2.PV'])
+    expect(useRuntimeStore.getState().subscriptionSources.trend).toEqual(['pid2.PV'])
+  })
+
+  it('subscriptionSources can be replaced wholesale', () => {
+    useRuntimeStore.getState().registerSubscription('tagTable', ['tank_2.level'])
+    useRuntimeStore.getState().registerSubscription('tagTable', ['pid2.SV', 'tank_2.level'])
+    const sources = useRuntimeStore.getState().subscriptionSources
+    expect(sources.tagTable).toEqual(['pid2.SV', 'tank_2.level'])
+  })
 })
