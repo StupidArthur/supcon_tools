@@ -1304,3 +1304,62 @@ func TestCleanup_UnregistersExitListener(t *testing.T) {
 		t.Errorf("Cleanup 后 GetSession 必须为 nil")
 	}
 }
+
+// 阶段 H 收口：archive stop 成功后 system stop 失败 → 第二次 Stop 不得重复 archive stop。
+// 验证：archive stop 总调用次数 == 1。
+func TestStop_ArchiveAlreadyStoppedIsNotRetried(t *testing.T) {
+	var archiveStopCount atomic.Int32
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		archiveStopCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	rig := newRealtimeTestRig(t)
+	defer rig.cleanup()
+	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "archive-no-retry", nil
+	})
+
+	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "archive-no-retry",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 第一次 Stop：注入 system stop 失败（archive stop 会成功）
+	rig.system.terminateErrorOverride = fmt.Errorf("simulated system stop failure")
+	stopErr := rig.binding.Stop()
+	if stopErr == nil {
+		t.Fatal("first Stop must fail (override active)")
+	}
+	// archive stop 应已被调用一次
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Fatalf("archive stop must be called exactly once after first Stop, got %d", got)
+	}
+
+	// 第二次 Stop：清除 override，让 system stop 成功
+	// 关键：archive stop 不得被再次调用（archiveActive 已被置为 false）
+	rig.system.terminateErrorOverride = nil
+	if err := rig.binding.Stop(); err != nil {
+		t.Fatalf("second Stop must succeed: %v", err)
+	}
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Errorf("archive stop must NOT be retried after success, total calls = %d (want 1)", got)
+	}
+}

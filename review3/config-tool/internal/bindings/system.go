@@ -147,6 +147,10 @@ type SystemBinding struct {
 	// 同时保持 Status().Running=true（不修改 b.proc 状态）。
 	// 生产代码不要设置此字段。
 	terminateErrorOverride error
+	// terminateAttemptHook 仅用于测试：每次真正进入 attemptTermination 前调用。
+	// 用于验证并发串行化（maxConcurrentAttempts == 1）。
+	// 生产代码不要设置此字段。
+	terminateAttemptHook func()
 }
 
 // NewSystemBinding 创建系统绑定
@@ -610,8 +614,8 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
 // terminateProcess 真实地尝试停止子进程。
 //
 // 关键设计：不得用 sync.Once 永久缓存首次失败（这会禁止重试）。
-// - 防并发：stopMu 互斥；in-progress 标记 + wait channel。
-// - 缓存逻辑：仅当进程已经死了（proc.done 已 close）才返回缓存错误；
+// - 防并发：stopMu 互斥；in-progress 标记 + wait channel + for 循环重检。
+// - 幂等语义：进程已死（proc.done 已 close）→ 返回 nil（目标已达成）。
 //   进程仍存活时下一次 Stop 必须重新执行 Interrupt → Kill → wait。
 func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool) error {
 	b.mu.Lock()
@@ -632,19 +636,22 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 		return override
 	}
 
-	// 并发合并：如果另一个 goroutine 正在执行终止，等待其完成
-	// 然后基于实际进程状态决定返回值。
+	// 并发合并：如果另一个 goroutine 正在执行终止，等待其完成，
+	// 然后重新检查状态（for 循环），防止 B/C 同时唤醒后都进入 attemptTermination。
 	// 关键：必须在持锁时捕获 stopDone 引用，否则在 unlock 与 <- 之间
 	// 另一个 goroutine 可能 close 旧 channel 并创建新 channel，
 	// 导致本 goroutine 永远阻塞在新 channel 上（deadlock）。
 	proc.stopMu.Lock()
-	if proc.stopInProgress {
+	for proc.stopInProgress {
 		done := proc.stopDone
 		proc.stopMu.Unlock()
 		<-done
 		proc.stopMu.Lock()
 	}
 	proc.stopInProgress = true
+	if b.terminateAttemptHook != nil {
+		b.terminateAttemptHook()
+	}
 	proc.stopMu.Unlock()
 
 	defer func() {
@@ -656,13 +663,11 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 		proc.stopMu.Unlock()
 	}()
 
-	// 进程已经死了：直接返回上次的错误（如果有），否则 nil
+	// 进程已经死了：目标已达成，返回 nil（幂等语义）。
+	// 历史错误保存在 proc.stopErr 供诊断，但不作为当前操作结果返回。
 	select {
 	case <-proc.done:
-		proc.stopMu.Lock()
-		err := proc.stopErr
-		proc.stopMu.Unlock()
-		return err
+		return nil
 	default:
 	}
 

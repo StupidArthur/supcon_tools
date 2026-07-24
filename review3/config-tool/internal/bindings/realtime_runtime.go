@@ -122,14 +122,18 @@ func (b *RealtimeRuntimeBinding) Cleanup() {
 			b.removeExitListener()
 			b.removeExitListener = nil
 		}
-		// session dir 由 monitorProcess 派发的 onSystemProcessExit 删除。
-		// 但若 monitorProcess 已经先于此处 dispatch（生命周期极短竞态），
-		// session dir 可能已被删。安全幂等。
+		// 阶段 H 收口：Stop() 已处理 archive 失败时的 session dir 保留。
+		// 此处仅记录错误日志（进程已死，内存状态已由 Stop() 清除）。
+		if stopErr != nil {
+			fmt.Fprintf(os.Stderr, "[realtime] Cleanup: stop/archive error (process dead): %v\n", stopErr)
+		}
 	} else {
 		// 进程仍存活：保留 current / curDir / token / session dir 让用户重试。
 		// 不删除 session dir —— 下次 Stop 需要读取 session.json 写入 stop-failed 状态。
 		// listener 保留（继续等待 monitor 检测进程真实退出后触发清理）。
-		_ = stopErr
+		if stopErr != nil {
+			fmt.Fprintf(os.Stderr, "[realtime] Cleanup: stop failed, process still alive, session preserved for retry: %v\n", stopErr)
+		}
 	}
 }
 
@@ -585,16 +589,19 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 
 	// 阶段 C4 收口：归档停止优先（保证 SQLite / jsonl flush / 句柄关闭），
 	// 仅在确实启用归档时调用。带 Bearer 鉴权。
+	// archivePending 跟踪"归档是否仍需重试"：
+	//   - archive stop 成功 → archivePending = false（不再重试）
+	//   - archive stop 失败 → archivePending = true（下次 Stop 重试）
+	// 关键：不得在 stop-failed 恢复路径中写回旧的 archiveActive 值，
+	// 否则已成功的 archive stop 会被错误地标记为仍需重试。
 	var archiveErr error
+	archivePending := archiveActive
 	if archiveActive && sess != nil {
 		archiveErr = b.stopArchiveOnShutdown(*sess)
-		// 阶段 5-5 收口：archive stop 成功才置 false。
-		// 失败时保留 true（unknown），下次 Stop 重试。
-		if archiveErr == nil {
-			b.mu.Lock()
-			b.archiveActive = false
-			b.mu.Unlock()
-		}
+		archivePending = archiveErr != nil
+		b.mu.Lock()
+		b.archiveActive = archivePending
+		b.mu.Unlock()
 	}
 
 	if b.system.Status().Running {
@@ -611,12 +618,13 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 					rec.State = realtime.StateStopFailed
 					_ = b.sessionManager.WriteSessionJSON(dir, rec)
 					// 保留 current / curDir，标记 session.state 可见
+					// 关键：archiveActive 使用 archivePending（不恢复旧值）
 					stamped := *sess
 					stamped.State = realtime.StateStopFailed
 					b.mu.Lock()
 					b.current = &stamped
 					b.curDir = dir
-					b.archiveActive = archiveActive
+					b.archiveActive = archivePending
 					b.mu.Unlock()
 				}
 				return fmt.Errorf("停止 DataFactory 失败: %v", combined)
@@ -626,6 +634,7 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 			b.mu.Lock()
 			b.current = nil
 			b.curDir = ""
+			b.archiveActive = false
 			b.mu.Unlock()
 			if archiveErr != nil {
 				return fmt.Errorf("停止 DataFactory 失败: %v; 归档停止失败: %v", stopErr, archiveErr)
@@ -634,10 +643,21 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 		}
 	}
 
-	b.sessionManager.RemoveSessionDir(dir)
+	// 阶段 H 收口：archive flush 失败时保留 session dir 作为诊断记录。
+	// 进程已死但 archive 数据可能不完整，保留 session.json 供后续分析。
+	// 下次启动由 CleanupOrphans 机制处理该目录。
+	if archiveErr != nil {
+		// 标记 stop-failed 状态，保留目录
+		rec, _ := b.sessionManager.ReadSessionRecord(dir)
+		rec.State = realtime.StateStopFailed
+		_ = b.sessionManager.WriteSessionJSON(dir, rec)
+	} else {
+		b.sessionManager.RemoveSessionDir(dir)
+	}
 	b.mu.Lock()
 	b.current = nil
 	b.curDir = ""
+	b.archiveActive = false
 	b.mu.Unlock()
 	// 归档停止错误不影响 Stop 整体成功（用户主动停止语义），但应当作为信号返回，
 	// 由调用方决定是否向用户展示。

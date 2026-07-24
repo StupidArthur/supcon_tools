@@ -203,9 +203,8 @@ func TestCleanup_Idempotent_ThreeCallsNoPanic(t *testing.T) {
 	}
 }
 
-// 阶段 H 收口：Shutdown 期间 archive stop 失败不得导致 session 状态丢失。
-// 验证：archive stop 返回 500 → Cleanup 仍完成 system stop → session 被清理
-// （进程已死，archive 无法重试，但错误必须被记录）。
+// 阶段 H 收口：Shutdown 期间 archive stop 失败 → 进程已死 → session dir 保留为诊断记录。
+// 验证：archive stop 被调用，system 停止，内存 session 清除，但磁盘 session dir 保留。
 func TestCleanup_ArchiveStopFailure_SessionStillCleaned(t *testing.T) {
 	var archiveStopCalled atomic.Bool
 	apiMux := http.NewServeMux()
@@ -257,6 +256,13 @@ func TestCleanup_ArchiveStopFailure_SessionStillCleaned(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	sessionDir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(sessionDir)
+	if len(entries) == 0 {
+		t.Fatal("session dir must exist after start")
+	}
+	preCleanupDir := filepath.Join(sessionDir, entries[0].Name())
+
 	// Cleanup：archive stop 失败，但 system stop 必须成功
 	binding.Cleanup()
 
@@ -266,13 +272,22 @@ func TestCleanup_ArchiveStopFailure_SessionStillCleaned(t *testing.T) {
 	if system.Status().Running {
 		t.Error("system must be stopped after Cleanup even if archive stop failed")
 	}
+	// 内存 session 必须清除（进程已死）
 	s, _ := binding.GetSession()
 	if s != nil {
 		t.Errorf("session must be nil after Cleanup (process is dead), got %+v", s)
 	}
-	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
-	if len(entries) != 0 {
-		t.Errorf("session dir must be cleaned after Cleanup, got %d", len(entries))
+	// 阶段 H：archive flush 失败时 session dir 必须保留作为诊断记录
+	if _, err := os.Stat(preCleanupDir); err != nil {
+		t.Errorf("archive flush 失败时 session dir 必须保留: %v", err)
+	}
+	// session.json 必须标记 stop-failed
+	rec, ok := sessionMgr.ReadSessionRecord(preCleanupDir)
+	if !ok {
+		t.Fatal("session.json 必须可读")
+	}
+	if rec.State != realtime.StateStopFailed {
+		t.Errorf("session.json state 必须为 stop-failed，实际 %s", rec.State)
 	}
 }
 
@@ -344,6 +359,180 @@ func TestCleanup_StopFailure_PreservesSessionDirForRetry(t *testing.T) {
 	// token 必须保留
 	if got := CurrentAPIToken(); got != firstToken {
 		t.Errorf("Cleanup 失败时 token 必须保留，期望 %q 实际 %q", firstToken, got)
+	}
+
+	// 清除 override，让 Stop 真的成功
+	system.terminateErrorOverride = nil
+	binding.Cleanup()
+
+	// 现在 session 必须被清理
+	s2, _ := binding.GetSession()
+	if s2 != nil {
+		t.Errorf("clean Cleanup 后 GetSession 必须为 nil，实际 %+v", s2)
+	}
+}
+
+// 阶段 H 收口：archive flush 失败 + 进程已死 → 保留磁盘失败记录。
+// 验证：session dir 保留，session.json 标记 stop-failed，内存 current 清除。
+func TestCleanup_ArchiveFailureLeavesDurableFailureRecord(t *testing.T) {
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	apiMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("flush failed"))
+	})
+	apiSrv := httptest.NewServer(apiMux)
+	defer apiSrv.Close()
+	ports := strings.TrimPrefix(apiSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(filepath.Join(tmp, "DataFactory.exe"), []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "archive-durable", nil
+	})
+
+	storeRoot := filepath.Join(tmp, "store")
+	os.MkdirAll(storeRoot, 0o755)
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompilerShutdownTest{})
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+
+	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "archive-durable",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionDir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(sessionDir)
+	if len(entries) == 0 {
+		t.Fatal("session dir must exist after start")
+	}
+	preCleanupDir := filepath.Join(sessionDir, entries[0].Name())
+
+	// Cleanup：archive stop 失败，但 system stop 成功（进程死亡）
+	binding.Cleanup()
+
+	// 进程已死 → 内存 current 必须清除
+	s, _ := binding.GetSession()
+	if s != nil {
+		t.Errorf("进程已死后 GetSession 必须为 nil，实际 %+v", s)
+	}
+	// token 必须清除
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("进程已死后 token 必须为空，实际 %q", got)
+	}
+	// 关键：session dir 必须保留作为诊断记录
+	if _, err := os.Stat(preCleanupDir); err != nil {
+		t.Errorf("archive flush 失败时 session dir 必须保留: %v", err)
+	}
+	// session.json 必须标记 stop-failed
+	rec, ok := sessionMgr.ReadSessionRecord(preCleanupDir)
+	if !ok {
+		t.Fatal("session.json 必须可读")
+	}
+	if rec.State != realtime.StateStopFailed {
+		t.Errorf("session.json state 必须为 stop-failed，实际 %s", rec.State)
+	}
+}
+
+// 阶段 H 收口：Stop 失败 + 进程仍存活 → Cleanup 保留可恢复的子进程记录。
+// 验证：session dir 保留，session.json 存在，child pid 可追踪。
+func TestCleanup_StopFailurePreservesRecoverableChildRecord(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(filepath.Join(tmp, "DataFactory.exe"), []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "recoverable-child", nil
+	})
+
+	storeRoot := filepath.Join(tmp, "store")
+	os.MkdirAll(storeRoot, 0o755)
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompilerShutdownTest{})
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "recoverable-child",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionDir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(sessionDir)
+	if len(entries) == 0 {
+		t.Fatal("session dir must exist after start")
+	}
+	preCleanupDir := filepath.Join(sessionDir, entries[0].Name())
+
+	// 读取启动时写入的 child pid
+	rec, ok := sessionMgr.ReadSessionRecord(preCleanupDir)
+	if !ok {
+		t.Fatal("session.json must be readable after start")
+	}
+	if rec.ChildPid <= 0 {
+		t.Fatalf("ChildPid must be > 0, got %d", rec.ChildPid)
+	}
+
+	// 注入 Stop 失败
+	system.terminateErrorOverride = fmt.Errorf("simulated unrecoverable stop")
+
+	// Cleanup：Stop 失败，进程仍存活
+	binding.Cleanup()
+
+	// session dir 必须保留
+	if _, err := os.Stat(preCleanupDir); err != nil {
+		t.Errorf("Stop 失败时 session dir 必须保留: %v", err)
+	}
+	// session.json 必须仍可读且 child pid 保留
+	rec2, ok := sessionMgr.ReadSessionRecord(preCleanupDir)
+	if !ok {
+		t.Fatal("Stop 失败后 session.json 必须仍可读")
+	}
+	if rec2.ChildPid != rec.ChildPid {
+		t.Errorf("ChildPid 必须保留，期望 %d 实际 %d", rec.ChildPid, rec2.ChildPid)
+	}
+	// session state 必须标记 stop-failed
+	if rec2.State != realtime.StateStopFailed {
+		t.Errorf("session state 必须为 stop-failed，实际 %s", rec2.State)
+	}
+	// 内存 current 必须保留（供重试）
+	s, _ := binding.GetSession()
+	if s == nil {
+		t.Fatal("Stop 失败时 GetSession 必须非空")
 	}
 
 	// 清除 override，让 Stop 真的成功

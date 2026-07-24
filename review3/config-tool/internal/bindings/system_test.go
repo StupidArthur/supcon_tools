@@ -1911,6 +1911,7 @@ func TestDefaultReadinessCheckerAddsBearerHeader(t *testing.T) {
 //   - 无 race（go test -race 检测）
 //   - 最终进程死亡
 //   - 所有 goroutine 都返回（无 deadlock）
+//   - 任意时刻最多 1 个 goroutine 在 attemptTermination 内（串行化）
 func TestTerminate_ConcurrentCallsNoPanicNoRace(t *testing.T) {
 	b := NewSystemBinding()
 	tmp := t.TempDir()
@@ -1925,6 +1926,24 @@ func TestTerminate_ConcurrentCallsNoPanicNoRace(t *testing.T) {
 		}
 		return true, "conc-term", nil
 	})
+
+	// 跟踪并发进入 attemptTermination 的最大数量
+	var (
+		currentAttempts atomic.Int32
+		maxAttempts     atomic.Int32
+	)
+	b.terminateAttemptHook = func() {
+		cur := currentAttempts.Add(1)
+		for {
+			old := maxAttempts.Load()
+			if cur <= old || maxAttempts.CompareAndSwap(old, cur) {
+				break
+			}
+		}
+		// 模拟一点工作量，增加竞态窗口
+		time.Sleep(5 * time.Millisecond)
+		currentAttempts.Add(-1)
+	}
 
 	cfg := filepath.Join(tmp, "test.yaml")
 	os.WriteFile(cfg, []byte("test: true"), 0o644)
@@ -1969,6 +1988,11 @@ func TestTerminate_ConcurrentCallsNoPanicNoRace(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("deadlock: concurrent terminateProcess did not complete within 10s")
+	}
+
+	// 关键断言：任意时刻最多 1 个 goroutine 在 attemptTermination 内
+	if got := maxAttempts.Load(); got != 1 {
+		t.Errorf("maxConcurrentAttempts must be 1 (serialized), got %d", got)
 	}
 
 	// 所有 goroutine 都返回后，进程必须已死
@@ -2056,5 +2080,76 @@ dead:
 	// 第三次 terminate：仍然幂等
 	if err := b.terminateProcess(proc, true); err != nil {
 		t.Errorf("third terminate on dead process must return nil, got: %v", err)
+	}
+}
+
+// 阶段 H 收口：进程被外部杀死后，terminate 必须返回 nil（目标已达成），
+// 不得返回旧的 override 错误。
+func TestTerminate_ExternalDeathClearsStaleStopError(t *testing.T) {
+	b := NewSystemBinding()
+	tmp := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0o755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(10 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "ext-death", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+
+	if err := b.Start(StartParams{
+		ConfigPath:  cfg,
+		Mode:        "REALTIME",
+		CycleTime:   0.5,
+		Port:        18951,
+		APIPort:     8000,
+		APIHost:     "127.0.0.1",
+		RuntimeName: "ext-death",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b.mu.Lock()
+	proc := b.proc
+	b.mu.Unlock()
+
+	// 第一次 terminate：override 返回错误，进程仍存活
+	b.terminateErrorOverride = fmt.Errorf("simulated failure")
+	if err := b.terminateProcess(proc, true); err == nil {
+		t.Fatal("first terminate with override must return error")
+	}
+	if !b.Status().Running {
+		t.Fatal("after override, process must still be running")
+	}
+
+	// 外部杀死进程（模拟 OS kill / 崩溃）
+	proc.cmd.Process.Kill()
+
+	// 等待 proc.done 关闭（monitorProcess 确认退出）
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-proc.done:
+			goto dead
+		default:
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	t.Fatal("process did not die after external kill")
+dead:
+
+	// 清除 override
+	b.terminateErrorOverride = nil
+
+	// 第二次 terminate：进程已死（外部杀死），必须返回 nil
+	// 不得返回第一次的旧错误 "simulated failure"
+	if err := b.terminateProcess(proc, true); err != nil {
+		t.Errorf("terminate after external death must return nil (goal achieved), got: %v", err)
 	}
 }
