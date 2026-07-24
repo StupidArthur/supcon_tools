@@ -1,17 +1,27 @@
 # realtime-auth-smoke.ps1
-# 真实启动 DataFactory (--api 模式) 并验证完整鉴权链路。
+# 验证 Python standalone API 的 REST/WS 鉴权。
 #
-# workplan 3.1 + 4.4 合同 (12 步):
+# 本脚本验证范围：
+#   - Python REST auth: covered
+#   - Python WS auth: covered
+#   - Python token rotation across restarts: covered
+#   - Go readiness auth: not covered by this script
+#   - GetConnectionInfo: not covered by this script
+#   - Wails bridge: not covered by this script
+#   - React bootstrap: not covered by this script
+#   - Product Stop transaction: not covered by this script
+#
+# 12 步骤:
 #   1. 启动最小实时配置
 #   2. readiness 成功
-#   3. GetConnectionInfo 返回 token-present
+#   3. Python API accepted the configured token
 #   4. 无 token REST 401
 #   5. 错 token REST 401
 #   6. 正确 token REST 200
 #   7. 无 token WS close 4401
 #   8. 正确 token WS 连接并收到 snapshot/heartbeat
-#   9. Stop
-#  10. 旧 token 再请求返回 401
+#   9. externally terminate standalone Python process
+#  10. process stopped, old endpoint is unreachable
 #  11. 再次启动生成新 token
 #  12. 旧 token 仍 401，新 token 200
 #
@@ -110,8 +120,8 @@ try {
         exit 2
     }
 
-    # Step 3: token present → readiness success implies token 配置正确
-    Write-Host "Step 3: token-present verified"
+    # Step 3: Python API accepted the configured token
+    Write-Host "Step 3: Python API accepted the configured token"
 
     # Step 4: no-token REST 401
     Write-Host "Step 4: no-token REST must 401"
@@ -167,14 +177,14 @@ try {
         exit 7
     }
 
-    # Step 9: Stop
-    Write-Host "Step 9: stop DataFactory"
+    # Step 9: externally terminate standalone Python process
+    Write-Host "Step 9: externally terminate standalone Python process"
     Stop-DataFactory $proc
     $proc = $null
     Start-Sleep -Seconds 1
 
-    # Step 10: post-stop 端口拒绝连接（旧 token 不能访问）
-    Write-Host "Step 10: post-stop port must be closed (old token can not reach)"
+    # Step 10: process stopped, old endpoint is unreachable
+    Write-Host "Step 10: process stopped, old endpoint is unreachable"
     $ok = $false
     $failReason = ""
     try {
@@ -227,6 +237,16 @@ result: ALL 12 STEPS OK
 token-rotated: true
 token-length: 32
 12/12 steps passed
+
+coverage:
+- Python REST auth: covered
+- Python WS auth: covered
+- Python token rotation across restarts: covered
+- Go readiness auth: not covered by this script
+- GetConnectionInfo: not covered by this script
+- Wails bridge: not covered by this script
+- React bootstrap: not covered by this script
+- Product Stop transaction: not covered by this script
 "@
     $summaryFile = Join-Path $RepoRoot "artifacts\auth-smoke-summary.txt"
     Set-Content -Path $summaryFile -Value $summary -Encoding UTF8

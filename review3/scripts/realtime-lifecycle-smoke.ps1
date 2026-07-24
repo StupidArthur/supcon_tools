@@ -1,9 +1,20 @@
 # realtime-lifecycle-smoke.ps1
-# 4 场景真实生命周期冒烟：
-#   1. 正常停止（archive stop → Python stop → cleanup）
-#   2. 异常退出（外部 kill child → 端口关闭）
-#   3. 真实停止失败后重试（Go binding 测试）
-#   4. 应用关闭顺序（Go Lifecycle 测试）
+# 4 场景生命周期冒烟：
+#   1. Python standalone external termination and port closure
+#   2. Python standalone crash closes port
+#   3. binding-level stop failure/retry tests (Go)
+#   4. binding-level archive-before-process test (Go)
+#
+# covered:
+# - standalone Python external termination closes port
+# - standalone Python crash closes port
+# - named Go recovery-state tests executed and passed
+# - named Go archive-before-process test executed and passed
+#
+# not covered:
+# - real OS kill timeout followed by retry
+# - Wails application shutdown with an unkillable child
+# - end-to-end UI Stop retry
 
 [CmdletBinding()]
 param(
@@ -31,8 +42,6 @@ function Kill-DataFactory([System.Diagnostics.Process]$P) {
         taskkill /F /T /PID $P.Id 2>&1 | Out-Null
     }
     Start-Sleep -Seconds 1
-    # 不再用 netstat 解析（不同 Windows 版本输出格式差异大）。
-    # 端口释放由 taskkill /F /T 杀进程树 + Sleep 完成。
     Start-Sleep -Seconds 1
 }
 
@@ -85,86 +94,105 @@ function Get-RandomHex([int]$N) {
     return (($bytes | ForEach-Object { $_.ToString("x2") }) -join "")
 }
 
+function Invoke-NamedGoTest {
+    param(
+        [string]$Package,
+        [string]$TestName
+    )
+
+    $output = go test -race -count=1 -json -run "^${TestName}$" $Package 2>&1
+    $code = $LASTEXITCODE
+
+    if ($code -ne 0) {
+        throw "$TestName failed with exit code $code"
+    }
+
+    $events = $output |
+        ForEach-Object {
+            try { $_ | ConvertFrom-Json } catch { $null }
+        } |
+        Where-Object { $_ -ne $null }
+
+    $foundRun = $events |
+        Where-Object {
+            $_.Action -eq "run" -and
+            $_.Test -eq $TestName
+        }
+
+    $foundPass = $events |
+        Where-Object {
+            $_.Action -eq "pass" -and
+            $_.Test -eq $TestName
+        }
+
+    if (-not $foundRun) {
+        throw "$TestName was not collected or executed (go test found no matching test)"
+    }
+
+    if (-not $foundPass) {
+        throw "$TestName did not pass (action=pass not found in JSON events)"
+    }
+}
+
 Push-Location $RepoRoot
 Log "=== realtime-lifecycle-smoke ==="
 Log "port: $Port"
 
-# ---------- 场景 1：正常停止 ----------
+# ---------- Scenario 1: Python standalone external termination and port closure ----------
 Log ""
-Log "Scenario 1: 正常停止"
+Log "Scenario 1: Python standalone external termination and port closure"
 $token1 = Get-RandomHex 32
 $proc = Start-DataFactory $token1 "lc-normal-1"
 if (-not (Wait-Ready $token1 "lc-normal-1" $StartupTimeoutSec)) {
     Log "FAIL: readiness timeout (scenario 1)"
     $exitCode = 2
 } else {
-    try {
-        Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/archive/start" `
-            -Method POST -Headers @{ "Authorization" = "Bearer $token1"; "Content-Type" = "application/json" } `
-            -Body '{"sessionId":"lc-1","tags":[],"metadata":{}}' `
-            -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop | Out-Null
-        Log "  archive start: OK"
-    } catch { Log "  archive start: FAILED" }
     Kill-DataFactory $proc
     Start-Sleep -Seconds 1
-    if (-not (Port-Open-Check 2000)) { Log "  port closed after stop: OK" }
-    else { Log "  FAIL: port still open after stop"; $exitCode = 3 }
+    if (-not (Port-Open-Check 2000)) { Log "  port closed after termination: OK" }
+    else { Log "  FAIL: port still open after termination"; $exitCode = 3 }
 }
 
-# ---------- 场景 2：异常退出 ----------
+# ---------- Scenario 2: Python standalone crash closes port ----------
 Log ""
-Log "Scenario 2: 异常退出 (外部 kill child)"
+Log "Scenario 2: Python standalone crash closes port"
 $token2 = Get-RandomHex 32
 $proc = Start-DataFactory $token2 "lc-crash-2"
 if (-not (Wait-Ready $token2 "lc-crash-2" $StartupTimeoutSec)) {
     Log "FAIL: readiness timeout (scenario 2)"
     $exitCode = 4
 } else {
-    try {
-        Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/archive/start" `
-            -Method POST -Headers @{ "Authorization" = "Bearer $token2"; "Content-Type" = "application/json" } `
-            -Body '{"sessionId":"lc-2","tags":[],"metadata":{}}' `
-            -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop | Out-Null
-    } catch { }
     Kill-DataFactory $proc
     Start-Sleep -Seconds 2
     if (-not (Port-Open-Check 2000)) { Log "  port closed after crash: OK" }
-    else { Log "  WARN: port still open after crash" }
+    else { Log "  FAIL: port still open after crash"; $exitCode = 8 }
 }
 
-# ---------- 场景 3：真实停止失败后重试 ----------
+# ---------- Scenario 3: binding-level stop failure/retry tests ----------
 Log ""
-Log "Scenario 3: real stop failure and retry (Go binding test)"
-$token3 = Get-RandomHex 32
-$proc = Start-DataFactory $token3 "lc-retry-3"
-if (-not (Wait-Ready $token3 "lc-retry-3" $StartupTimeoutSec)) {
-    Log "FAIL: readiness timeout (scenario 3)"
-    $exitCode = 5
-} else {
-    Push-Location (Join-Path $RepoRoot "config-tool")
-    $goOut = go test -race -count=1 -run "TestStart_StopFailurePreservesSessionForRetry" ./internal/bindings/... 2>&1
-    Pop-Location
-    if ($LASTEXITCODE -eq 0) { Log "  go test: OK" }
-    else {
-        Log "  go test: FAIL"
-        $goOut | ForEach-Object { Log "    $_" }
-        $exitCode = 6
-    }
-}
-Kill-DataFactory $proc
-
-# ---------- 场景 4：应用关闭顺序 ----------
-Log ""
-Log "Scenario 4: shutdown order (Go Lifecycle test)"
+Log "Scenario 3: binding-level stop failure and retry tests"
 Push-Location (Join-Path $RepoRoot "config-tool")
-$goOut = go test -race -count=1 -run "TestLifecycle_ShutdownOrderArchiveBeforeProcessKill" ./internal/app/... 2>&1
+try {
+    Invoke-NamedGoTest -Package "./internal/bindings/..." -TestName "TestStart_StopFailurePreservesSessionForRetry"
+    Log "  TestStart_StopFailurePreservesSessionForRetry: PASS"
+} catch {
+    Log "  FAIL: $($_.Exception.Message)"
+    $exitCode = 6
+}
 Pop-Location
-if ($LASTEXITCODE -eq 0) { Log "  go test: OK" }
-else {
-    Log "  go test: FAIL"
-    $goOut | ForEach-Object { Log "    $_" }
+
+# ---------- Scenario 4: binding-level archive-before-process test ----------
+Log ""
+Log "Scenario 4: binding-level archive-before-process test"
+Push-Location (Join-Path $RepoRoot "config-tool")
+try {
+    Invoke-NamedGoTest -Package "./internal/bindings/..." -TestName "TestLifecycle_ShutdownOrderArchiveBeforeProcessKill"
+    Log "  TestLifecycle_ShutdownOrderArchiveBeforeProcessKill: PASS"
+} catch {
+    Log "  FAIL: $($_.Exception.Message)"
     $exitCode = 7
 }
+Pop-Location
 
 Pop-Location
 if ($exitCode -eq 0) {
@@ -174,6 +202,19 @@ if ($exitCode -eq 0) {
     Log ""
     Log "FAILED with exit $exitCode"
 }
+
+Log ""
+Log "covered:"
+Log "- standalone Python external termination closes port"
+Log "- standalone Python crash closes port"
+Log "- named Go recovery-state tests executed and passed"
+Log "- named Go archive-before-process test executed and passed"
+Log ""
+Log "not covered:"
+Log "- real OS kill timeout followed by retry"
+Log "- Wails application shutdown with an unkillable child"
+Log "- end-to-end UI Stop retry"
+
 Set-Content -Path $summaryFile -Value ($summary -join "`n") -Encoding UTF8
 Write-Host "wrote $summaryFile"
 exit $exitCode
