@@ -673,7 +673,9 @@ func TestStart_ArchiveFailedRollsBack(t *testing.T) {
 	}
 }
 
-// 阶段 C3：报警规则为空时是合法 no-op，不应报错。
+// 阶段 C3 收口：报警规则为空时是合法 no-op，不应报错。
+// 必须用 StartProject（带 project）才能真正走报警推送分支；StartSingleYAML
+// 走单 YAML 路径不会触发任何 alarm push，验证无效。
 func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
 	tmp := t.TempDir()
 	storeRoot := filepath.Join(tmp, "store")
@@ -682,6 +684,29 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
 	}
 	storage := realtime.NewProjectStorage(storeRoot)
 	manager := realtime.NewManager(storage, &localFakeCompiler{})
+
+	ctx := context.Background()
+	if _, err := manager.CreateProject(ctx, "noalarms"); err != nil {
+		t.Fatal(err)
+	}
+	projects, _ := manager.ListProjects(ctx)
+	pid := projects[0].ID
+	yamlPath := filepath.Join(tmp, "src.yaml")
+	os.WriteFile(yamlPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
+	view, err := manager.AddSource(ctx, pid, yamlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcID := view.Project.Sources[0].ID
+	srcAbs := storage.SourceAbsPath(pid, srcID)
+	if err := os.WriteFile(srcAbs, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 关键：项目没有 alarm rules
+	rules, _ := manager.ListAlarmRules(ctx, pid)
+	if len(rules) != 0 {
+		t.Fatalf("本测试要求项目无 alarm rules，实际 %d", len(rules))
+	}
 
 	system := NewSystemBinding()
 	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
@@ -696,6 +721,7 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
 		return true, "noalarms", nil
 	})
 
+	// mock 服务器：/api/alarms/config 绝不能被调用
 	alarmMux := http.NewServeMux()
 	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("no rule 时不应推送 /api/alarms/config")
@@ -707,30 +733,39 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
 	apiPort := 0
 	fmt.Sscanf(ports, "%d", &apiPort)
 
-	cfg := filepath.Join(tmp, "test.yaml")
-	os.WriteFile(cfg, []byte("test: true"), 0o644)
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
 	defer system.Cleanup()
 
-	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+	if _, err := binding.StartProject(pid, realtime.RealtimeStartOptions{
 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "noalarms",
 	}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// 阶段 C4：Stop 顺序——归档停止必须在 system.Stop 之前。
-func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
+// 阶段 C4 收口：Stop 顺序 + 鉴权 + 顺序观察。
+// 必须验证：
+//   - archive 启用时 /api/archive/stop 被调用
+//   - 请求携带 Bearer token
+//   - 顺序：archive-stop 在 system-stop 之前
+func TestStart_StopCallsArchiveStopWithBearerBeforeSystem(t *testing.T) {
 	var order []string
 	var orderMu sync.Mutex
+	var seenAuth atomic.Value
 	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
 	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
 		orderMu.Lock()
 		order = append(order, "archive-stop")
 		orderMu.Unlock()
+		seenAuth.Store(r.Header.Get("Authorization"))
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	archiveSrv := httptest.NewServer(archiveMux)
 	defer archiveSrv.Close()
@@ -740,15 +775,25 @@ func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
 
 	rig := newRealtimeTestRig(t)
 	defer rig.cleanup()
+	// 在 system 里注册一个进程退出监听器，模拟 system.Stop 的副作用顺序。
+	rig.system.AddExitListener(func(exitCode int, normalStop bool) {
+		if normalStop {
+			orderMu.Lock()
+			order = append(order, "system-stop")
+			orderMu.Unlock()
+		}
+	})
 	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
 		if token == "" {
 			return false, "", nil
 		}
-		return true, "stop-order", nil
+		return true, "stop-order-auth", nil
 	})
 
 	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
-		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-order",
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-order-auth",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -756,15 +801,27 @@ func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
 		t.Fatal(err)
 	}
 	orderMu.Lock()
-	defer orderMu.Unlock()
-	if len(order) == 0 {
-		t.Error("Stop 应调用 /api/archive/stop")
+	gotOrder := append([]string(nil), order...)
+	orderMu.Unlock()
+	if len(gotOrder) < 2 {
+		t.Fatalf("应至少看到 archive-stop + system-stop 两次，实际 %v", gotOrder)
+	}
+	if gotOrder[0] != "archive-stop" {
+		t.Errorf("archive-stop 必须在 system-stop 之前，实际顺序 %v", gotOrder)
+	}
+	auth, _ := seenAuth.Load().(string)
+	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
+		t.Errorf("archive stop 必须携带 Bearer 头，实际 %q", auth)
 	}
 }
 
 // 阶段 C4：Stop 期间归档停止失败不应阻止 system.Stop。
 func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
 	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
 	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("close failed"))
@@ -786,14 +843,177 @@ func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
 
 	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-archive-fail",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 归档停止错误应在 Stop 错误中合并报告，但 system 必须被 stop。
+	stopErr := rig.binding.Stop()
+	if stopErr == nil {
+		t.Error("归档停止失败应被报告")
+	} else if !strings.Contains(stopErr.Error(), "归档停止失败") {
+		t.Errorf("Stop 错误必须包含 '归档停止失败'，实际: %v", stopErr)
+	}
+	if rig.system.Status().Running {
+		t.Errorf("Stop 后系统仍 Running")
+	}
+}
+
+// 阶段 C4 收口：关键回滚路径 —— archive 启动 200 后，session.json 写入失败。
+// 必须：调用带 Bearer 的 /api/archive/stop，再 system.Stop，删除 session 目录。
+// 旧实现：stopArchiveOnShutdown 从 b.current 取 session，而 b.current 此刻为 nil，
+// 导致 archive stop 被跳过。
+func TestStart_ArchiveStartedThenSessionWriteFails_RollsBackWithAuth(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "rollback-archive", nil
+	})
+
+	// 关键 mock：/api/archive/start 200 OK；/api/archive/stop 验证 Bearer
+	var (
+		gotStart    atomic.Bool
+		gotStop     atomic.Bool
+		stopAuth    atomic.Value
+	)
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		gotStart.Store(true)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		gotStop.Store(true)
+		stopAuth.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+
+	// 注入写失败：使用自定义 SessionManager 包装，
+	// 让 WriteSessionJSON 在 archive 成功之后返回错误。
+	baseMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	failingMgr := &failingWriteSessionManager{SessionManager: baseMgr}
+	binding := NewRealtimeRuntimeBinding(manager, system, failingMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "rollback-archive",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	})
+	if err == nil {
+		t.Fatal("必须回滚失败")
+	}
+	if !strings.Contains(err.Error(), "session.json") {
+		t.Errorf("错误必须提到 session.json，实际: %v", err)
+	}
+	if !gotStart.Load() {
+		t.Error("archive start 必须被调用")
+	}
+	if !gotStop.Load() {
+		t.Fatal("archive stop 必须被回滚调用（archiveActive 在 launch 内 archive 成功后置 true）")
+	}
+	// 关键：必须带 Bearer 头
+	auth, _ := stopAuth.Load().(string)
+	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
+		t.Errorf("archive stop 必须携带 Bearer 头，实际 %q", auth)
+	}
+	// session 目录必须被清理
+	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
+	if len(entries) != 0 {
+		t.Errorf("session 目录必须清理，实际 %d", len(entries))
+	}
+	// system 必须停
+	if system.Status().Running {
+		t.Errorf("system 必须停")
+	}
+}
+
+// failingWriteSessionManager 包装 SessionManager，让 WriteSessionJSON 强制失败。
+// 用于测试 archive 已启动后回滚路径。
+type failingWriteSessionManager struct {
+	*realtime.SessionManager
+}
+
+func (f *failingWriteSessionManager) CreateSessionDir() (string, string, error) {
+	return f.SessionManager.CreateSessionDir()
+}
+
+func (f *failingWriteSessionManager) CompiledPath(dir string) string {
+	return f.SessionManager.CompiledPath(dir)
+}
+
+func (f *failingWriteSessionManager) WriteSessionJSON(_ string, _ realtime.SessionRecord) error {
+	return fmt.Errorf("injected session.json write failure")
+}
+
+func (f *failingWriteSessionManager) RemoveSessionDir(dir string) {
+	f.SessionManager.RemoveSessionDir(dir)
+}
+
+func (f *failingWriteSessionManager) ReadSessionRecord(dir string) (realtime.SessionRecord, bool) {
+	return f.SessionManager.ReadSessionRecord(dir)
+}
+
+func (f *failingWriteSessionManager) CleanupOrphans(activeDir string) {
+	f.SessionManager.CleanupOrphans(activeDir)
+}
+
+// 阶段 C 收口：archive 未启用时 Stop 不调用 archive/stop（避免无意义请求）。
+func TestStart_StopWithoutArchive_DoesNotCallArchiveStop(t *testing.T) {
+	// 启动监听：/api/archive/stop 一旦被调用就 fail
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("archive 未启用时不应调用 /api/archive/stop")
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	rig := newRealtimeTestRig(t)
+	defer rig.cleanup()
+	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "no-archive", nil
+	})
+
+	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "no-archive",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := rig.binding.Stop(); err != nil {
-		t.Errorf("归档停止失败不应使 Stop 失败: %v", err)
-	}
-	if rig.system.Status().Running {
-		t.Errorf("Stop 后系统仍 Running")
+		t.Fatal(err)
 	}
 }
 

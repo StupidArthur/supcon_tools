@@ -13,18 +13,31 @@ import (
 	"config-tool/internal/realtime"
 )
 
+// SessionManagerCompat is the minimal SessionManager interface used by
+// RealtimeRuntimeBinding. It exists so tests can swap in a wrapper that
+// simulates write failures (e.g. session.json write fail after archive start).
+type SessionManagerCompat interface {
+	CreateSessionDir() (sessionID, dir string, err error)
+	CompiledPath(dir string) string
+	WriteSessionJSON(dir string, rec realtime.SessionRecord) error
+	RemoveSessionDir(dir string)
+	ReadSessionRecord(dir string) (realtime.SessionRecord, bool)
+	CleanupOrphans(activeDir string)
+}
+
 type RealtimeRuntimeBinding struct {
 	ctx            context.Context
 	manager        *realtime.Manager
 	system         *SystemBinding
-	sessionManager *realtime.SessionManager
+	sessionManager SessionManagerCompat
 
 	mu sync.Mutex
 	// current / curDir 描述当前活跃 session。异常退出 / 主动 Stop / 启动失败
 	// 都会把这两个清空，Session 状态由 monitorProcess 派发的 onSystemProcessExit
 	// 统一处理。
-	current *realtime.RealtimeRunSession
-	curDir  string
+	current       *realtime.RealtimeRunSession
+	curDir        string
+	archiveActive bool // 当前 session 是否已成功启动 /api/archive/start
 
 	// 阶段 B2 收口：exitListenerOnce 保证 SetContext 多次调用只注册一次监听器，
 	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
@@ -35,7 +48,7 @@ type RealtimeRuntimeBinding struct {
 func NewRealtimeRuntimeBinding(
 	manager *realtime.Manager,
 	system *SystemBinding,
-	sessionManager *realtime.SessionManager,
+	sessionManager SessionManagerCompat,
 ) *RealtimeRuntimeBinding {
 	return &RealtimeRuntimeBinding{
 		manager:        manager,
@@ -57,7 +70,8 @@ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
 
 // onSystemProcessExit 由 SystemBinding 在 monitorProcess 内同步调用。
 // 无论进程是否正常停止，都必须：
-//   - 清空 current / curDir
+//   - 尝试关闭归档（如已启用；进程正在退出，最佳努力）
+//   - 清空 current / curDir / archiveActive
 //   - 删除 session 临时目录
 //   - 保留 system.lastError 供前端 GetSession 读取
 //   - 幂等：多次调用安全
@@ -65,12 +79,18 @@ func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bo
 	b.mu.Lock()
 	s := b.current
 	dir := b.curDir
+	archiveActive := b.archiveActive
 	b.current = nil
 	b.curDir = ""
+	b.archiveActive = false
 	b.mu.Unlock()
 	if s != nil {
 		// 状态置为 exited / failed，由调用方按需读取
 		s.State = realtime.StateExited
+		// 进程已退出，archive stop 调用大概率失败；只在 archive 真的启用时尝试。
+		if archiveActive {
+			_ = b.stopArchiveOnShutdown(*s)
+		}
 	}
 	if dir != "" {
 		b.sessionManager.RemoveSessionDir(dir)
@@ -249,19 +269,6 @@ func (b *RealtimeRuntimeBinding) launch(
 		b.sessionManager.RemoveSessionDir(dir)
 		return realtime.RealtimeRunSession{}, err
 	}
-	// 启动成功以后的所有失败都必须自己回滚，因为 system 已 Running。
-	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
-		// 优先停归档（确保 SQLite / jsonl flush），再关 Engine。
-		_ = b.stopArchiveOnShutdown()
-		_ = b.system.Stop()
-		b.sessionManager.RemoveSessionDir(dir)
-		b.mu.Lock()
-		b.current = nil
-		b.curDir = ""
-		b.mu.Unlock()
-		return realtime.RealtimeRunSession{}, reason
-	}
-
 	st := b.system.Status()
 	session.ConfigHash = st.ConfigHash
 	session.StartedAt = st.StartedAt
@@ -272,11 +279,43 @@ func (b *RealtimeRuntimeBinding) launch(
 	rec := sessionRecordFor(session)
 	rec.ChildPid = childPID
 
+	// 阶段 C 收口：rollback 必须使用 local session + 局部 archiveActive，
+	// 不能依赖 b.current（仅在所有初始化成功后才会被赋值）。
+	archiveActive := false
+	alarmConfigured := false
+	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
+		// 优先级 1: 停归档（保证 SQLite / jsonl flush 与文件句柄关闭）。
+		if archiveActive {
+			// stopArchiveOnShutdown 不再依赖 b.current，传入局部 session。
+			if err := b.stopArchiveOnShutdown(session); err != nil {
+				reason = fmt.Errorf("%w; 归档停止失败: %v", reason, err)
+			}
+		}
+		// 优先级 2: 关闭 Python。
+		stopErr := b.system.Stop()
+		// 优先级 3: 写完 session.json 的目录可以删除；其它中间产物（编译产物等）
+		// 已经被 CreateSessionDir 创建的目录一并清理。
+		b.sessionManager.RemoveSessionDir(dir)
+		// 优先级 4: 清空 in-flight 状态。注意：b.current 此刻仍为 nil（未提交），
+		// 但 monitorProcess 后续会派发 exit listener 来收尾。
+		b.mu.Lock()
+		b.current = nil
+		b.curDir = ""
+		b.archiveActive = false
+		b.mu.Unlock()
+		if stopErr != nil {
+			return realtime.RealtimeRunSession{}, fmt.Errorf("%w; 进程停止失败: %v", reason, stopErr)
+		}
+		return realtime.RealtimeRunSession{}, reason
+	}
+	_ = alarmConfigured // 当前未用作条件分支，保留扩展点
+
 	// 报警配置推送（C3）：规则非空时推送失败必须使启动失败。
 	if session.SourceKind == realtime.RuntimeSourceProject {
 		if err := b.pushAlarmConfig(session); err != nil {
 			return rollback(fmt.Errorf("报警配置推送失败: %w", err))
 		}
+		alarmConfigured = true
 	}
 
 	// 归档启动（C4）：用户明确启用后失败必须使启动失败。
@@ -284,6 +323,7 @@ func (b *RealtimeRuntimeBinding) launch(
 		if err := b.startArchive(session, opts.ArchiveTags); err != nil {
 			return rollback(fmt.Errorf("运行归档启动失败: %w", err))
 		}
+		archiveActive = true
 	}
 
 	// 写 session.json：失败同样回滚。
@@ -294,6 +334,7 @@ func (b *RealtimeRuntimeBinding) launch(
 	b.mu.Lock()
 	b.current = &session
 	b.curDir = dir
+	b.archiveActive = archiveActive
 	b.mu.Unlock()
 
 	return session, nil
@@ -331,16 +372,16 @@ func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSessio
 }
 
 // stopArchiveOnShutdown 主动调用 /api/archive/stop，确保 SQLite commit / jsonl flush / 句柄关闭。
-// 错误仅记录，不影响关闭流程。
-func (b *RealtimeRuntimeBinding) stopArchiveOnShutdown() error {
-	b.mu.Lock()
-	s := b.current
-	b.mu.Unlock()
-	if s == nil {
+// 阶段 C 收口：
+//   - 接受 session 作为参数，不再依赖 b.current（rollback 时 b.current 尚未提交）
+//   - 通过 httpPostJSON 自动加 Bearer 鉴权头
+// 错误仅记录，不影响关闭流程（调用方自行决定是否合并到总体错误）。
+func (b *RealtimeRuntimeBinding) stopArchiveOnShutdown(session realtime.RealtimeRunSession) error {
+	if session.SessionID == "" {
 		return nil
 	}
-	url := fmt.Sprintf("http://%s:%d/api/archive/stop", s.APIHost, s.APIPort)
-	resp, err := forceHTTPClient.Post(url, "application/json", strings.NewReader("{}"))
+	url := fmt.Sprintf("http://%s:%d/api/archive/stop", session.APIHost, session.APIPort)
+	resp, err := httpPostJSON(forceHTTPClient, url, []byte("{}"))
 	if err != nil {
 		return fmt.Errorf("POST /api/archive/stop 网络错误: %w", err)
 	}
@@ -493,18 +534,30 @@ func (b *RealtimeRuntimeBinding) DeleteRunHistory(sessionID string) error {
 func (b *RealtimeRuntimeBinding) Stop() error {
 	b.mu.Lock()
 	dir := b.curDir
+	sess := b.current
+	archiveActive := b.archiveActive
+	b.archiveActive = false
 	b.mu.Unlock()
 
-	// 阶段 C4：归档必须在 Python 关闭前停止，确保 SQLite commit / jsonl flush / 句柄关闭。
-	// 错误仅记录，不影响事件循环与 system.Stop。
-	if err := b.stopArchiveOnShutdown(); err != nil {
-		// 归档停止失败不应阻止用户主动停止。
-		// (record into binding state for debugging if needed)
+	// 阶段 C4 收口：归档停止优先（保证 SQLite / jsonl flush / 句柄关闭），
+	// 仅在确实启用归档时调用。带 Bearer 鉴权。
+	var archiveErr error
+	if archiveActive && sess != nil {
+		archiveErr = b.stopArchiveOnShutdown(*sess)
 	}
 
 	if b.system.Status().Running {
-		if err := b.system.Stop(); err != nil {
-			return err
+		if stopErr := b.system.Stop(); stopErr != nil {
+			// 即使 Stop 失败也清掉状态（避免后续误以为还在运行）。
+			b.sessionManager.RemoveSessionDir(dir)
+			b.mu.Lock()
+			b.current = nil
+			b.curDir = ""
+			b.mu.Unlock()
+			if archiveErr != nil {
+				return fmt.Errorf("停止 DataFactory 失败: %v; 归档停止失败: %v", stopErr, archiveErr)
+			}
+			return stopErr
 		}
 	}
 
@@ -513,6 +566,11 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	b.current = nil
 	b.curDir = ""
 	b.mu.Unlock()
+	// 归档停止错误不影响 Stop 整体成功（用户主动停止语义），但应当作为信号返回，
+	// 由调用方决定是否向用户展示。
+	if archiveErr != nil {
+		return fmt.Errorf("归档停止失败: %v", archiveErr)
+	}
 	return nil
 }
 
