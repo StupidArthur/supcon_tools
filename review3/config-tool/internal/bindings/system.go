@@ -766,11 +766,16 @@ func (b *SystemBinding) Stop() error {
 	}
 	b.mu.Unlock()
 
-	if err := b.terminateProcess(proc, true); err != nil {
-		return err
+	stopErr := b.terminateProcess(proc, true)
+
+	// 阶段 5-3 收口：terminateProcess 失败但进程仍存活时，保留 b.proc。
+	// 不要清空，否则后续 monitorProcess / Status 会把进程"忘记"。
+	// 用户可重试 Stop，processAlive + 下次 terminate 仍能找到进程。
+	if stopErr != nil && b.processAliveForCleanup(proc) {
+		return stopErr
 	}
 
-	// 清理状态
+	// 进程已退出（或我们认为它死了）：清理状态。
 	b.mu.Lock()
 	if b.proc == proc {
 		b.proc = nil
@@ -785,7 +790,30 @@ func (b *SystemBinding) Stop() error {
 	if b.ctx != nil {
 		runtime.EventsEmit(b.ctx, "df:status", status)
 	}
-	return nil
+	return stopErr
+}
+
+// processAliveForCleanup 判定 proc 在当前 OS 上是否仍活动。
+// 用于 Stop 失败时决定是否清空 b.proc。
+//
+// 关键：不要用 proc.cmd.Process.Signal(0) — 在 Windows 上
+// os.Process.Signal 会直接调用 TerminateProcess（不可信）。
+// 这里用 done channel：monitorProcess 里的 Wait 退出后才会 close done。
+// override 不杀进程时 done 不会关闭，因此返回 true。
+func (b *SystemBinding) processAliveForCleanup(proc *managedProcess) bool {
+	if proc == nil || proc.cmd == nil || proc.cmd.Process == nil {
+		return false
+	}
+	select {
+	case <-proc.done:
+		// monitorProcess 已确认进程退出
+		return false
+	default:
+		// done 仍未关闭：进程可能仍活着
+		// 注意：仅依赖 done 不能区分"已 stop 成功但 Wait 还在跑"vs"override 后进程仍活"
+		// 但前一种情况 stopErr 是 nil 不会进入此函数；后一种 stopErr != nil 才会调用。
+		return true
+	}
 }
 
 // Status 获取系统状态
@@ -849,9 +877,18 @@ func (b *SystemBinding) Cleanup() {
 		return
 	}
 
+	// 阶段 5-3 收口：terminateProcess 失败但进程仍存活时，保留 b.proc。
+	// 否则进程成为"无人管理"状态：monitorProcess 派发 isCurrent=false，
+	// exit listener 跳过清理，session/token 残留但 Stop 永远不再找得到进程。
 	_ = b.terminateProcess(proc, true)
+	if b.processAliveForCleanup(proc) {
+		// 进程仍存活 — 不清 b.proc，保留给用户再次 Stop。
+		// 这里不抛错：Lifecycle 关闭本身不能返回 error。
+		// 错误已记录在 proc.stopErr。
+		return
+	}
 
-	// 清理状态
+	// 进程已退出：清理状态。
 	b.mu.Lock()
 	if b.proc == proc {
 		b.proc = nil

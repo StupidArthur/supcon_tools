@@ -98,17 +98,44 @@ func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bo
 }
 
 func (b *RealtimeRuntimeBinding) Cleanup() {
-	// 阶段 5-3：Cleanup 走和 Stop 一致的内部事务：
-	//   1) 停归档（带 Bearer 鉴权）
-	//   2) 关 Python
-	//   3) 删除 session 目录
-	//   4) 清状态、注销监听器
-	// 错误被合并：归档停止失败不阻塞 system.Stop。
-	_ = b.Stop()
-	// 注销监听器，避免 Wails 应用销毁时回调仍引用已释放的 binding。
-	if b.removeExitListener != nil {
-		b.removeExitListener()
-		b.removeExitListener = nil
+	// 阶段 5-3 收口：Cleanup 走和 Stop 一致的内部事务。
+	// 关键：若 system.Stop 失败且进程仍存活，必须保留 current / curDir / token
+	// 让用户可以再次 Stop 重试。此时**不注销** exit listener（继续等 monitor
+	// 检测进程真实退出后触发清理）。
+	stopErr := b.Stop()
+
+	// 检查进程是否仍存活；只有真正死了才注销 listener / 删 session 目录。
+	// 直接访问 system.proc（bindings 内部，无需 *ForTest 暴露）。
+	stillRunning := false
+	if stopErr != nil {
+		b.system.mu.Lock()
+		proc := b.system.proc
+		b.system.mu.Unlock()
+		if proc != nil {
+			stillRunning = b.system.processAliveForCleanup(proc)
+		}
+	}
+
+	if !stillRunning {
+		// 进程已停：注销 listener（避免 Wails 应用销毁后回调仍引用 binding）
+		if b.removeExitListener != nil {
+			b.removeExitListener()
+			b.removeExitListener = nil
+		}
+		// session dir 由 monitorProcess 派发的 onSystemProcessExit 删除。
+		// 但若 monitorProcess 已经先于此处 dispatch（生命周期极短竞态），
+		// session dir 可能已被删。安全幂等。
+	} else {
+		// 进程仍存活：保留状态让用户重试。
+		// 仅清理 on-disk session 目录（防止 leak），current / curDir / token
+		// 保留。listener 保留（继续等待 monitor 检测）。
+		b.mu.Lock()
+		dir := b.curDir
+		b.mu.Unlock()
+		if dir != "" {
+			b.sessionManager.RemoveSessionDir(dir)
+		}
+		_ = stopErr
 	}
 }
 
