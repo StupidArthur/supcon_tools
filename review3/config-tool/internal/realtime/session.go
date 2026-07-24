@@ -24,12 +24,14 @@ const (
 )
 
 const (
-	StatePreparing = "preparing"
-	StateStarting  = "starting"
-	StateRunning   = "running"
-	StateStopping  = "stopping"
-	StateFailed    = "failed"
-	StateExited    = "exited"
+	StatePreparing        = "preparing"
+	StateStarting         = "starting"
+	StateRunning          = "running"
+	StateStopping         = "stopping"
+	StateFailed           = "failed"
+	StateExited           = "exited"
+	StateStopFailed       = "stop-failed"        // Stop 失败但进程仍在，需要重试
+	StateRecoveryRequired = "recovery-required" // 异常状态，需要用户主动清理
 )
 
 type RealtimeRunSession struct {

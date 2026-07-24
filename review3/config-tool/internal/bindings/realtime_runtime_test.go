@@ -984,6 +984,117 @@ func (f *failingWriteSessionManager) CleanupOrphans(activeDir string) {
 	f.SessionManager.CleanupOrphans(activeDir)
 }
 
+// stubSystemAdapter 允许测试中替换 systemBinding 的部分方法。
+// 简化方案：直接在测试用例中用新 SystemBinding + 自定义 stop 失败逻辑。
+
+// 阶段 5-2 收口：Stop 失败但进程仍在 → 保留 session 状态供重试。
+// 关键验证：
+//   - Stop 返回 error
+//   - GetSession 仍非空
+//   - session 目录仍存在
+//   - CurrentAPIToken 仍非空
+//   - 可以再次调用 Stop（即使会再次失败）
+// 阶段 5-2 收口：Stop 失败但进程仍在 → 保留 session 状态供重试。
+// 通过 system.terminateErrorOverride 测试 hook 强制 Stop 返回错误，
+// 但 b.proc 不变，Status().Running 仍 true。
+func TestStart_StopFailurePreservesSessionForRetry(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "stop-fail-rec", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "stop-fail-rec",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	firstToken := CurrentAPIToken()
+	if firstToken == "" {
+		t.Fatal("启动后 token 必须非空")
+	}
+	dir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(dir)
+	if len(entries) == 0 {
+		t.Fatal("session dir 必须存在")
+	}
+	sessionDir := filepath.Join(dir, entries[0].Name())
+
+	// 注入 Stop 失败：override 让 terminateProcess 立即返回错误，
+	// 但 b.proc 不被清空（保留 running 状态）。
+	system.terminateErrorOverride = fmt.Errorf("simulated stop failure")
+
+	stopErr := binding.Stop()
+	if stopErr == nil {
+		t.Fatal("预期 Stop 返回错误")
+	}
+	if !strings.Contains(stopErr.Error(), "simulated stop failure") {
+		t.Errorf("Stop 错误必须包含 simulated stop failure，实际: %v", stopErr)
+	}
+
+	// 关键断言：Stop 失败时 session 状态必须全部保留。
+	if got := CurrentAPIToken(); got != firstToken {
+		t.Errorf("Stop 失败时 token 必须保留，期望 %q 实际 %q", firstToken, got)
+	}
+	if !system.Status().Running {
+		t.Error("Stop 失败时 Status().Running 必须仍为 true")
+	}
+	s, err := binding.GetSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s == nil {
+		t.Fatal("Stop 失败时 GetSession 必须返回非空 session")
+	}
+	if s.State != realtime.StateStopFailed {
+		t.Errorf("Stop 失败时 session.State 必须为 stop-failed，实际 %s", s.State)
+	}
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Errorf("Stop 失败时 session dir 必须保留: %v", err)
+	}
+
+	// 关键：可以再次调用 Stop（即使同样失败，状态继续保留）。
+	stopErr2 := binding.Stop()
+	if stopErr2 == nil {
+		t.Error("第二次 Stop 也应返回错误（override 仍生效）")
+	}
+	if s2, _ := binding.GetSession(); s2 == nil {
+		t.Error("第二次 Stop 失败后 GetSession 仍应非空")
+	}
+
+	// 清理：清除 override，让 Stop 真的成功收尾。
+	system.terminateErrorOverride = nil
+	if err := binding.Stop(); err != nil {
+		t.Logf("clean Stop error (after override cleared): %v", err)
+	}
+	// 现在 process 真的死了，Stop 应该清空 state
+	if s3, _ := binding.GetSession(); s3 != nil {
+		t.Errorf("clean Stop 后 GetSession 必须为 nil，实际: %+v", s3)
+	}
+}
+
 // 阶段 C 收口：archive 未启用时 Stop 不调用 archive/stop（避免无意义请求）。
 func TestStart_StopWithoutArchive_DoesNotCallArchiveStop(t *testing.T) {
 	// 启动监听：/api/archive/stop 一旦被调用就 fail

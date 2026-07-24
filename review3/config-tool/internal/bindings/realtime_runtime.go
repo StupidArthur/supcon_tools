@@ -130,6 +130,14 @@ func (b *RealtimeRuntimeBinding) GetSession() (*realtime.RealtimeRunSession, err
 	return &cp, nil
 }
 
+// recAsSession 把 session + rec 合并成 RealtimeRunSession（用于 rollback 写 stop-failed
+// 状态时复用 launch 阶段的局部 session）。
+func recAsSession(s *realtime.RealtimeRunSession, r realtime.SessionRecord) *realtime.RealtimeRunSession {
+	cp := *s
+	cp.State = r.State
+	return &cp
+}
+
 // RealtimeConnectionInfo 暴露给前端的当前运行期连接信息。
 // 关键约束：
 //   - APIToken 仅在内存中，不进入任何持久化记录（session.json / metadata.json / 日志）。
@@ -279,20 +287,43 @@ func (b *RealtimeRuntimeBinding) launch(
 	rec := sessionRecordFor(session)
 	rec.ChildPid = childPID
 
-	// 阶段 C 收口：rollback 必须使用 local session + 局部 archiveActive，
+	// 阶段 C 收口 + 阶段 5-2：rollback 必须使用 local session + 局部 archiveActive，
 	// 不能依赖 b.current（仅在所有初始化成功后才会被赋值）。
+	// 关键：system.Stop() 失败时**不能**清空 session / curDir / token；
+	// 必须保留状态供用户重试，否则会留下"系统仍 Running 但 realtime 已失管"的孤儿进程。
 	archiveActive := false
 	alarmConfigured := false
 	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
 		// 优先级 1: 停归档（保证 SQLite / jsonl flush 与文件句柄关闭）。
 		if archiveActive {
-			// stopArchiveOnShutdown 不再依赖 b.current，传入局部 session。
 			if err := b.stopArchiveOnShutdown(session); err != nil {
 				reason = fmt.Errorf("%w; 归档停止失败: %v", reason, err)
 			}
 		}
 		// 优先级 2: 关闭 Python。
 		stopErr := b.system.Stop()
+		// 阶段 5-2：Stop 失败且进程仍 Running → 保留 session 状态。
+		if stopErr != nil {
+			// 进程仍可能存在（Stop 已发信号但子进程未退出）
+			stillRunning := b.system.Status().Running
+			if stillRunning {
+				combined := fmt.Errorf("%w; 进程停止失败: %v（进程仍在，保留会话供重试）", reason, stopErr)
+				// 把 session 写入绑定状态，让前端能看到"stop-failed"，可重试 Stop。
+				rec.State = realtime.StateStopFailed
+				_ = b.sessionManager.WriteSessionJSON(dir, rec)
+				b.mu.Lock()
+				// 关键：保留 current / curDir / archiveActive，不要清 token。
+				// monitorProcess 后续若检测到进程真的退出，会派发 exit listener 收尾。
+				preserved := recAsSession(&session, rec)
+				b.current = preserved
+				b.curDir = dir
+				b.archiveActive = archiveActive
+				b.mu.Unlock()
+				return realtime.RealtimeRunSession{}, combined
+			}
+			// 进程已退出（Stop 返回错误但系统记录 Running=false）→ 走正常清理。
+			reason = fmt.Errorf("%w; 进程停止失败（已退出）: %v", reason, stopErr)
+		}
 		// 优先级 3: 写完 session.json 的目录可以删除；其它中间产物（编译产物等）
 		// 已经被 CreateSessionDir 创建的目录一并清理。
 		b.sessionManager.RemoveSessionDir(dir)
@@ -303,9 +334,6 @@ func (b *RealtimeRuntimeBinding) launch(
 		b.curDir = ""
 		b.archiveActive = false
 		b.mu.Unlock()
-		if stopErr != nil {
-			return realtime.RealtimeRunSession{}, fmt.Errorf("%w; 进程停止失败: %v", reason, stopErr)
-		}
 		return realtime.RealtimeRunSession{}, reason
 	}
 	_ = alarmConfigured // 当前未用作条件分支，保留扩展点
@@ -548,7 +576,29 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 
 	if b.system.Status().Running {
 		if stopErr := b.system.Stop(); stopErr != nil {
-			// 即使 Stop 失败也清掉状态（避免后续误以为还在运行）。
+			// 阶段 5-2：Stop 失败但进程仍在 → 保留会话供重试。
+			if b.system.Status().Running {
+				combined := stopErr
+				if archiveErr != nil {
+					combined = fmt.Errorf("%w; 归档停止失败: %v", stopErr, archiveErr)
+				}
+				if sess != nil {
+					// 写 stop-failed 状态
+					rec, _ := b.sessionManager.ReadSessionRecord(dir)
+					rec.State = realtime.StateStopFailed
+					_ = b.sessionManager.WriteSessionJSON(dir, rec)
+					// 保留 current / curDir，标记 session.state 可见
+					stamped := *sess
+					stamped.State = realtime.StateStopFailed
+					b.mu.Lock()
+					b.current = &stamped
+					b.curDir = dir
+					b.archiveActive = archiveActive
+					b.mu.Unlock()
+				}
+				return fmt.Errorf("停止 DataFactory 失败: %v", combined)
+			}
+			// 进程已退出但 Stop 仍报错：清理
 			b.sessionManager.RemoveSessionDir(dir)
 			b.mu.Lock()
 			b.current = nil

@@ -134,6 +134,10 @@ type SystemBinding struct {
 	readyPollInterval time.Duration
 	readyTimeout      time.Duration
 	stopTimeout       time.Duration
+	// terminateErrorOverride 仅用于测试：强制 Stop() 返回指定 error，
+	// 同时保持 Status().Running=true（不修改 b.proc 状态）。
+	// 生产代码不要设置此字段。
+	terminateErrorOverride error
 }
 
 // NewSystemBinding 创建系统绑定
@@ -597,7 +601,15 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 		proc.stopRequested = true
 	}
 	stopTimeout := b.stopTimeout
+	override := b.terminateErrorOverride
 	b.mu.Unlock()
+
+	if override != nil {
+		// 测试 hook：直接返回 override，进程仍 Running。
+		proc.stopErr = override
+		proc.cancelReady()
+		return override
+	}
 
 	proc.cancelReady()
 	proc.stopOnce.Do(func() {
