@@ -310,7 +310,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
 
     // 阶段 D3：注册/更新一个组件的订阅 tag 集合。多次注册同一 source 会覆盖。
     // union 一旦变化，ws 立即收到新的 setSubscription。
-    // 超过 MAX 抛 SubscriptionOverflowError，pendingSubscription 保留。
+    // 关键：先 dry-run 校验 union，超过 MAX 时抛错；只有校验通过才写 state。
+    // 这样可以保证 subscriptionSources 始终保持有效（不会留下"超限"的 source）。
     registerSubscription: (source, tags) => {
       let union: string[] | null
       try {
@@ -528,6 +529,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       set({
         apiHost: DEFAULT_API_HOST,
         apiPort: DEFAULT_API_PORT,
+        apiToken: '',
         runtimeName: null,
         connectionState: 'idle',
         apiReady: false,
@@ -551,6 +553,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
           'pid2.MV': true,
           'valve_1.current_opening': true,
         },
+        subscriptionSources: {},
+        lastAcknowledgedSubscription: undefined,
+        subscriptionError: null,
       })
       get().trendBuffer.clear()
       // generation 已归零，但同步保留 nextGen 让任何 in-flight connect 看到不一致

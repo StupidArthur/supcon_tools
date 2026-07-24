@@ -249,4 +249,31 @@ describe('useRuntimeStore', () => {
     const sources = useRuntimeStore.getState().subscriptionSources
     expect(sources.tagTable).toEqual(['pid2.SV', 'tank_2.level'])
   })
+
+  it('unregisterSubscription removes source from union', () => {
+    useRuntimeStore.getState().registerSubscription('tagTable', ['tank_2.level'])
+    useRuntimeStore.getState().registerSubscription('trend', ['pid2.SV'])
+    useRuntimeStore.getState().unregisterSubscription('tagTable')
+    const sources = useRuntimeStore.getState().subscriptionSources
+    expect(sources.tagTable).toBeUndefined()
+    expect(sources.trend).toEqual(['pid2.SV'])
+  })
+
+  it('registerSubscription with null stores explicit null in source map', () => {
+    useRuntimeStore.getState().registerSubscription('tagTable', null)
+    const sources = useRuntimeStore.getState().subscriptionSources
+    expect(sources.tagTable).toBeNull()
+  })
+
+  it('over MAX_SUBSCRIPTION_TAGS keeps prior sources and surfaces subscriptionError', () => {
+    useRuntimeStore.getState()._reset()
+    useRuntimeStore.getState().registerSubscription('trend', ['pid2.SV'])
+    const big = Array.from({ length: 6000 }, (_, i) => `tag${i}`)
+    useRuntimeStore.getState().registerSubscription('tagTable', big)
+    expect(useRuntimeStore.getState().subscriptionError).toMatch(/订阅超过/)
+    // trend 仍在
+    expect(useRuntimeStore.getState().subscriptionSources.trend).toEqual(['pid2.SV'])
+    // tagTable 不应被更新（因超过上限抛错）
+    expect(useRuntimeStore.getState().subscriptionSources.tagTable).toBeUndefined()
+  })
 })

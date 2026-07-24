@@ -7,6 +7,9 @@ interface ForceEntry {
   value?: number
 }
 
+// 阶段 D4：可见区域订阅 debounce。频繁滚动不应每次都发送 WS subscribe 消息。
+const SCROLL_SUBSCRIPTION_DEBOUNCE_MS = 100
+
 const ROW_HEIGHT = 28
 const VIEWPORT_HEIGHT = 384
 const OVERSCAN = 8
@@ -23,6 +26,11 @@ export function RuntimeTagTable() {
   const [forceError, setForceError] = useState<string | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 阶段 D4：useRef 取得稳定的 registerSubscription / unregisterSubscription 引用，
+  // 避免 useEffect 每次都重新订阅。
+  const registerSubscription = useRuntimeStore((s) => s.registerSubscription)
+  const unregisterSubscription = useRuntimeStore((s) => s.unregisterSubscription)
 
   const refreshForces = useCallback(async () => {
     try {
@@ -64,6 +72,31 @@ export function RuntimeTagTable() {
     }
     return out
   }, [tags, scrollTop])
+
+  // 阶段 D4：滚动 / 过滤变化 → 防抖注册 tag-table 订阅。
+  // 关键约束：
+  //   - 卸载 / activeDir 切换时必须 unregisterSubscription，避免遗留 source。
+  //   - filter 为空 + 无可见 tag 时，传 null（"全量"），让其它 source（趋势 / dashboard）继续生效。
+  //   - 防抖：连续滚动只在静止 100ms 后才发一次 registerSubscription 调用。
+  useEffect(() => {
+    const debounceId = setTimeout(() => {
+      const visibleNames = visibleTags.map((v) => v.tag.name).filter((n) => typeof n === 'string')
+      // 如果表是空的（无 rawSnapshot / 无 filter match）则传 null（"我不要任何 tag"）
+      // 让 computeSubscriptionUnion 在 store 内合并时不会因 tag-table 占一个空数组
+      // 而错把 union 锁到 []。
+      const payload: string[] | null = visibleNames.length === 0 ? null : visibleNames
+      try {
+        registerSubscription('tagTable', payload)
+      } catch (e) {
+        setForceError(String(e))
+      }
+    }, SCROLL_SUBSCRIPTION_DEBOUNCE_MS)
+    return () => {
+      clearTimeout(debounceId)
+      // 卸载 / deps 变化时主动注销，确保离开该页面后 union 不再包含本 source。
+      unregisterSubscription('tagTable')
+    }
+  }, [visibleTags, registerSubscription, unregisterSubscription])
 
   const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {
     setForceError(null)
