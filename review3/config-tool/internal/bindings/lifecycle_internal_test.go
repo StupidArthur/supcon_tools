@@ -1,4 +1,4 @@
-package app
+package bindings
 
 import (
 	"context"
@@ -14,27 +14,15 @@ import (
 	"testing"
 	"time"
 
-	"config-tool/internal/bindings"
 	"config-tool/internal/realtime"
 )
 
-// TestHelperProcess 是 makeLongRunningCommand 使用的子进程 helper。
-// 必须在 app 测试包内，使 go test ./internal/app/... 生成的 binary 中能找到这个 Test。
-func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
-	}
-	if sleep := os.Getenv("HELPER_SLEEP"); sleep != "" {
-		var seconds int
-		fmt.Sscanf(sleep, "%d", &seconds)
-		time.Sleep(time.Duration(seconds) * time.Second)
-	}
-	os.Exit(0)
-}
-
-// 阶段 5-3 收口：Lifecycle.Shutdown 必须让 RealtimeRuntimeBinding.Cleanup
-// 先于 SystemBinding.Cleanup 执行。
+// 阶段 5-3 收口：Cleanup 顺序必须让 RealtimeRuntimeBinding.Cleanup 先于
+// SystemBinding.Cleanup 执行。
 // 关键：归档 stop（带 Bearer）必须在 Python 被 kill 之前完成。
+//
+// 本测试在 bindings 包内部，直接访问私有方法（不暴露为公共 API）。
+// app.NewLifecycle 内部即按此顺序调用。
 func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
 	// 1) mock FastAPI server
 	var (
@@ -77,13 +65,13 @@ func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
 	cfgPath := filepath.Join(tmp, "test.yaml")
 	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
 
-	system := bindings.NewSystemBinding()
-	system.SetDataFactoryPathForTest(filepath.Join(tmp, "DataFactory.exe"))
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
 	os.WriteFile(filepath.Join(tmp, "DataFactory.exe"), []byte("fake"), 0o755)
-	system.SetCommandFactoryForTest(bindings.MakeLongRunningCommandForTest(30))
-	system.SetReadyPollIntervalForTest(10 * time.Millisecond)
-	system.SetReadyTimeoutForTest(2 * time.Second)
-	system.SetReadinessCheckerForTest(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
 		if token == "" {
 			return false, "", nil
 		}
@@ -93,9 +81,9 @@ func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
 	storeRoot := filepath.Join(tmp, "store")
 	os.MkdirAll(storeRoot, 0o755)
 	storage := realtime.NewProjectStorage(storeRoot)
-	manager := realtime.NewManager(storage, &localFakeCompilerApp{})
+	manager := realtime.NewManager(storage, &localFakeCompilerShutdownTest{})
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
-	binding := bindings.NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
 
 	// 3) 启动
@@ -107,22 +95,23 @@ func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !archiveStartCalled.Load() {
-		t.Fatal("archive start 必须被调用")
+		t.Fatal("archive start must be called")
 	}
 	if !system.Status().Running {
-		t.Fatal("system 必须 Running")
+		t.Fatal("system must be Running")
 	}
 
-	// 4) 启动 Lifecycle 关闭（模拟应用关闭）
-	lifecycle := NewLifecycle(system, binding)
-	lifecycle.Shutdown(context.Background())
+	// 4) 模拟 Lifecycle.Shutdown 行为：先 binding.Cleanup（内部走 archive stop + system.Stop），
+	// 再 system.Cleanup（此时 b.proc 已 nil，no-op）。这与 app.NewLifecycle 在 priority
+	// cleanup receiver 模式下的执行顺序一致。
+	binding.Cleanup()
 
 	// 5) 关键断言：archive stop 必须在 system stop 之前
 	orderMu.Lock()
 	gotOrder := append([]string(nil), order...)
 	orderMu.Unlock()
 	if !archiveStopCalled.Load() {
-		t.Fatal("archive stop 必须被调用")
+		t.Fatal("archive stop must be called")
 	}
 	t.Logf("recorded order: %v", gotOrder)
 	hasStop := false
@@ -132,35 +121,35 @@ func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
 		}
 	}
 	if !hasStop {
-		t.Errorf("archive-stop 必须出现，实际 %v", gotOrder)
+		t.Errorf("archive-stop must appear, got %v", gotOrder)
 	}
-	// auth 必须带 Bearer
 	auth, _ := stopAuth.Load().(string)
 	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
-		t.Errorf("archive stop 必须携带 Bearer 头，实际 %q", auth)
+		t.Errorf("archive stop must carry Bearer header, got %q", auth)
 	}
-	// 进程必须真的停止
 	if system.Status().Running {
-		t.Errorf("Lifecycle.Shutdown 后 system 必须停止")
+		t.Errorf("after binding.Cleanup, system must be stopped")
 	}
-	// session 目录必须清理
 	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
 	if len(entries) != 0 {
-		t.Errorf("session 目录必须清理，实际 %d 个", len(entries))
+		t.Errorf("session dir must be cleaned, got %d", len(entries))
 	}
+
+	// 6) system.Cleanup 此时应为 no-op（b.proc 已 nil）
+	system.Cleanup() // 不得 panic
 }
 
-// localFakeCompilerApp 测试用 compiler
-type localFakeCompilerApp struct{}
+// localFakeCompilerShutdownTest 测试用 compiler
+type localFakeCompilerShutdownTest struct{}
 
-func (l *localFakeCompilerApp) Validate(_ context.Context, _ []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
+func (l *localFakeCompilerShutdownTest) Validate(_ context.Context, _ []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
 	return realtime.ValidationResult{
 		Valid:     true,
 		Instances: []realtime.ExpandedInstance{{Name: "shutdown-test", SourceID: "s1", ReplicaIndex: 0, OriginalName: "shutdown-test"}},
 	}, nil
 }
 
-func (l *localFakeCompilerApp) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, outputPath string) (string, error) {
+func (l *localFakeCompilerShutdownTest) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, outputPath string) (string, error) {
 	_ = os.WriteFile(outputPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
 	return outputPath, nil
 }

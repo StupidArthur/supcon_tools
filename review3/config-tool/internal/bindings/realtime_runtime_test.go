@@ -776,7 +776,7 @@ func TestStart_StopCallsArchiveStopWithBearerBeforeSystem(t *testing.T) {
 	rig := newRealtimeTestRig(t)
 	defer rig.cleanup()
 	// 在 system 里注册一个进程退出监听器，模拟 system.Stop 的副作用顺序。
-	rig.system.AddExitListener(func(exitCode int, normalStop bool) {
+	rig.system.addExitListener(func(exitCode int, normalStop bool) {
 		if normalStop {
 			orderMu.Lock()
 			order = append(order, "system-stop")

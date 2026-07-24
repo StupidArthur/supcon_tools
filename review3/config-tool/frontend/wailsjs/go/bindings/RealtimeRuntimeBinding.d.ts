@@ -22,11 +22,7 @@ export function GetProjectRevision(arg1:string):Promise<string>;
 
 export function GetSession():Promise<realtime.RealtimeRunSession>;
 
-export function IsPriorityCleanup():Promise<boolean>;
-
 export function ListRunHistory():Promise<Array<Record<string, any>>>;
-
-export function SetChildPid(arg1:string,arg2:number):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 

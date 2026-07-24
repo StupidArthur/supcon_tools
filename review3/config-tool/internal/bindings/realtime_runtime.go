@@ -63,7 +63,7 @@ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
 	// 都会被 monitorProcess 异步 dispatch 到这里；用于清理 realtime session 状态。
 	// sync.Once 防止 SetContext 重复注册（容器 / Lifecycle 可能多次调用）。
 	b.exitListenerOnce.Do(func() {
-		b.removeExitListener = b.system.AddExitListener(b.onSystemProcessExit)
+		b.removeExitListener = b.system.addExitListener(b.onSystemProcessExit)
 	})
 	b.sessionManager.CleanupOrphans("")
 }
@@ -111,11 +111,6 @@ func (b *RealtimeRuntimeBinding) Cleanup() {
 		b.removeExitListener = nil
 	}
 }
-
-// IsPriorityCleanup 标记为 priority cleanup。
-// Lifecycle 关闭时，priority cleanup（RealtimeRuntimeBinding）先于
-// SystemBinding 关闭，确保归档 stop 在 Python 被 kill 之前完成。
-func (b *RealtimeRuntimeBinding) IsPriorityCleanup() bool { return true }
 
 func (b *RealtimeRuntimeBinding) GetProjectRevision(projectID string) (string, error) {
 	return b.manager.RuntimeRevision(projectID)
@@ -636,21 +631,4 @@ func sessionRecordFor(s realtime.RealtimeRunSession) realtime.SessionRecord {
 		CreatedAt:          s.StartedAt,
 		State:              s.State,
 	}
-}
-
-// SetChildPid 写入真实子进程 PID（启动后由 launch 调用）。
-// 该函数保留可供外部测试 / 未来其他场景使用。
-func (b *RealtimeRuntimeBinding) SetChildPid(dir string, pid int) error {
-	if dir == "" {
-		return fmt.Errorf("session dir required")
-	}
-	if pid <= 0 {
-		return fmt.Errorf("invalid pid: %d", pid)
-	}
-	rec, ok := b.sessionManager.ReadSessionRecord(dir)
-	if !ok {
-		return fmt.Errorf("session.json missing: %s", dir)
-	}
-	rec.ChildPid = pid
-	return b.sessionManager.WriteSessionJSON(dir, rec)
 }

@@ -38,16 +38,8 @@ export function GetSession() {
   return window['go']['bindings']['RealtimeRuntimeBinding']['GetSession']();
 }
 
-export function IsPriorityCleanup() {
-  return window['go']['bindings']['RealtimeRuntimeBinding']['IsPriorityCleanup']();
-}
-
 export function ListRunHistory() {
   return window['go']['bindings']['RealtimeRuntimeBinding']['ListRunHistory']();
-}
-
-export function SetChildPid(arg1, arg2) {
-  return window['go']['bindings']['RealtimeRuntimeBinding']['SetChildPid'](arg1, arg2);
 }
 
 export function SetContext(arg1) {

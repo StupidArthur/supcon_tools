@@ -155,10 +155,13 @@ func NewSystemBinding() *SystemBinding {
 	}
 }
 
-// AddExitListener 注册进程退出回调。当前 process 退出时（任意原因）调用。
-// 回调在持有 monitorProcess 同一 goroutine 内调用；必须非阻塞。
-// 返回值：可用于 RemoveExitListener 的句柄。
-func (b *SystemBinding) AddExitListener(fn func(exitCode int, normalStop bool)) func() {
+// addExitListener 注册进程退出回调（私有 API，绑定包内部使用）。
+// 当前 process 退出时（任意原因）调用。回调在持有 monitorProcess 同一
+// goroutine 内调用；必须非阻塞。返回值：可用于注销的句柄。
+//
+// 不导出：避免 Wails 绑定把它暴露给前端；前端只能通过其它事件（df:exited
+// / df:status / GetConnectionInfo）观察退出。
+func (b *SystemBinding) addExitListener(fn func(exitCode int, normalStop bool)) func() {
 	b.exitMu.Lock()
 	defer b.exitMu.Unlock()
 	b.exitListeners = append(b.exitListeners, fn)
@@ -168,7 +171,6 @@ func (b *SystemBinding) AddExitListener(fn func(exitCode int, normalStop bool)) 
 		defer b.exitMu.Unlock()
 		if i < len(b.exitListeners) {
 			b.exitListeners[i] = func(exitCode int, normalStop bool) {}
-			// 不缩容，避免已触发回调的 index 失效
 		}
 	}
 }
@@ -224,36 +226,6 @@ func (b *SystemBinding) setStopTimeout(d time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.stopTimeout = d
-}
-
-// 下列方法为 app 包 lifecycle_test 提供的 exported 入口。
-// 仅测试用；生产代码请使用默认 NewSystemBinding 行为。
-
-// SetDataFactoryPathForTest 设置 DataFactory 可执行文件路径（测试用）。
-func (b *SystemBinding) SetDataFactoryPathForTest(path string) {
-	b.mu.Lock()
-	b.dataFactoryPath = path
-	b.mu.Unlock()
-}
-
-// SetCommandFactoryForTest 设置命令工厂（测试用）。
-func (b *SystemBinding) SetCommandFactoryForTest(f commandFactory) {
-	b.setCommandFactory(f)
-}
-
-// SetReadyPollIntervalForTest 设置 ready 轮询周期（测试用）。
-func (b *SystemBinding) SetReadyPollIntervalForTest(d time.Duration) {
-	b.setReadyPollInterval(d)
-}
-
-// SetReadyTimeoutForTest 设置 ready 超时（测试用）。
-func (b *SystemBinding) SetReadyTimeoutForTest(d time.Duration) {
-	b.setReadyTimeout(d)
-}
-
-// SetReadinessCheckerForTest 设置 readiness checker（测试用）。
-func (b *SystemBinding) SetReadinessCheckerForTest(c readinessChecker) {
-	b.setReadinessChecker(c)
 }
 
 func (b *SystemBinding) SetContext(ctx context.Context) {

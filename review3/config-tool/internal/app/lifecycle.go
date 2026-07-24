@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"log"
+
+	"config-tool/internal/bindings"
 )
 
 type ContextReceiver interface {
@@ -11,14 +13,6 @@ type ContextReceiver interface {
 
 type CleanupReceiver interface {
 	Cleanup()
-}
-
-// PriorityCleanupReceiver：标记一个 receiver 的 Cleanup 必须在普通 cleanup 之前
-// 运行。用于让 RealtimeRuntimeBinding 先于 SystemBinding 执行清理，
-// 保证归档停止（带 Bearer 鉴权）在 Python 进程被终止前完成。
-type PriorityCleanupReceiver interface {
-	CleanupReceiver
-	IsPriorityCleanup() bool
 }
 
 type Lifecycle struct {
@@ -36,7 +30,10 @@ func NewLifecycle(receivers ...ContextReceiver) *Lifecycle {
 		if !ok {
 			continue
 		}
-		if p, ok := r.(PriorityCleanupReceiver); ok && p.IsPriorityCleanup() {
+		// 不暴露 IsPriorityCleanup 作为公共方法（避免 Wails 绑定）。
+		// 改用 type assertion：RealtimeRuntimeBinding 的 Cleanup 必须先于
+		// SystemBinding 的 Cleanup（先停归档 → 再停 Python）。
+		if _, isRT := r.(*bindings.RealtimeRuntimeBinding); isRT {
 			l.priorityCleanups = append(l.priorityCleanups, c)
 		} else {
 			l.normalCleanups = append(l.normalCleanups, c)
