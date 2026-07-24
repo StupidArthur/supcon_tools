@@ -126,15 +126,9 @@ func (b *RealtimeRuntimeBinding) Cleanup() {
 		// 但若 monitorProcess 已经先于此处 dispatch（生命周期极短竞态），
 		// session dir 可能已被删。安全幂等。
 	} else {
-		// 进程仍存活：保留状态让用户重试。
-		// 仅清理 on-disk session 目录（防止 leak），current / curDir / token
-		// 保留。listener 保留（继续等待 monitor 检测）。
-		b.mu.Lock()
-		dir := b.curDir
-		b.mu.Unlock()
-		if dir != "" {
-			b.sessionManager.RemoveSessionDir(dir)
-		}
+		// 进程仍存活：保留 current / curDir / token / session dir 让用户重试。
+		// 不删除 session dir —— 下次 Stop 需要读取 session.json 写入 stop-failed 状态。
+		// listener 保留（继续等待 monitor 检测进程真实退出后触发清理）。
 		_ = stopErr
 	}
 }
