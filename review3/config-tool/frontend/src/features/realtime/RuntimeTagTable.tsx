@@ -75,13 +75,15 @@ export function RuntimeTagTable() {
     return numericNames.filter((n) => n.toLowerCase().includes(lower))
   }, [numericNames, filter])
 
-  const visibleNames = useMemo(() => {
+  const visibleRange = useMemo(() => {
     const total = filteredNames.length
     const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
     const visibleCount = Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN * 2
     const end = Math.min(total, start + visibleCount)
-    return filteredNames.slice(start, end)
+    return { start, end, names: filteredNames.slice(start, end) }
   }, [filteredNames, scrollTop])
+
+  const visibleNames = visibleRange.names
 
   // 阶段 D4 收口：拆成两个 effect。
   // 1) visibleNames 变化时：debounce 后只调用 registerSubscription。
@@ -153,19 +155,10 @@ export function RuntimeTagTable() {
     return n
   }
 
-  // 即便 rawSnapshot 还没有，tagCatalog 也可能已加载；位号表可以基于 catalog 显示。
-  // 完全没数据时仍然显示空状态。
-  if (tagCatalog.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground" data-testid="tag-table-empty">
-        未运行。启动实时工程后此处显示位号表。
-      </div>
-    )
-  }
-
-  // 阶段 5-4 收口：visibleRows 渲染阶段才读 frame 值；
+  // 阶段 5-4 + Task B：visibleRows 渲染阶段才读 frame 值；
   // 不参与订阅 effect deps。每帧 snapshot 不会触发本 useMemo 重算全集。
   // 只对 ~30 行读值，O(visible) 而非 O(catalog)。
+  // 使用绝对索引：visibleRange.start + localIndex。
   const visibleRows = useMemo(() => {
     const readValue = (name: string): unknown => {
       if (latestFrame && Object.prototype.hasOwnProperty.call(latestFrame.values, name)) {
@@ -176,8 +169,22 @@ export function RuntimeTagTable() {
       }
       return null
     }
-    return visibleNames.map((name, idx) => ({ name, value: readValue(name), index: idx }))
-  }, [visibleNames, latestFrame, rawSnapshot])
+    return visibleRange.names.map((name, localIndex) => ({
+      name,
+      value: readValue(name),
+      index: visibleRange.start + localIndex,
+    }))
+  }, [visibleRange, latestFrame, rawSnapshot])
+
+  // 即便 rawSnapshot 还没有，tagCatalog 也可能已加载；位号表可以基于 catalog 显示。
+  // 完全没数据时仍然显示空状态。
+  if (tagCatalog.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground" data-testid="tag-table-empty">
+        未运行。启动实时工程后此处显示位号表。
+      </div>
+    )
+  }
 
   const getUaValue = (name: string, runtimeValue: unknown): string => {
     const force = forces[name]
