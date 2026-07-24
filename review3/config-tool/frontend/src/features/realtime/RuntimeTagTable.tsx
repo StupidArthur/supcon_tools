@@ -97,7 +97,7 @@ export function RuntimeTagTable() {
   // 1) visibleTags 变化时：debounce 后只调用 registerSubscription。
   //    cleanup 仅取消 pending 计时器，不会触发 unregister，避免滚动时
   //    立刻发送一次"无 tagTable"的 subscribe 消息再重发。
-  // 2) 组件卸载时：unregisterSubscription 一次。
+  // 2) 仅组件卸载时：unregisterSubscription 一次。
   // 空可见集合显式注册 []（"我订阅空集，server 只回元数据"），不要用 null
   // 让聚合器误把 tagTable 视为"缺席"。
   useEffect(() => {
@@ -114,6 +114,27 @@ export function RuntimeTagTable() {
 
   useEffect(() => {
     return () => unregisterSubscription('tagTable')
+  }, [unregisterSubscription])
+
+  // 阶段 D5：force 订阅源。
+  // 用户已经设置了 force 的 tag 即使滚出可见区也必须持续订阅，
+  // 否则 force UI 显示的运行值会失联。force 集合变化时 debounce 注册。
+  const forceTags = useMemo(
+    () => Object.keys(forces).filter((k) => typeof k === 'string' && k.length > 0).sort(),
+    [forces],
+  )
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        registerSubscription('force', forceTags)
+      } catch (e) {
+        setForceError(String(e))
+      }
+    }, SCROLL_SUBSCRIPTION_DEBOUNCE_MS)
+    return () => clearTimeout(id)
+  }, [forceTags, registerSubscription])
+  useEffect(() => {
+    return () => unregisterSubscription('force')
   }, [unregisterSubscription])
 
   const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {

@@ -60,6 +60,35 @@ export function DashboardPage({ projectId }: Props) {
     [dashboard, activePageId],
   )
 
+  // 阶段 D5：dashboard 订阅源。当前 activePage 上所有 widget 的 tag 集合
+  // 都应当持续订阅，避免用户把 trend widget 滚出可见区或切换到其它 page
+  // 后无法恢复运行值。卸载 / 切 project 时注销。
+  const registerSubscription = useRuntimeStore((s) => s.registerSubscription)
+  const unregisterSubscription = useRuntimeStore((s) => s.unregisterSubscription)
+
+  const dashboardTags = useMemo(() => {
+    if (!activePage) return []
+    const set = new Set<string>()
+    for (const w of activePage.widgets) {
+      if (w.tag && typeof w.tag === 'string') set.add(w.tag)
+    }
+    return Array.from(set).sort()
+  }, [activePage])
+
+  useEffect(() => {
+    if (dashboardTags.length === 0) {
+      // 没有 dashboard tag → 显式 [] 表达"我订阅空集，server 只回元数据"
+      registerSubscription('dashboard', [])
+      return () => unregisterSubscription('dashboard')
+    }
+    try {
+      registerSubscription('dashboard', dashboardTags)
+    } catch (e) {
+      setError(String(e))
+    }
+    return () => unregisterSubscription('dashboard')
+  }, [dashboardTags, registerSubscription, unregisterSubscription])
+
   const updateWidget = (widgetId: string, patch: Partial<DashboardWidget>) => {
     setDashboard((prev) => ({
       ...prev,
