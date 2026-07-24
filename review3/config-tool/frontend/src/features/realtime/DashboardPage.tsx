@@ -75,19 +75,21 @@ export function DashboardPage({ projectId }: Props) {
     return Array.from(set).sort()
   }, [activePage])
 
-  // 阶段 5-7：项目身份校验。session 可能属于另一个项目，
-  // 此时 dashboard 的 tag 订阅来自当前项目，与 session 的 tag 不匹配。
-  const sessionProjectMismatch = !!session && !!session.projectId && session.projectId !== projectId
+  // 阶段 C5 + Task C：项目身份校验。使用正向匹配：
+  // dashboardMatchesSession = session 与当前 dashboard 属于同一 project。
+  // hasSessionMismatch = 有 session 但不匹配（包括 single-YAML 和其他 project）。
+  const dashboardMatchesSession =
+    session?.sourceKind === 'project' &&
+    session.projectId === projectId
+  const hasSessionMismatch = !!session && !dashboardMatchesSession
 
+  // 无 session / 单 YAML / 其他 project → 不注册 dashboard tags
   useEffect(() => {
-    // 阶段 5-7：session 与当前 dashboard 项目不匹配时，不注册订阅
-    // （tag 属于另一个项目，订阅无意义）
-    if (sessionProjectMismatch) {
+    if (!dashboardMatchesSession) {
       unregisterSubscription('dashboard')
       return () => unregisterSubscription('dashboard')
     }
     if (dashboardTags.length === 0) {
-      // 没有 dashboard tag → 显式 [] 表达"我订阅空集，server 只回元数据"
       registerSubscription('dashboard', [])
       return () => unregisterSubscription('dashboard')
     }
@@ -97,7 +99,7 @@ export function DashboardPage({ projectId }: Props) {
       setError(String(e))
     }
     return () => unregisterSubscription('dashboard')
-  }, [dashboardTags, registerSubscription, unregisterSubscription, sessionProjectMismatch])
+  }, [dashboardTags, registerSubscription, unregisterSubscription, dashboardMatchesSession])
 
   const updateWidget = (widgetId: string, patch: Partial<DashboardWidget>) => {
     setDashboard((prev) => ({
@@ -155,14 +157,16 @@ export function DashboardPage({ projectId }: Props) {
   }
 
   const selected = activePage?.widgets.find((w) => w.id === selectedWidget) || null
-  const canEdit = editMode && !sessionProjectMismatch
+  const canEdit = editMode && !hasSessionMismatch
 
   return (
     <div className="flex-1 overflow-y-auto bg-background p-6" data-testid="dashboard-page">
       <div className="mx-auto max-w-5xl space-y-3">
-        {sessionProjectMismatch ? (
+        {hasSessionMismatch ? (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-xs text-amber-700">
-            当前运行的会话属于项目 {session?.projectName || session?.projectId}，与画面所属项目不匹配。切换到该项目后可编辑画面。
+            {session?.sourceKind === 'single-yaml'
+              ? '当前运行的是单 YAML 会话，不能使用项目画面的实时订阅。'
+              : `当前运行的会话属于项目 ${session?.projectName || session?.projectId}，与画面所属项目不匹配。切换到该项目后可编辑画面。`}
           </div>
         ) : null}
 
@@ -172,9 +176,9 @@ export function DashboardPage({ projectId }: Props) {
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={() => { if (!sessionProjectMismatch) setEditMode((v) => !v) }}
-              disabled={sessionProjectMismatch}
-              className={`rounded border border-border px-2 py-1 text-xs ${sessionProjectMismatch ? 'cursor-not-allowed opacity-50' : 'hover:bg-secondary'}`}
+              onClick={() => { if (!hasSessionMismatch) setEditMode((v) => !v) }}
+              disabled={hasSessionMismatch}
+              className={`rounded border border-border px-2 py-1 text-xs ${hasSessionMismatch ? 'cursor-not-allowed opacity-50' : 'hover:bg-secondary'}`}
               data-testid="dashboard-edit-toggle"
             >
               {editMode ? '运行模式' : '编辑模式'}
