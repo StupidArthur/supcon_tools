@@ -19,9 +19,17 @@ type RealtimeRuntimeBinding struct {
 	system         *SystemBinding
 	sessionManager *realtime.SessionManager
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// current / curDir 描述当前活跃 session。异常退出 / 主动 Stop / 启动失败
+	// 都会把这两个清空，Session 状态由 monitorProcess 派发的 onSystemProcessExit
+	// 统一处理。
 	current *realtime.RealtimeRunSession
 	curDir  string
+
+	// 阶段 B2 收口：exitListenerOnce 保证 SetContext 多次调用只注册一次监听器，
+	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
+	exitListenerOnce sync.Once
+	removeExitListener func()
 }
 
 func NewRealtimeRuntimeBinding(
@@ -40,7 +48,10 @@ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
 	b.ctx = ctx
 	// 注册进程退出监听器：DataFactory 进程异常退出 / 主动 Stop / 启动期间退出
 	// 都会被 monitorProcess 异步 dispatch 到这里；用于清理 realtime session 状态。
-	b.system.AddExitListener(b.onSystemProcessExit)
+	// sync.Once 防止 SetContext 重复注册（容器 / Lifecycle 可能多次调用）。
+	b.exitListenerOnce.Do(func() {
+		b.removeExitListener = b.system.AddExitListener(b.onSystemProcessExit)
+	})
 	b.sessionManager.CleanupOrphans("")
 }
 
@@ -78,6 +89,11 @@ func (b *RealtimeRuntimeBinding) Cleanup() {
 	b.current = nil
 	b.curDir = ""
 	b.mu.Unlock()
+	// 注销监听器，避免 Wails 应用销毁时回调仍引用已释放的 binding。
+	if b.removeExitListener != nil {
+		b.removeExitListener()
+		b.removeExitListener = nil
+	}
 }
 
 func (b *RealtimeRuntimeBinding) GetProjectRevision(projectID string) (string, error) {

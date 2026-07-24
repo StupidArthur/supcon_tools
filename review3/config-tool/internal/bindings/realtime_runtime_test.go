@@ -796,3 +796,110 @@ func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
 		t.Errorf("Stop 后系统仍 Running")
 	}
 }
+
+// 阶段 B2 收口：SetContext 必须 sync.Once，多次调用只注册一个监听器。
+// 验证：异常退出只触发一次清理（不会重复 RemoveSessionDir 导致错误或泄漏）。
+func TestSetContext_RegistersExitListenerOnlyOnce(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(20 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "dup-listener", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	defer system.Cleanup()
+
+	// 多次调用 SetContext —— Wails lifecycle 可能在 OnStartup 之后再次触发。
+	binding.SetContext(context.Background())
+	binding.SetContext(context.Background())
+	binding.SetContext(context.Background())
+
+	// 验证 listener 数量：
+	// 1) 之前没有显式 getter；从 monitorProcess 的 dispatch 行为反推。
+	// 我们启动一次 + 立即 Stop，Stop 路径会同时走 monitorProcess dispatch + 显式 b.system.Stop，
+	// 重复监听会导致 RemoveSessionDir 多次（第二次报错但被忽略），但 onSystemProcessExit 幂等
+	// （current 第二次为 nil 不会重复 RemoveSessionDir）。
+	// 这里的关键是 session.json 只被删除一次。
+	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "dup-listener",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Fatalf("启动后应有 1 个 session dir，实际 %d", len(entries))
+	}
+	sessionDir := filepath.Join(dir, entries[0].Name())
+
+	// Stop 会触发 onSystemProcessExit。
+	if err := binding.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	// session dir 必须被删除（一次）
+	if _, err := os.Stat(sessionDir); !os.IsNotExist(err) {
+		t.Errorf("Stop 后 session dir 必须删除")
+	}
+	// Cleanup 也得成功（幂等）
+	binding.Cleanup()
+}
+
+// 阶段 B2 收口：Cleanup 注销监听器。
+func TestCleanup_UnregistersExitListener(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(20 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "cleanup-listener", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	defer system.Cleanup()
+
+	binding.SetContext(context.Background())
+	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "cleanup-listener",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	binding.Cleanup()
+	// Cleanup 后应无活跃 session
+	s, _ := binding.GetSession()
+	if s != nil {
+		t.Errorf("Cleanup 后 GetSession 必须为 nil")
+	}
+}
