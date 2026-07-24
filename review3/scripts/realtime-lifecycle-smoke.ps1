@@ -171,11 +171,23 @@ if (-not (Wait-Ready $token2 "lc-crash-2" $StartupTimeoutSec)) {
 # ---------- Scenario 3: binding-level stop failure/retry tests ----------
 Log ""
 Log "Scenario 3: binding-level stop failure and retry tests"
+$scenario3Results = @{}
 Push-Location (Join-Path $RepoRoot "config-tool")
 try {
     Invoke-NamedGoTest -Package "./internal/bindings/..." -TestName "TestStart_StopFailurePreservesSessionForRetry"
+    $scenario3Results["TestStart_StopFailurePreservesSessionForRetry"] = $true
     Log "  TestStart_StopFailurePreservesSessionForRetry: PASS"
 } catch {
+    $scenario3Results["TestStart_StopFailurePreservesSessionForRetry"] = $false
+    Log "  FAIL: $($_.Exception.Message)"
+    $exitCode = 6
+}
+try {
+    Invoke-NamedGoTest -Package "./internal/bindings/..." -TestName "TestTerminate_Retryable_RealKillAfterOverride"
+    $scenario3Results["TestTerminate_Retryable_RealKillAfterOverride"] = $true
+    Log "  TestTerminate_Retryable_RealKillAfterOverride: PASS"
+} catch {
+    $scenario3Results["TestTerminate_Retryable_RealKillAfterOverride"] = $false
     Log "  FAIL: $($_.Exception.Message)"
     $exitCode = 6
 }
@@ -184,11 +196,14 @@ Pop-Location
 # ---------- Scenario 4: binding-level archive-before-process test ----------
 Log ""
 Log "Scenario 4: binding-level archive-before-process test"
+$scenario4Results = @{}
 Push-Location (Join-Path $RepoRoot "config-tool")
 try {
     Invoke-NamedGoTest -Package "./internal/bindings/..." -TestName "TestLifecycle_ShutdownOrderArchiveBeforeProcessKill"
+    $scenario4Results["TestLifecycle_ShutdownOrderArchiveBeforeProcessKill"] = $true
     Log "  TestLifecycle_ShutdownOrderArchiveBeforeProcessKill: PASS"
 } catch {
+    $scenario4Results["TestLifecycle_ShutdownOrderArchiveBeforeProcessKill"] = $false
     Log "  FAIL: $($_.Exception.Message)"
     $exitCode = 7
 }
@@ -214,6 +229,16 @@ Log "not covered:"
 Log "- real OS kill timeout followed by retry"
 Log "- Wails application shutdown with an unkillable child"
 Log "- end-to-end UI Stop retry"
+Log ""
+Log "scenario results:"
+foreach ($k in $scenario3Results.Keys) {
+    $v = if ($scenario3Results[$k]) { "passed" } else { "failed" }
+    Log "- ${k}: ${v}"
+}
+foreach ($k in $scenario4Results.Keys) {
+    $v = if ($scenario4Results[$k]) { "passed" } else { "failed" }
+    Log "- ${k}: ${v}"
+}
 
 Set-Content -Path $summaryFile -Value ($summary -join "`n") -Encoding UTF8
 Write-Host "wrote $summaryFile"

@@ -1,13 +1,14 @@
 # realtime-gate.ps1
 # 统一质量门禁。任一步失败立即停止，返回非 0。
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
+[CmdletBinding()]
 param(
     [string]$Baseline = "8d8474545e2fa8bfa0d1a6e7c2a4b3c178159739",
     [switch]$SkipWailsBuild
 )
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..")
@@ -29,16 +30,16 @@ function Invoke-GateStep {
     )
 
     Write-Host ""
-    Write-Host "=== $Name ==="
+    Write-Host "=== ${Name} ==="
 
     try {
         & $Action
         if ($LASTEXITCODE -ne 0) {
-            throw "$Name failed with exit code $LASTEXITCODE"
+            throw "${Name} failed with exit code $LASTEXITCODE"
         }
-        Log "$Name: PASS"
+        Log "${Name}: PASS"
     } catch {
-        Log "$Name: FAIL - $($_.Exception.Message)"
+        Log "${Name}: FAIL - $($_.Exception.Message)"
         throw
     }
 }
@@ -90,15 +91,22 @@ try {
     }
 
     # Step 5: Frontend tests
-    $frontendTestOutput = ""
+    $script:frontendTestOutput = ""
     Invoke-GateStep "Step 5: Frontend tests" {
         Push-Location (Join-Path $RepoRoot "config-tool\frontend")
-        $frontendTestOutput = npm test -- --run 2>&1
+        $script:frontendTestOutput = npm test -- --run 2>&1
         Pop-Location
     }
-    $testMatch = [regex]::Match(($frontendTestOutput -join "`n"), "Tests\s+(\d+)\s+passed")
+    $ansiEsc = [char]27
+    [void]$ansiEsc.ToString()  # 显式 cast 触发类型推断（PowerShell 5.1 兼容性）
+    $ansiPattern = [string]::new([char[]]@($ansiEsc)) + '?\[[0-9;]*m'
+    $frontendTestText = [regex]::Replace(($script:frontendTestOutput -join "`n"), $ansiPattern, "")
+    $frontendTestText = [regex]::Replace($frontendTestText, '\[[0-9;]*m', "")
+    $testMatch = [regex]::Match($frontendTestText, "Tests\s+(\d+)\s+passed")
     if ($testMatch.Success) {
         Log "  frontend test count: $($testMatch.Groups[1].Value)"
+    } else {
+        throw "Could not confirm executed frontend test count (no 'Tests N passed' line in npm test output)"
     }
 
     # Step 6: TypeScript/Vite build
@@ -123,6 +131,20 @@ try {
             }
         }
         Log "  Python test files: $($realtimePythonTests -join ', ')"
+
+        # 先 --collect-only 确认测试数量，避免 pytest 静默零收集后仍退出 0
+        $collectOutput = python -m pytest @realtimePythonTests --collect-only -q 2>&1
+        $collectText = $collectOutput -join "`n"
+        $collectMatch = [regex]::Match($collectText, "(\d+)\s+tests\s+collected")
+        if (-not $collectMatch.Success) {
+            throw "Python pytest --collect-only did not report a test count. Output: $($collectText.Substring(0, [Math]::Min(500, $collectText.Length)))"
+        }
+        $collectedCount = [int]$collectMatch.Groups[1].Value
+        Log "  Python collected count: $collectedCount"
+        if ($collectedCount -le 35) {
+            throw "Realtime Python test count too small: $collectedCount (required > 35)"
+        }
+
         python -m pytest @realtimePythonTests -q 2>&1
     }
 

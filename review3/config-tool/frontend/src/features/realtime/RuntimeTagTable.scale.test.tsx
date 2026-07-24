@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
 import { RuntimeTagTable } from './RuntimeTagTable'
+import { SubscriptionOverflowError } from '../runtime/websocket'
 
 const ROW_HEIGHT = 28
 const VIEWPORT_HEIGHT = 384
@@ -145,5 +146,71 @@ describe('RuntimeTagTable 50k scale', () => {
 
     expect(unregistered).toContain('tagTable')
     expect(unregistered).toContain('force')
+  })
+
+  it('超过 MAX_SUBSCRIPTION_TAGS 时 registerSubscription 抛 SubscriptionOverflowError', () => {
+    // 阶段 D4 + 冻结清单：聚合订阅超过 5000 必须明确报错，
+    // 不得静默截断或发送部分订阅。
+    // store.registerSubscription 内部 catch 后写入 subscriptionError
+    // （避免破坏其它组件的现有订阅），但错误必须被记录，source 不得写入。
+    const overflowTags = Array.from({ length: 5001 }, (_, i) => `tag${i}`)
+    act(() => {
+      useRuntimeStore.getState().registerSubscription('scale-overflow', overflowTags)
+    })
+
+    // store 写入了明确的 overflow 错误信息
+    const err = useRuntimeStore.getState().subscriptionError
+    expect(err).not.toBeNull()
+    expect(err).toMatch(/5000|5001|上限|订阅/)
+
+    // store 不写入 source（保留其它 source 不受影响）
+    const sources = useRuntimeStore.getState().subscriptionSources
+    expect('scale-overflow' in sources).toBe(false)
+  })
+
+  it('50k catalog + 高频 snapshot 后 tagTable 行数仍 < 100', async () => {
+    const tagCatalog = Array.from({ length: TOTAL_TAGS }, (_, i) => ({
+      name: `tag${String(i).padStart(5, '0')}`,
+      dataType: 'number' as const,
+      writable: true,
+      forceable: false,
+      display: false,
+    }))
+
+    act(() => {
+      useRuntimeStore.setState({ tagCatalog, rawSnapshot: null })
+    })
+
+    const { container } = render(<RuntimeTagTable />)
+    await waitFor(() => {
+      expect(container.textContent).toContain(`(${TOTAL_TAGS})`)
+    })
+    await new Promise((r) => setTimeout(r, 150))
+
+    expect(container.textContent).toContain('(50000)')
+    expect(
+      container.querySelectorAll('[data-testid="tag-table-row"]').length,
+    ).toBeLessThan(100)
+
+    for (let i = 0; i < 20; i++) {
+      act(() => {
+        useRuntimeStore.setState({
+          latestFrame: {
+            values: Object.fromEntries(
+              tagCatalog.slice(0, 50).map((t, idx) => [t.name, (i + idx) * 0.1]),
+            ),
+            receivedAt: Date.now() + i,
+            cycleCount: i,
+            simTime: i * 0.5,
+          } as any,
+        })
+      })
+      await new Promise((r) => setTimeout(r, 10))
+    }
+
+    expect(container.textContent).toContain('(50000)')
+    expect(
+      container.querySelectorAll('[data-testid="tag-table-row"]').length,
+    ).toBeLessThan(100)
   })
 })
