@@ -44,10 +44,16 @@ export interface RuntimeWs {
   fetchInitialSnapshot(signal?: AbortSignal): Promise<void>
   isOpen(): boolean
   forceReconnect(): void
-  /** 阶段 D：设置订阅 tag 集合。null 表示全量（兼容未订阅客户端）。 */
-  setSubscription(tags: string[] | null): void
+  /**
+   * 阶段 D：设置订阅 tag 集合。
+   * - undefined：尚未发送订阅命令（兼容旧客户端，server 走全量）
+   * - null：显式请求全量 snapshot
+   * - []：仅 cycle_count/sim_time 元数据
+   * - [a, b, ...]：仅订阅指定 tag + 元数据
+   */
+  setSubscription(tags: string[] | null | undefined): void
   /** 阶段 D：当前正在使用的订阅集合（最后发送值）。 */
-  getSubscription(): string[] | null
+  getSubscription(): string[] | null | undefined
 }
 
 // 指数退避：1, 2, 4, 8, 16, 30, 30, 30 ... 上限 30s
@@ -55,7 +61,17 @@ const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000, 16000, 30000]
 // WebSocket 在浏览器/Node 环境都可以使用。这里假设全局 WebSocket（浏览器）。
 type WsFactory = (url: string) => WebSocket
 
-function normalizeSubscription(tags: string[] | null): string[] | null {
+/**
+ * 规范化订阅 tag 集合：
+ *   - 过滤掉空字符串/非字符串
+ *   - 去重并排序
+ *   - null 保留为 null（"全量"）
+ *   - [] 保留为 []（"仅元数据"）
+ * 超过 MAX_SUBSCRIPTION_TAGS 时抛错（不得静默截断）。
+ */
+function normalizeSubscription(
+  tags: string[] | null,
+): string[] | null {
   if (tags === null) return null
   const set = new Set<string>()
   for (const t of tags) {
@@ -63,9 +79,23 @@ function normalizeSubscription(tags: string[] | null): string[] | null {
   }
   const arr = Array.from(set).sort()
   if (arr.length > MAX_SUBSCRIPTION_TAGS) {
-    return arr.slice(0, MAX_SUBSCRIPTION_TAGS)
+    throw new Error(
+      `订阅超过 ${MAX_SUBSCRIPTION_TAGS} 上限（实际 ${arr.length}），请先收窄订阅范围`,
+    )
   }
   return arr
+}
+
+/** SubscriptionOverflowError — setSubscription 超过上限时抛出的语义错误。 */
+export class SubscriptionOverflowError extends Error {
+  readonly actualCount: number
+  readonly limit: number
+  constructor(actual: number, limit: number) {
+    super(`订阅超过 ${limit} 上限（实际 ${actual}），请先收窄订阅范围`)
+    this.name = 'SubscriptionOverflowError'
+    this.actualCount = actual
+    this.limit = limit
+  }
 }
 
 export function createRuntimeWs(
@@ -85,7 +115,7 @@ export function createRuntimeWs(
   let operationGeneration = 0
   let snapshotAbort: AbortController | null = null
   let pendingSubscription: string[] | null | undefined = undefined
-  let activeSubscription: string[] | null = null
+  let activeSubscription: string[] | null | undefined = undefined
   let sendOnOpen = true
 
   const factory: WsFactory = deps.wsFactory ?? ((url: string) => new WebSocket(url))
@@ -121,16 +151,27 @@ export function createRuntimeWs(
 
   // sendSubscription 立即发送订阅消息。
   // 失败（连接未开）时记入 pendingSubscription，连接 onopen 时再发。
-  // 关键：null（"全量"）也是合法值，必须发送，不能因为"无变更"被吞掉。
+  // 关键：null（"全量"）与 []（仅元数据）都是合法值，必须明确发送。
+  const subscriptionsEqual = (
+    a: string[] | null | undefined,
+    b: string[] | null | undefined,
+  ): boolean => {
+    if (a === b) return true
+    if (a === undefined || b === undefined) return false
+    if (a === null || b === null) return false
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false
+    }
+    return true
+  }
+
   const sendSubscriptionNow = (sock: WebSocket): boolean => {
     if (pendingSubscription === undefined) {
       // setSubscription 还未被调用过，不发送
       return true
     }
-    if (activeSubscription !== null && pendingSubscription !== null &&
-        activeSubscription.length === pendingSubscription.length &&
-        activeSubscription.every((v, i) => v === pendingSubscription[i])) {
-      // 同样非 null 的相同内容不重复发送
+    if (subscriptionsEqual(activeSubscription, pendingSubscription)) {
       return true
     }
     if (sock.readyState !== WebSocket.OPEN) return false
@@ -241,8 +282,8 @@ export function createRuntimeWs(
       if (!isActive(generation) || ws !== socket) return
       ws = null
       clearHeartbeatHealth()
-      // activeSubscription 重置为未发送，触发重连后重发
-      activeSubscription = null
+      // activeSubscription 重置为 undefined，触发重连后重发
+      activeSubscription = undefined
       setState('disconnected')
       scheduleReconnect(generation)
     }
@@ -299,7 +340,7 @@ export function createRuntimeWs(
       }
     }
     clearHeartbeatHealth()
-    activeSubscription = null
+    activeSubscription = undefined
     setState('disconnected')
     scheduleReconnect(generation)
   }
@@ -317,7 +358,9 @@ export function createRuntimeWs(
       ws = null
       try { old.close() } catch { /* ignore */ }
     }
-    activeSubscription = null
+    // 关键：activeSubscription 必须保持 undefined，避免与显式 setSubscription(null)
+    // 的"首次发送"判断混淆。
+    activeSubscription = undefined
     reconnectAttempt = 0
     setState('connecting')
     await fetchSnapshotThenConnect(generation)
@@ -351,9 +394,20 @@ export function createRuntimeWs(
 
   const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
 
-  const setSubscription = (tags: string[] | null): void => {
-    const normalized = normalizeSubscription(tags)
-    pendingSubscription = normalized
+  /**
+   * 设置订阅。null = 显式全量；undefined = 尚未指定（保持服务端默认）；
+   * 超过 MAX_SUBSCRIPTION_TAGS 抛 SubscriptionOverflowError，原有状态保留。
+   */
+  const setSubscription = (tags: string[] | null | undefined): void => {
+    if (tags === undefined) {
+      pendingSubscription = undefined
+    } else {
+      // normalizeSubscription throws on overflow; we propagate to caller
+      // and DO NOT mutate pendingSubscription, so the previous valid value
+      // remains active. This avoids silent degradation when one source
+      // temporarily over-subscribes.
+      pendingSubscription = normalizeSubscription(tags)
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       sendSubscriptionNow(ws)
     }

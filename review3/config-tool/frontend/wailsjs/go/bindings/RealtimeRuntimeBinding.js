@@ -26,6 +26,10 @@ export function GetAlarms() {
   return window['go']['bindings']['RealtimeRuntimeBinding']['GetAlarms']();
 }
 
+export function GetConnectionInfo() {
+  return window['go']['bindings']['RealtimeRuntimeBinding']['GetConnectionInfo']();
+}
+
 export function GetProjectRevision(arg1) {
   return window['go']['bindings']['RealtimeRuntimeBinding']['GetProjectRevision'](arg1);
 }

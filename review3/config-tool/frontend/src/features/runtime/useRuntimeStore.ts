@@ -34,7 +34,12 @@ import {
 import {
   computeStaleThresholdMs,
 } from './dataSelection'
-import { createRuntimeWs, type RuntimeWs } from './websocket'
+import {
+  createRuntimeWs,
+  type RuntimeWs,
+  MAX_SUBSCRIPTION_TAGS,
+  SubscriptionOverflowError,
+} from './websocket'
 import type { TrendBuffer, TrendPoint } from './trendBuffer'
 import { TrendBuffer as TrendBufferClass } from './trendBuffer'
 import { computeControlQuality, type QualitySample } from './controlQuality'
@@ -92,9 +97,15 @@ export interface RuntimeStoreState {
   connectGeneration: number
   // 阶段 D3：订阅来源聚合。各组件 registerSubscription(source, tags)；
   // 实际 WS 发送的并集见 getActiveSubscriptionUnion()，避免互相覆盖。
-  subscriptionSources: Record<string, string[]>
+  // 三态语义：
+  //   - undefined：组件已注册但未指定 tag（视为空订阅 = 仅元数据）
+  //   - null：     组件已注销（key 已删除）
+  //   - string[]: 组件明确订阅的 tag 集合
+  subscriptionSources: Record<string, string[] | null>
   /** 最近一次服务端 ack 的订阅列表（来自 {type:'subscribed'} 消息）。 */
-  lastAcknowledgedSubscription: string[] | null
+  lastAcknowledgedSubscription: string[] | null | undefined
+  /** 最近一次订阅溢出错误（tag 数量超过 MAX_SUBSCRIPTION_TAGS）。 */
+  subscriptionError: string | null
 
   // Actions
   setEndpoint: (host: string, port: number, token?: string) => void
@@ -109,10 +120,18 @@ export interface RuntimeStoreState {
     patch: Partial<Pick<RuntimeWriteEvent, 'status' | 'confirmedAt'>>,
   ) => void
   recomputeQuality: () => void
-  /** 阶段 D3：注册某个组件的订阅 tag 集合；source 是稳定 id。 */
-  registerSubscription: (source: string, tags: string[]) => void
+  /**
+   * 阶段 D3：注册/更新某个组件的订阅 tag 集合。
+   * tags 传 null 表示该 source 主动声明"我不要任何 tag"（等同于 []）。
+   * 超过 MAX 抛 SubscriptionOverflowError，pending 状态保留。
+   */
+  registerSubscription: (source: string, tags: string[] | null) => void
+  /** 阶段 D4：组件卸载时调用，移除该 source 的订阅。 */
+  unregisterSubscription: (source: string) => void
   connect: () => Promise<void>
   disconnect: () => void
+  /** 显式结束 runtime session（详见 action 注释）。 */
+  endRuntimeSession: () => void
   // 每秒调用一次检查 stale
   tickStaleCheck: () => void
   // 测试 helper
@@ -122,20 +141,39 @@ export interface RuntimeStoreState {
 const DEFAULT_API_HOST = '127.0.0.1'
 const DEFAULT_API_PORT = 8000
 
-// computeSubscriptionUnion 计算所有来源的 tag 并集 + 排序。
-// 单一来源为空时整体视为 null（全量），便于后台把不必要的过滤移除。
-function computeSubscriptionUnion(sources: Record<string, string[]>): string[] | null {
-  const sets: string[][] = Object.values(sources)
-  if (sets.length === 0) return null
+/**
+ * 阶段 D：计算所有来源的 tag 并集 + 排序。
+ * 关键：三态语义：
+ *   - 所有 source 都未注册（subscriptionSources 为空对象）→ null（"全量"，
+ *     与 setSubscription(null) 行为一致；旧客户端兼容）
+ *   - 至少一个 source 注册了非空 tag → 排序去重的并集
+ *   - 所有 source 都注册了空数组（"我不订阅任何 tag"） → []（仅运行元数据）
+ *
+ * 超过 MAX_SUBSCRIPTION_TAGS 时抛 SubscriptionOverflowError。
+ */
+function computeSubscriptionUnion(
+  sources: Record<string, string[] | null>,
+): string[] | null {
+  const entries = Object.values(sources)
+  if (entries.length === 0) return null
   const out = new Set<string>()
-  for (const tags of sets) {
+  let anyTag = false
+  for (const tags of entries) {
+    if (tags === null) continue
     if (!Array.isArray(tags)) continue
     for (const t of tags) {
-      if (typeof t === 'string' && t.length > 0) out.add(t)
+      if (typeof t === 'string' && t.length > 0) {
+        out.add(t)
+        anyTag = true
+      }
     }
   }
-  if (out.size === 0) return null
-  return Array.from(out).sort()
+  if (!anyTag) return []
+  const arr = Array.from(out).sort()
+  if (arr.length > MAX_SUBSCRIPTION_TAGS) {
+    throw new SubscriptionOverflowError(arr.length, MAX_SUBSCRIPTION_TAGS)
+  }
+  return arr
 }
 
 export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
@@ -218,7 +256,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     lastError: null,
     connectGeneration: 0,
     subscriptionSources: {},
-    lastAcknowledgedSubscription: null,
+    lastAcknowledgedSubscription: undefined,
+    subscriptionError: null,
 
     setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
     setApiReady: (ready) => set({ apiReady: ready }),
@@ -271,10 +310,38 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
 
     // 阶段 D3：注册/更新一个组件的订阅 tag 集合。多次注册同一 source 会覆盖。
     // union 一旦变化，ws 立即收到新的 setSubscription。
+    // 超过 MAX 抛 SubscriptionOverflowError，pendingSubscription 保留。
     registerSubscription: (source, tags) => {
+      let union: string[] | null
+      try {
+        union = computeSubscriptionUnion({ ...get().subscriptionSources, [source]: tags })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        set({ subscriptionError: msg })
+        // 保留旧 union / pendingSubscription；不更新 source 以免破坏其它组件。
+        return
+      }
+      set((prev) => ({
+        subscriptionSources: { ...prev.subscriptionSources, [source]: tags },
+        subscriptionError: null,
+      }))
+      if (ws) {
+        try {
+          ws.setSubscription(union)
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          set({ subscriptionError: msg })
+        }
+      }
+    },
+
+    // 阶段 D4：注销 source，从并集中移除。
+    unregisterSubscription: (source) => {
       set((prev) => {
-        const next = { ...prev.subscriptionSources, [source]: tags }
-        return { subscriptionSources: next }
+        if (!(source in prev.subscriptionSources)) return {}
+        const next = { ...prev.subscriptionSources }
+        delete next[source]
+        return { subscriptionSources: next, subscriptionError: null }
       })
       const union = computeSubscriptionUnion(get().subscriptionSources)
       if (ws) {
@@ -399,8 +466,17 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       if (get().connectGeneration !== myGen) runtimeWs.stop()
     },
 
+    /**
+     * 主动结束 runtime 会话 / 用户停止。
+     * 行为：
+     *   - 递增 generation 让所有进行中的 connect 失效
+     *   - 停止 WS（保留 latestSnapshot / rawSnapshot 以便 UI 冻结最后值）
+     *   - 清空 apiToken（session 端到端生命周期闭合）
+     *   - 设置 stale = true（断线标记）
+     * 临时 WS 断线（指 createRuntimeWs 内部 scheduleReconnect 路径）不经过此函数，
+     * 不清 token；只有真正的"session 结束"才会进入这里。
+     */
     disconnect: () => {
-      // 递增 generation 让所有进行中的 connect 失效。
       const nextGen = (get().connectGeneration ?? 0) + 1
       set({ connectGeneration: nextGen })
       stopStaleCheck()
@@ -408,14 +484,22 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         ws.stop()
         ws = null
       }
-      // 按契约：
-      // - 冻结最后真实值（不替换、不清空 latestSnapshot）
-      // - 设置 stale = true（disconnect 视为断线，无论是否在阈值内）
-      // - 不清空 snapshotReceivedAt（保持供 stale 计算）
       set({
         connectionState: 'idle',
         stale: true,
+        apiToken: '',
+        lastAcknowledgedSubscription: undefined,
+        subscriptionError: null,
       })
+    },
+
+    /**
+     * 阶段 G 前置：endRuntimeSession —— 显式区分"停止本次 session"。
+     * 当前实现等同于 disconnect()，保留命名以便阶段 G 完整化（写入 audit
+     * 事件、清理强制状态、关闭归档等扩展点）。
+     */
+    endRuntimeSession: () => {
+      get().disconnect()
     },
 
     tickStaleCheck: () => {

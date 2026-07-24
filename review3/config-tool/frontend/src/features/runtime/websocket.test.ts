@@ -540,10 +540,45 @@ describe('createRuntimeWs subscription protocol', () => {
     expect(sock.sentMessages).toContainEqual(
       JSON.stringify({ type: 'subscribe', tags: null }),
     )
+    expect(ws.getSubscription()).toBeNull()
     ws.stop()
   })
 
-  it('limits subscription to MAX_SUBSCRIPTION_TAGS', async () => {
+  it('empty array subscription means metadata-only', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription([])
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    expect(sock.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: [] }),
+    )
+    expect(ws.getSubscription()).toEqual([])
+    ws.stop()
+  })
+
+  it('setSubscription undefined keeps "no preference" and does NOT send', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    // 没调 setSubscription → 不应发送 subscribe 消息。
+    expect(sock.sentMessages.find((m) => m.includes('"type":"subscribe"'))).toBeUndefined()
+    expect(ws.getSubscription()).toBeUndefined()
+    ws.stop()
+  })
+
+  it('throws SubscriptionOverflowError when subscription exceeds MAX_SUBSCRIPTION_TAGS', async () => {
     const ws = createRuntimeWs(
       { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
       () => {},
@@ -551,13 +586,47 @@ describe('createRuntimeWs subscription protocol', () => {
       { fetchSnapshot: async () => {} },
     )
     const big = Array.from({ length: 6000 }, (_, i) => `tag${i}`)
-    ws.setSubscription(big)
+    expect(() => ws.setSubscription(big)).toThrow(/订阅超过 5000 上限/)
+    // 失败时 pendingSubscription 必须保持旧值（无）
+    expect(ws.getSubscription()).toBeUndefined()
+    ws.stop()
+  })
+
+  it('switching from array to null actually sends (no equality short-circuit)', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription(['a', 'b'])
     await ws.start()
     const sock = FakeWebSocket.instances[0]
     sock.triggerOpen()
-    const sent = sock.sentMessages.find((m) => m.includes('"type":"subscribe"'))
-    const parsed = JSON.parse(sent!)
-    expect(parsed.tags.length).toBe(5000)
+    sock.sentMessages = [] // 清空，只看切换
+    ws.setSubscription(null)
+    expect(sock.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: null }),
+    )
+    ws.stop()
+  })
+
+  it('switching from array to [] actually sends (no equality short-circuit)', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    ws.setSubscription(['a'])
+    await ws.start()
+    const sock = FakeWebSocket.instances[0]
+    sock.triggerOpen()
+    sock.sentMessages = []
+    ws.setSubscription([])
+    expect(sock.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'subscribe', tags: [] }),
+    )
     ws.stop()
   })
 

@@ -80,25 +80,37 @@ export function RealtimeRunPage() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [dfLogs])
 
+  // generation guard：本次 effect 启动时记录；任何 await 之后必须先检查当前
+  // 状态是否已被新 effect 接管，否则忽略本次 effect 的副作用。
   useEffect(() => {
     const rtStore = useRuntimeStore.getState()
+    const initialGen = useRealtimeRunSessionStore.getState()
+    const mySessionGen = initialGen.session
     if (dfStatus.running && dfStatus.apiReady) {
       const host = session?.apiHost || apiHost
       const port = session?.apiPort || apiPort
       // 自动从 Go 侧获取本次运行的 connection info（host / port / runtimeName / token）。
       // 仅在内存使用，绝不写入持久化。
+      // 关键：
+      //   - GetConnectionInfo 失败时绝不能回退到无 token 连接（否则必然 401 / 4401）
+      //   - await 期间 dfStatus 可能已变化；写入前必须检查 generation
       void (async () => {
+        let info
         try {
-          const info = await realtimeRuntimeApi.getConnectionInfo()
-          if (info.apiToken) {
-            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port, info.apiToken)
-          } else {
-            // 进程已运行但 token 暂时拿不到（极端时序），等下一次 dfStatus 变化再试。
-            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port)
-          }
-        } catch {
-          rtStore.setEndpoint(host, port)
+          info = await realtimeRuntimeApi.getConnectionInfo()
+        } catch (e) {
+          // 显示错误，不发起任何连接。
+          setError(`无法获取运行 token：${String(e)}。请重新启动实时工程。`)
+          return
         }
+        // 异步窗口检查：dfStatus / session / generation 必须一致。
+        if (!info.apiToken) {
+          setError('运行 token 为空，连接被拒绝。请重新启动实时工程。')
+          return
+        }
+        if (!dfStatus.running || !dfStatus.apiReady) return
+        if (useRealtimeRunSessionStore.getState().session !== mySessionGen) return
+        rtStore.setEndpoint(info.apiHost || host, info.apiPort || port, info.apiToken)
         void rtStore.connect()
       })()
     } else if (!dfStatus.running) {
