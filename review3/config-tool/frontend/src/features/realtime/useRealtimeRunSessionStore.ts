@@ -89,7 +89,21 @@ export const useRealtimeRunSessionStore = create<RealtimeRunSessionState>((set) 
       await realtimeRuntimeApi.stop()
       set({ session: null, loading: false })
     } catch (e: any) {
-      set({ error: String(e), loading: false })
+      // 阶段 5-6 收口：Stop 失败时，调用 GetSession 拉取最新 session 状态
+      // （可能为 stop-failed），让前端显示 session.state 而非仅错误。
+      // 错误信息合并到 error 字段；session 保留供用户重试。
+      const stopErr = String(e)
+      let fresh: RealtimeRunSession | null = null
+      try {
+        fresh = ((await realtimeRuntimeApi.getSession()) as any) || null
+      } catch {
+        // ignore
+      }
+      const stopFailed = fresh?.state === 'stop-failed'
+      const merged = stopFailed
+        ? `停止失败，实时进程仍在运行，需要重试：${stopErr}`
+        : `停止失败：${stopErr}`
+      set({ session: fresh, error: merged, loading: false })
     }
   },
 

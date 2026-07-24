@@ -587,7 +587,6 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	dir := b.curDir
 	sess := b.current
 	archiveActive := b.archiveActive
-	b.archiveActive = false
 	b.mu.Unlock()
 
 	// 阶段 C4 收口：归档停止优先（保证 SQLite / jsonl flush / 句柄关闭），
@@ -595,6 +594,13 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	var archiveErr error
 	if archiveActive && sess != nil {
 		archiveErr = b.stopArchiveOnShutdown(*sess)
+		// 阶段 5-5 收口：archive stop 成功才置 false。
+		// 失败时保留 true（unknown），下次 Stop 重试。
+		if archiveErr == nil {
+			b.mu.Lock()
+			b.archiveActive = false
+			b.mu.Unlock()
+		}
 	}
 
 	if b.system.Status().Running {
