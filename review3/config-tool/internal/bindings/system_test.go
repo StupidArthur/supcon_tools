@@ -1904,3 +1904,157 @@ func TestDefaultReadinessCheckerAddsBearerHeader(t *testing.T) {
 		t.Errorf("最后一次请求 Authorization 应为 Bearer hello，实际 %q", got)
 	}
 }
+
+// 阶段 H 收口：并发 terminate 不得 panic / deadlock / race。
+// 多个 goroutine 同时调用 terminateProcess，验证：
+//   - 无 panic
+//   - 无 race（go test -race 检测）
+//   - 最终进程死亡
+//   - 所有 goroutine 都返回（无 deadlock）
+func TestTerminate_ConcurrentCallsNoPanicNoRace(t *testing.T) {
+	b := NewSystemBinding()
+	tmp := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0o755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(10 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "conc-term", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+
+	if err := b.Start(StartParams{
+		ConfigPath:  cfg,
+		Mode:        "REALTIME",
+		CycleTime:   0.5,
+		Port:        18951,
+		APIPort:     8000,
+		APIHost:     "127.0.0.1",
+		RuntimeName: "conc-term",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b.mu.Lock()
+	proc := b.proc
+	b.mu.Unlock()
+	if proc == nil {
+		t.Fatal("proc must be non-nil after Start")
+	}
+
+	const goroutines = 8
+	var wg sync.WaitGroup
+	errs := make([]error, goroutines)
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = b.terminateProcess(proc, true)
+		}(i)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("deadlock: concurrent terminateProcess did not complete within 10s")
+	}
+
+	// 所有 goroutine 都返回后，进程必须已死
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !b.Status().Running {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if b.Status().Running {
+		t.Error("after concurrent terminate, process must be dead")
+	}
+
+	// 至少一个 goroutine 应返回 nil（成功终止）
+	successCount := 0
+	for _, err := range errs {
+		if err == nil {
+			successCount++
+		}
+	}
+	if successCount == 0 {
+		t.Errorf("at least one concurrent terminate must succeed, got errors: %v", errs)
+	}
+}
+
+// 阶段 H 收口：terminate 幂等 —— 进程已死后重复调用不 panic、不清除错误状态。
+func TestTerminate_IdempotentAfterProcessDead(t *testing.T) {
+	b := NewSystemBinding()
+	tmp := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0o755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(10 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "idempotent", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+
+	if err := b.Start(StartParams{
+		ConfigPath:  cfg,
+		Mode:        "REALTIME",
+		CycleTime:   0.5,
+		Port:        18951,
+		APIPort:     8000,
+		APIHost:     "127.0.0.1",
+		RuntimeName: "idempotent",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b.mu.Lock()
+	proc := b.proc
+	b.mu.Unlock()
+
+	// 第一次 terminate：成功
+	if err := b.terminateProcess(proc, true); err != nil {
+		t.Fatalf("first terminate must succeed: %v", err)
+	}
+
+	// 等进程真的退出
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-proc.done:
+			goto dead
+		default:
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	t.Fatal("process did not die after terminate")
+dead:
+
+	// 第二次 terminate：进程已死，应快速返回 nil（幂等）
+	if err := b.terminateProcess(proc, true); err != nil {
+		t.Errorf("second terminate on dead process must return nil, got: %v", err)
+	}
+
+	// 第三次 terminate：仍然幂等
+	if err := b.terminateProcess(proc, true); err != nil {
+		t.Errorf("third terminate on dead process must return nil, got: %v", err)
+	}
+}

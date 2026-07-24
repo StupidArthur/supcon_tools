@@ -634,10 +634,14 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 
 	// 并发合并：如果另一个 goroutine 正在执行终止，等待其完成
 	// 然后基于实际进程状态决定返回值。
+	// 关键：必须在持锁时捕获 stopDone 引用，否则在 unlock 与 <- 之间
+	// 另一个 goroutine 可能 close 旧 channel 并创建新 channel，
+	// 导致本 goroutine 永远阻塞在新 channel 上（deadlock）。
 	proc.stopMu.Lock()
 	if proc.stopInProgress {
+		done := proc.stopDone
 		proc.stopMu.Unlock()
-		<-proc.stopDone
+		<-done
 		proc.stopMu.Lock()
 	}
 	proc.stopInProgress = true
