@@ -75,7 +75,17 @@ export function DashboardPage({ projectId }: Props) {
     return Array.from(set).sort()
   }, [activePage])
 
+  // 阶段 5-7：项目身份校验。session 可能属于另一个项目，
+  // 此时 dashboard 的 tag 订阅来自当前项目，与 session 的 tag 不匹配。
+  const sessionProjectMismatch = !!session && !!session.projectId && session.projectId !== projectId
+
   useEffect(() => {
+    // 阶段 5-7：session 与当前 dashboard 项目不匹配时，不注册订阅
+    // （tag 属于另一个项目，订阅无意义）
+    if (sessionProjectMismatch) {
+      unregisterSubscription('dashboard')
+      return () => unregisterSubscription('dashboard')
+    }
     if (dashboardTags.length === 0) {
       // 没有 dashboard tag → 显式 [] 表达"我订阅空集，server 只回元数据"
       registerSubscription('dashboard', [])
@@ -87,7 +97,7 @@ export function DashboardPage({ projectId }: Props) {
       setError(String(e))
     }
     return () => unregisterSubscription('dashboard')
-  }, [dashboardTags, registerSubscription, unregisterSubscription])
+  }, [dashboardTags, registerSubscription, unregisterSubscription, sessionProjectMismatch])
 
   const updateWidget = (widgetId: string, patch: Partial<DashboardWidget>) => {
     setDashboard((prev) => ({
@@ -145,26 +155,35 @@ export function DashboardPage({ projectId }: Props) {
   }
 
   const selected = activePage?.widgets.find((w) => w.id === selectedWidget) || null
+  const canEdit = editMode && !sessionProjectMismatch
 
   return (
     <div className="flex-1 overflow-y-auto bg-background p-6" data-testid="dashboard-page">
       <div className="mx-auto max-w-5xl space-y-3">
+        {sessionProjectMismatch ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-xs text-amber-700">
+            当前运行的会话属于项目 {session?.projectName || session?.projectId}，与画面所属项目不匹配。切换到该项目后可编辑画面。
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">画面</span>
           {statusBadge()}
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setEditMode((v) => !v)}
-              className="rounded border border-border px-2 py-1 text-xs hover:bg-secondary"
+              onClick={() => { if (!sessionProjectMismatch) setEditMode((v) => !v) }}
+              disabled={sessionProjectMismatch}
+              className={`rounded border border-border px-2 py-1 text-xs ${sessionProjectMismatch ? 'cursor-not-allowed opacity-50' : 'hover:bg-secondary'}`}
               data-testid="dashboard-edit-toggle"
             >
               {editMode ? '运行模式' : '编辑模式'}
             </button>
             <button
               type="button"
-              onClick={() => void save(dashboard)}
-              className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
+              onClick={() => { if (canEdit) void save(dashboard) }}
+              disabled={!canEdit}
+              className={`rounded px-2 py-1 text-xs ${canEdit ? 'bg-primary text-primary-foreground' : 'cursor-not-allowed bg-muted text-muted-foreground'}`}
               data-testid="dashboard-save"
             >
               保存
