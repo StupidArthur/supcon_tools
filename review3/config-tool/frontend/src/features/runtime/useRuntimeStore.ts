@@ -56,6 +56,8 @@ export interface RuntimeStoreState {
   // 连接状态
   apiHost: string
   apiPort: number
+  /** 仅内存；不持久化。空字符串表示未注入 token（如未启实时进程）。 */
+  apiToken: string
   runtimeName: string | null
   connectionState: ConnectionState
   // API readiness（由 SystemBinding.status().apiReady 写入，REST 真实可达）
@@ -90,7 +92,7 @@ export interface RuntimeStoreState {
   connectGeneration: number
 
   // Actions
-  setEndpoint: (host: string, port: number) => void
+  setEndpoint: (host: string, port: number, token?: string) => void
   setApiReady: (ready: boolean) => void
   setTrendTags: (tags: string[]) => void
   setSeriesVisibility: (tag: string, visible: boolean) => void
@@ -166,6 +168,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
   return {
     apiHost: DEFAULT_API_HOST,
     apiPort: DEFAULT_API_PORT,
+    apiToken: '',
     runtimeName: null,
     connectionState: 'idle',
     apiReady: false,
@@ -192,7 +195,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     lastError: null,
     connectGeneration: 0,
 
-    setEndpoint: (host, port) => set({ apiHost: host, apiPort: port }),
+    setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
     setApiReady: (ready) => set({ apiReady: ready }),
     setTrendTags: (tags) => {
       set({ trendTags: tags })
@@ -252,7 +255,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       // 第一步：GET /api/status 获取真实 runtimeName
       let status
       try {
-        status = await getStatus({ apiHost: state.apiHost, apiPort: state.apiPort })
+        status = await getStatus({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken })
       } catch (e) {
         // 若 generation 已变（disconnect 在我们 await 期间发生），不要写错误状态
         if (get().connectGeneration !== myGen) return
@@ -271,14 +274,14 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
 
       // 第三步：用真实 runtimeName 调 meta（meta 失败不阻止 WS）
       try {
-        await getMeta({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
+        await getMeta({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }, runtimeName)
       } catch (e) {
         // 忽略
       }
 
       // 通用 tag catalog（失败不阻止 WS）
       try {
-        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
+        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }, runtimeName)
         if (get().connectGeneration === myGen && Array.isArray(tagsResp.tags)) {
           set({ tagCatalog: tagsResp.tags })
         }
@@ -298,9 +301,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       })
 
       // 第四步：连接 WS；start() 内会先 GET snapshot 再开 WS。
-      const endpoint = { apiHost: state.apiHost, apiPort: state.apiPort }
+      const endpoint = { apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }
       const runtimeWs = createRuntimeWs(
-        { apiHost: state.apiHost, apiPort: state.apiPort, cycleTime },
+        { apiHost: state.apiHost, apiPort: state.apiPort, cycleTime, apiToken: state.apiToken },
         (msg) => {
           // 消息回调：仅在 generation 未变时写入 snapshot / heartbeat。
           if (get().connectGeneration !== myGen) return

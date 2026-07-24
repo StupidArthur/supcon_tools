@@ -124,6 +124,9 @@ export const realtimeRuntimeApi = {
     RealtimeRuntimeBinding.StartSingleYAML(configPath, options),
   stop: () => RealtimeRuntimeBinding.Stop(),
   getSession: () => RealtimeRuntimeBinding.GetSession(),
+  /** 获取当前实时运行的连接信息（含 apiToken）。返回的 token 必须仅用于本次会话的内存中。 */
+  getConnectionInfo: () =>
+    RealtimeRuntimeBinding.GetConnectionInfo() as unknown as Promise<import('../../wailsjs/go/models').bindings.RealtimeConnectionInfo>,
   getProjectRevision: (projectId: string) => RealtimeRuntimeBinding.GetProjectRevision(projectId),
   getAlarms: () => RealtimeRuntimeBinding.GetAlarms(),
   getAlarmEvents: (limit: number) => RealtimeRuntimeBinding.GetAlarmEvents(limit),

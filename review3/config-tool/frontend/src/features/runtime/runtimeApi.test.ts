@@ -199,3 +199,65 @@ describe('runtimeApi.mapApiSnapshot', () => {
     expect(snap.simTime).toBe(21.5)
   })
 })
+
+describe('runtimeApi auth header', () => {
+  it('attaches Authorization Bearer when apiToken is provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        instance_name: 'pid',
+        mode: 'REALTIME',
+        cycle_count: 1,
+        sim_time: 0.5,
+        cycle_time: 0.5,
+        safe_state: false,
+        consecutive_failures: 0,
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await getStatus({ apiHost: '127.0.0.1', apiPort: 8000, apiToken: 'secret-token' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8000/api/status',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer secret-token' }),
+      }),
+    )
+  })
+
+  it('omits Authorization header when apiToken is empty', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        instance_name: 'pid',
+        mode: 'REALTIME',
+        cycle_count: 1,
+        sim_time: 0.5,
+        cycle_time: 0.5,
+        safe_state: false,
+        consecutive_failures: 0,
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await getStatus({ apiHost: '127.0.0.1', apiPort: 8000 })
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    const headers = lastCall[1]?.headers as Record<string, string> | undefined
+    expect(headers?.Authorization).toBeUndefined()
+  })
+
+  it('does NOT send fake token when set to empty string', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ instance_name: 'x', meta: {}, statistics: {} }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await getMeta({ apiHost: '127.0.0.1', apiPort: 8000, apiToken: '' }, 'x')
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    const headers = lastCall[1]?.headers as Record<string, string> | undefined
+    expect(headers?.Authorization).toBeUndefined()
+  })
+})

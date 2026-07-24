@@ -85,8 +85,22 @@ export function RealtimeRunPage() {
     if (dfStatus.running && dfStatus.apiReady) {
       const host = session?.apiHost || apiHost
       const port = session?.apiPort || apiPort
-      rtStore.setEndpoint(host, port)
-      void rtStore.connect()
+      // 自动从 Go 侧获取本次运行的 connection info（host / port / runtimeName / token）。
+      // 仅在内存使用，绝不写入持久化。
+      void (async () => {
+        try {
+          const info = await realtimeRuntimeApi.getConnectionInfo()
+          if (info.apiToken) {
+            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port, info.apiToken)
+          } else {
+            // 进程已运行但 token 暂时拿不到（极端时序），等下一次 dfStatus 变化再试。
+            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port)
+          }
+        } catch {
+          rtStore.setEndpoint(host, port)
+        }
+        void rtStore.connect()
+      })()
     } else if (!dfStatus.running) {
       rtStore.disconnect()
     }

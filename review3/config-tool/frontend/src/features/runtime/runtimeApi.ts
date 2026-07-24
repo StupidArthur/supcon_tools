@@ -4,6 +4,8 @@
 //   - 必须先调 getStatus() 获取真实 runtimeName，再调 getMeta/getSnapshot。
 //   - 任何路径里的 runtimeName 都来自 /api/status.instance_name，禁止硬编码或与 Program 实例名混淆。
 //   - 这里不维护业务状态（连接、缓存、心跳），只做 HTTP 调用和字段映射。
+//   - REST 鉴权：cfg.apiToken 非空时必须加 Authorization: Bearer <token> 头；
+//     空 token 不发送 Authorization（兼容 DATAFACTORY_NO_AUTH 开发模式）。
 
 import type {
   ApiMetaResponse,
@@ -15,6 +17,8 @@ import type {
 export interface RuntimeApiConfig {
   apiHost: string
   apiPort: number
+  /** 仅内存；不持久化。空字符串表示不发送 Authorization（如开发模式）。 */
+  apiToken?: string
 }
 
 export class RuntimeApiError extends Error {
@@ -24,8 +28,12 @@ export class RuntimeApiError extends Error {
   }
 }
 
-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const resp = await fetch(url, { signal })
+async function fetchJson<T>(url: string, cfg: RuntimeApiConfig, signal?: AbortSignal): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (cfg.apiToken) {
+    headers['Authorization'] = `Bearer ${cfg.apiToken}`
+  }
+  const resp = await fetch(url, { signal, headers })
   if (!resp.ok) {
     throw new RuntimeApiError(resp.status, `${url} → HTTP ${resp.status}`)
   }
@@ -41,7 +49,7 @@ export async function getStatus(
   cfg: RuntimeApiConfig,
   signal?: AbortSignal,
 ): Promise<ApiStatusResponse> {
-  return fetchJson<ApiStatusResponse>(apiUrl(cfg, '/api/status'), signal)
+  return fetchJson<ApiStatusResponse>(apiUrl(cfg, '/api/status'), cfg, signal)
 }
 
 export async function getMeta(
@@ -51,6 +59,7 @@ export async function getMeta(
 ): Promise<ApiMetaResponse> {
   return fetchJson<ApiMetaResponse>(
     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/meta`),
+    cfg,
     signal,
   )
 }
@@ -62,6 +71,7 @@ export async function getSnapshot(
 ): Promise<ApiSnapshot> {
   return fetchJson<ApiSnapshot>(
     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/snapshot`),
+    cfg,
     signal,
   )
 }
@@ -78,6 +88,7 @@ export async function getTags(
 ): Promise<ApiTagsResponse> {
   return fetchJson<ApiTagsResponse>(
     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/tags`),
+    cfg,
     signal,
   )
 }

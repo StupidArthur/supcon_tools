@@ -51,7 +51,7 @@ func makeLongRunningCommand(sleepSeconds int) commandFactory {
 // 创建模拟的 readiness checker
 func makeMockReadinessChecker(readyAfterCalls int, instanceName string) (readinessChecker, func() int32) {
 	var callCount atomic.Int32
-	checker := func(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
+	checker := func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
 		count := callCount.Add(1)
 		if int(count) >= readyAfterCalls {
 			return true, instanceName, nil
@@ -241,7 +241,7 @@ func TestStatus_APIReadyOnlyAfterReadinessMatch(t *testing.T) {
 	b.setReadyTimeout(5 * time.Second)
 
 	var ready atomic.Bool
-	b.setReadinessChecker(func(context.Context, string, int) (bool, string, error) {
+	b.setReadinessChecker(func(context.Context, string, int, string) (bool, string, error) {
 		if ready.Load() {
 			return true, "test-runtime", nil
 		}
@@ -323,7 +323,7 @@ func TestStart_ReadyTimeout(t *testing.T) {
 	b.setReadyPollInterval(50 * time.Millisecond)
 	b.setReadyTimeout(500 * time.Millisecond)
 
-	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
 		return false, "", nil
 	})
 
@@ -842,7 +842,7 @@ func TestStart_ConcurrentWithStop(t *testing.T) {
 	b.setReadyPollInterval(10 * time.Millisecond)
 	b.setReadyTimeout(5 * time.Second)
 	b.setStopTimeout(1 * time.Second)
-	b.setReadinessChecker(func(context.Context, string, int) (bool, string, error) {
+	b.setReadinessChecker(func(context.Context, string, int, string) (bool, string, error) {
 		return false, "", nil
 	})
 
@@ -898,7 +898,7 @@ func TestStart_ConcurrentWithCleanup(t *testing.T) {
 	b.setReadyPollInterval(10 * time.Millisecond)
 	b.setReadyTimeout(5 * time.Second)
 	b.setStopTimeout(1 * time.Second)
-	b.setReadinessChecker(func(context.Context, string, int) (bool, string, error) {
+	b.setReadinessChecker(func(context.Context, string, int, string) (bool, string, error) {
 		return false, "", nil
 	})
 
@@ -1524,4 +1524,383 @@ func containsArgPair(args []string, key, value string) bool {
 		}
 	}
 	return false
+}
+
+// authStatusServer 模拟启用了 token 鉴权的 /api/status：
+// - 缺少 Authorization / 错误 token → 401
+// - 正确 token → 200 + 配置 instance 名
+type authStatusServer struct {
+	mu       sync.Mutex
+	token    string
+	instance string
+	requests []string
+}
+
+func newAuthStatusServer(token, instance string) (*authStatusServer, *httptest.Server) {
+	s := &authStatusServer{token: token, instance: instance}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		s.requests = append(s.requests, r.Header.Get("Authorization"))
+		s.mu.Unlock()
+		if s.token != "" {
+			auth := r.Header.Get("Authorization")
+			if auth != "Bearer "+s.token {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(StatusResponse{InstanceName: s.instance})
+	})
+	server := httptest.NewServer(mux)
+	return s, server
+}
+
+func (s *authStatusServer) authed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, h := range s.requests {
+		if h != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *authStatusServer) anyFailed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, h := range s.requests {
+		if h == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *authStatusServer) requestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.requests)
+}
+
+func TestStart_ReadySuccess_PassesAuthTokenViaReadiness(t *testing.T) {
+	// 验证：启用了 token 鉴权的真实 FastAPI 风格的 /api/status mock，
+	// 初次调用不带 token → 401；Start 注入 token 后 → 200 并得到 instance 名。
+	// 我们让 mock 在第一次请求时拒（含/不含 token 都拒），第二次起允许任何 token。
+	// 但 Start 内部首轮就用 token 调用，所以路径中存在至少一次"带了 token"的调用。
+	var receivedAuth atomic.Value
+	callCount := atomic.Int32{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		receivedAuth.Store(r.Header.Get("Authorization"))
+		// 强制契约：必须带 Bearer，并且非空
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(StatusResponse{InstanceName: "test-runtime"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(20 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	// 真实 defaultReadinessChecker：会把 Start 生成的 token 写入 Authorization 头。
+	b.setReadinessChecker(defaultReadinessChecker)
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{
+		ConfigPath:  configPath,
+		APIPort:     port,
+		APIHost:     "127.0.0.1",
+		RuntimeName: "test-runtime",
+	}); err != nil {
+		t.Fatalf("Start 失败: %v", err)
+	}
+	auth, _ := receivedAuth.Load().(string)
+	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
+		t.Errorf("defaultReadinessChecker 必须携带 Bearer token，实际 %q", auth)
+	}
+	if callCount.Load() == 0 {
+		t.Errorf("readiness 必须被实际调用")
+	}
+	if got := CurrentAPIToken(); got == "" {
+		t.Errorf("ready 后 CurrentAPIToken 必须非空")
+	}
+	b.Cleanup()
+}
+
+func TestStart_ReadySucceedsWhenMockAcceptsToken(t *testing.T) {
+	// 用带 token 注入 hook 的 readiness：第一次返回 random token，第二次 read 用同样 token。
+	// 真实场景里：Start 会生成 token → 传 readiness → mock 验证 → 通过。
+	// 这里把 readiness 替换为：第一次等调用但返回 false；第二次记录 token 并返回 true。
+	// 关键验证：Start 前后 token 行为正确。
+	var firstToken atomic.Value
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(10 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+
+	var attempts atomic.Int32
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		// 第一次尝试时记下 Start 生成的 token
+		if attempts.Add(1) == 1 {
+			firstToken.Store(token)
+		}
+		// 假定携带 token 必然通过
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "test-runtime", nil
+	})
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
+		t.Fatalf("Start 失败: %v", err)
+	}
+	tok, _ := firstToken.Load().(string)
+	if tok == "" {
+		t.Fatal("Start 期间 readiness 收到的 token 必须非空")
+	}
+	if got := CurrentAPIToken(); got != tok {
+		t.Errorf("ready 成功后 CurrentAPIToken() = %q, want %q", got, tok)
+	}
+
+	// Stop 后必须失效
+	if err := b.Stop(); err != nil {
+		t.Fatalf("Stop 失败: %v", err)
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("Stop 后 CurrentAPIToken() 必须为空，实际 %q", got)
+	}
+}
+
+func TestStart_TokenClearedOnReadyTimeout(t *testing.T) {
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(20 * time.Millisecond)
+	b.setReadyTimeout(200 * time.Millisecond)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		return false, "", nil
+	})
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-timeout"}); err == nil {
+		t.Fatal("Start 必须超时失败")
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("ready 超时后 CurrentAPIToken() 必须为空，实际 %q", got)
+	}
+}
+
+func TestStart_TokenClearedOnInstanceMismatch(t *testing.T) {
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(20 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		return true, "wrong-name", nil
+	})
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "expected"}); err == nil {
+		t.Fatal("instance 不匹配时 Start 必须失败")
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("instance 不匹配后 CurrentAPIToken() 必须为空，实际 %q", got)
+	}
+}
+
+func TestStart_TokenClearedOnProcessEarlyExit(t *testing.T) {
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+	// 进程立刻以非 0 退出
+	b.setCommandFactory(makeMockCommand(42, "", "aborted"))
+	b.setReadyPollInterval(20 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		return false, "", nil
+	})
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "early-exit"}); err == nil {
+		t.Fatal("进程提前退出时 Start 必须失败")
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("进程提前退出后 CurrentAPIToken() 必须为空，实际 %q", got)
+	}
+}
+
+func TestStart_TokenRevokedOnUnexpectedExit(t *testing.T) {
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+
+	// 进程跑 1s 后退出
+	b.setCommandFactory(makeLongRunningCommand(1))
+	b.setReadyPollInterval(20 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+
+	var seenToken atomic.Value
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		seenToken.Store(token)
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "test-runtime", nil
+	})
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
+		t.Fatalf("Start 失败: %v", err)
+	}
+	tok, _ := seenToken.Load().(string)
+	if tok == "" {
+		t.Fatal("readiness 必须收到 token")
+	}
+	if got := CurrentAPIToken(); got != tok {
+		t.Fatalf("ready 后 token = %q, want %q", got, tok)
+	}
+
+	// 等待异常退出
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if CurrentAPIToken() == "" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("异常退出后 CurrentAPIToken() 必须失效，实际 %q", got)
+	}
+}
+
+func TestStart_RestartInvalidatesPreviousToken(t *testing.T) {
+	b := NewSystemBinding()
+	tmpDir := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(10 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "test-runtime", nil
+	})
+
+	configPath := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(configPath, []byte("test: true"), 0644)
+
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
+		t.Fatalf("第一次 Start 失败: %v", err)
+	}
+	first := CurrentAPIToken()
+	if first == "" {
+		t.Fatal("第一次 Start 后 CurrentAPIToken 必须非空")
+	}
+	if err := b.Stop(); err != nil {
+		t.Fatalf("Stop 失败: %v", err)
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Fatalf("Stop 后 token 必须被清空，实际 %q", got)
+	}
+
+	// 第二次启动
+	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
+		t.Fatalf("第二次 Start 失败: %v", err)
+	}
+	second := CurrentAPIToken()
+	if second == "" {
+		t.Fatal("第二次 Start 后 CurrentAPIToken 必须非空")
+	}
+	if second == first {
+		t.Errorf("第二次 token 必须与第一次不同，至少语义上不能复用：%q", second)
+	}
+	b.Cleanup()
+}
+
+func TestDefaultReadinessCheckerAddsBearerHeader(t *testing.T) {
+	// 真实 FastAPI 鉴权行为：缺 token → 401；正确 token → 200。
+	var seenAuth atomic.Value
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		seenAuth.Store(r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") != "Bearer hello" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(StatusResponse{InstanceName: "test"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	// 不带 token → 401
+	ready, name, err := defaultReadinessChecker(context.Background(), "127.0.0.1", port, "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if ready || name != "" {
+		t.Errorf("no-token readiness should be (false, \"\"), got (%v, %q)", ready, name)
+	}
+
+	// 错误 token → 401
+	ready, _, err = defaultReadinessChecker(context.Background(), "127.0.0.1", port, "wrong")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if ready {
+		t.Errorf("wrong-token readiness should be false")
+	}
+
+	// 正确 token → 200 + instance
+	ready, name, err = defaultReadinessChecker(context.Background(), "127.0.0.1", port, "hello")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !ready || name != "test" {
+		t.Errorf("correct-token readiness should be (true, \"test\"), got (%v, %q)", ready, name)
+	}
+	if got, _ := seenAuth.Load().(string); got != "Bearer hello" {
+		t.Errorf("最后一次请求 Authorization 应为 Bearer hello，实际 %q", got)
+	}
 }

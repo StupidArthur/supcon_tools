@@ -15,6 +15,8 @@ export function GetAlarmEvents(arg1:number):Promise<Record<string, any>>;
 
 export function GetAlarms():Promise<Record<string, any>>;
 
+export function GetConnectionInfo():Promise<bindings.RealtimeConnectionInfo>;
+
 export function GetProjectRevision(arg1:string):Promise<string>;
 
 export function GetSession():Promise<realtime.RealtimeRunSession>;

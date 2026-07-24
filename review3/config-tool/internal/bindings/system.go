@@ -73,9 +73,11 @@ type BatchResult struct {
 // commandFactory 创建命令的工厂函数（用于测试注入）
 type commandFactory func(name string, arg ...string) *exec.Cmd
 
-// readinessChecker 检查 API 是否就绪的函数（用于测试注入）
-// 返回 (ready bool, instanceName string, err error)
-type readinessChecker func(ctx context.Context, apiHost string, apiPort int) (bool, string, error)
+// readinessChecker 检查 API 是否就绪的函数（用于测试注入）。
+// token 允许为空（开发环境 / DATAFACTORY_NO_AUTH），但生产模式下应始终提供；
+// checker 自身负责把 token 写入 Authorization header，不依赖外部全局状态。
+// 返回 (ready bool, instanceName string, err error)。
+type readinessChecker func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error)
 
 // processResult 进程退出结果
 type processResult struct {
@@ -358,7 +360,15 @@ func (b *SystemBinding) Start(params StartParams) error {
 	if params.APIToken == "" {
 		params.APIToken = generateAPIToken()
 	}
+	// publish token before we touch any subprocess state; rollback in defer below
+	// covers every failure path (pipe / start / ready / instance mismatch / early exit).
 	SetCurrentAPIToken(params.APIToken)
+	tokenCommitted := true
+	defer func() {
+		if tokenCommitted {
+			SetCurrentAPIToken("")
+		}
+	}()
 	args := BuildArgs(params)
 	cmd := dfLaunch.command(commandFactory, args...)
 
@@ -439,7 +449,7 @@ func (b *SystemBinding) Start(params StartParams) error {
 			return fmt.Errorf(errMsg)
 
 		case <-ticker.C:
-			ready, instanceName, err := readinessChecker(readyCtx, apiHost, apiPort)
+			ready, instanceName, err := readinessChecker(readyCtx, apiHost, apiPort, params.APIToken)
 			if err != nil {
 				continue
 			}
@@ -476,6 +486,8 @@ func (b *SystemBinding) Start(params StartParams) error {
 			if b.ctx != nil {
 				runtime.EventsEmit(b.ctx, "df:status", status)
 			}
+			// token stays valid for the lifetime of this process; cleared on Stop / unexpected exit.
+			tokenCommitted = false
 			return nil
 		}
 	}
@@ -512,6 +524,11 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
 		b.proc = nil
 	}
 	b.mu.Unlock()
+
+	// 进程退出（正常或异常）→ 当前 token 立即失效，避免泄漏给无效监听端。
+	if isCurrent {
+		SetCurrentAPIToken("")
+	}
 
 	// 发送事件
 	if isCurrent {
@@ -1395,12 +1412,16 @@ func ParseStatusResponse(data []byte) (*StatusResponse, error) {
 	return &resp, nil
 }
 
-// defaultReadinessChecker 默认的 readiness checker
-func defaultReadinessChecker(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
+// defaultReadinessChecker 默认的 readiness checker。
+// 必须使用入参 token（生产环境 Bearer）调用 /api/status，不依赖外部全局 token 与硬编码。
+func defaultReadinessChecker(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
 	url := fmt.Sprintf("http://%s:%d/api/status", apiHost, apiPort)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return false, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

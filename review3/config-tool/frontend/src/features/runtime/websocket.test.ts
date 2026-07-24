@@ -390,3 +390,65 @@ describe('createRuntimeWs', () => {
     vi.useRealTimers()
   })
 })
+
+describe('createRuntimeWs auth token', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+    vi.stubGlobal('WebSocket', FakeWebSocket as any)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('appends ?token=... to URL when apiToken is non-empty', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5, apiToken: 'secret-token' },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    expect(FakeWebSocket.instances[0].url).toBe(
+      'ws://127.0.0.1:8000/ws/snapshot?token=secret-token',
+    )
+    ws.stop()
+  })
+
+  it('encodes special characters in token', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5, apiToken: 'a/b+c d' },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    expect(FakeWebSocket.instances[0].url).toBe(
+      'ws://127.0.0.1:8000/ws/snapshot?token=a%2Fb%2Bc%20d',
+    )
+    ws.stop()
+  })
+
+  it('does NOT append token when apiToken is empty', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5, apiToken: '' },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    expect(FakeWebSocket.instances[0].url).toBe('ws://127.0.0.1:8000/ws/snapshot')
+    ws.stop()
+  })
+
+  it('does NOT append token when apiToken is undefined', async () => {
+    const ws = createRuntimeWs(
+      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+      () => {},
+      () => {},
+      { fetchSnapshot: async () => {} },
+    )
+    await ws.start()
+    expect(FakeWebSocket.instances[0].url).toBe('ws://127.0.0.1:8000/ws/snapshot')
+    ws.stop()
+  })
+})

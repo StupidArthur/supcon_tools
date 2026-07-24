@@ -68,6 +68,39 @@ func (b *RealtimeRuntimeBinding) GetSession() (*realtime.RealtimeRunSession, err
 	return &cp, nil
 }
 
+// RealtimeConnectionInfo 暴露给前端的当前运行期连接信息。
+// 关键约束：
+//   - APIToken 仅在内存中，不进入任何持久化记录（session.json / metadata.json / 日志）。
+//   - 没有运行会话时调用方会得到空字符串 token，前端必须把它视为"未运行"。
+//   - 进入此结构体的 token 与当前 run 的 process 一一对应；进程退出 / 异常停止会被清空。
+type RealtimeConnectionInfo struct {
+	APIHost     string `json:"apiHost"`
+	APIPort     int    `json:"apiPort"`
+	RuntimeName string `json:"runtimeName"`
+	APIToken    string `json:"apiToken"`
+}
+
+// GetConnectionInfo 返回当前实时运行的连接信息（host / port / runtimeName / token）。
+// 必须在 session 活跃时调用才返回有效 token；进程启动失败 / 退出 / 停止后 token 为空，
+// 前端不得用空 token 继续访问 REST / WS。
+func (b *RealtimeRuntimeBinding) GetConnectionInfo() (RealtimeConnectionInfo, error) {
+	b.mu.Lock()
+	s := b.current
+	b.mu.Unlock()
+	if s == nil {
+		return RealtimeConnectionInfo{}, fmt.Errorf("没有运行会话")
+	}
+	if !b.system.Status().Running {
+		return RealtimeConnectionInfo{}, fmt.Errorf("实时进程未在运行")
+	}
+	return RealtimeConnectionInfo{
+		APIHost:     s.APIHost,
+		APIPort:     s.APIPort,
+		RuntimeName: s.RuntimeName,
+		APIToken:    CurrentAPIToken(),
+	}, nil
+}
+
 func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime.RealtimeStartOptions) (realtime.RealtimeRunSession, error) {
 	opts := options.WithDefaults()
 

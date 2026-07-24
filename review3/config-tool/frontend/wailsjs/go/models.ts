@@ -68,6 +68,24 @@ export namespace bindings {
 	        this.expires_at = source["expires_at"];
 	    }
 	}
+	export class RealtimeConnectionInfo {
+	    apiHost: string;
+	    apiPort: number;
+	    runtimeName: string;
+	    apiToken: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RealtimeConnectionInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiHost = source["apiHost"];
+	        this.apiPort = source["apiPort"];
+	        this.runtimeName = source["runtimeName"];
+	        this.apiToken = source["apiToken"];
+	    }
+	}
 	export class ForceState {
 	    forces: Record<string, ForceEntry>;
 	    tags: string[];

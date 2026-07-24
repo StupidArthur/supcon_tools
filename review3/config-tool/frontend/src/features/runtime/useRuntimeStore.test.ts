@@ -173,4 +173,60 @@ describe('useRuntimeStore', () => {
     useRuntimeStore.getState().disconnect()
     expect(useRuntimeStore.getState().connectionState).toBe('idle')
   })
+
+  it('setEndpoint with token stores token in-memory', () => {
+    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000, 'in-memory-token')
+    const s = useRuntimeStore.getState()
+    expect(s.apiToken).toBe('in-memory-token')
+    expect(s.apiHost).toBe('127.0.0.1')
+    expect(s.apiPort).toBe(8000)
+  })
+
+  it('setEndpoint without token keeps token empty', () => {
+    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000)
+    expect(useRuntimeStore.getState().apiToken).toBe('')
+  })
+
+  it('connect() passes Authorization header when apiToken is set', async () => {
+    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000, 'in-memory-token')
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/api/status')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            instance_name: 'real_runtime',
+            mode: 'REALTIME',
+            cycle_count: 0,
+            sim_time: 0,
+            cycle_time: 0.5,
+            safe_state: false,
+            consecutive_failures: 0,
+          }),
+        })
+      }
+      if (url.endsWith('/snapshot')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ cycle_count: 0, sim_time: 0 }),
+        })
+      }
+      if (url.endsWith('/meta')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ instance_name: 'real_runtime', meta: {}, statistics: {} }),
+        })
+      }
+      return Promise.reject(new Error('unexpected url: ' + url))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await useRuntimeStore.getState().connect()
+
+    const statusCall = fetchMock.mock.calls.find((c) => (c[0] as string).endsWith('/api/status'))
+    expect(statusCall).toBeDefined()
+    const headers = statusCall![1]?.headers as Record<string, string> | undefined
+    expect(headers?.Authorization).toBe('Bearer in-memory-token')
+  })
 })

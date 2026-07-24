@@ -399,6 +399,60 @@ def test_token_auth_wrong_token(binding):
         engine_api.set_api_token(None)
 
 
+def test_token_auth_ws_rejects_without_token(binding):
+    """WS 鉴权：缺少 token query 必须 close 4401。"""
+    from fastapi.testclient import TestClient
+
+    engine_api.set_api_token("secret-token")
+    try:
+        client = TestClient(engine_api.app)
+        # 缺 token：accept 后立即 close 4401
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/snapshot") as ws:
+                ws.receive_json()
+        assert exc.value.code == 4401
+    finally:
+        engine_api.set_api_token(None)
+
+
+def test_token_auth_ws_rejects_wrong_token(binding):
+    """WS 鉴权：错误 token 必须 close 4401。"""
+    from fastapi.testclient import TestClient
+    engine_api.set_api_token("secret-token")
+    try:
+        client = TestClient(engine_api.app)
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/snapshot?token=wrong") as ws:
+                ws.receive_json()
+        assert exc.value.code == 4401
+    finally:
+        engine_api.set_api_token(None)
+
+
+def test_token_auth_ws_accepts_correct_token(binding):
+    """WS 鉴权：正确 token 必须连接到 broadcaster；缺帧时收到 heartbeat。"""
+    from fastapi.testclient import TestClient
+
+    engine_api.set_api_token("secret-token")
+    try:
+        client = TestClient(engine_api.app)
+        with client.websocket_connect("/ws/snapshot?token=secret-token") as ws:
+            # 头 1s 没数据：收 heartbeat
+            msg = ws.receive_json()
+            assert msg == {"_heartbeat": True, "ts": msg["ts"]}
+    finally:
+        engine_api.set_api_token(None)
+
+
+def test_token_disabled_when_none(binding):
+    """set_api_token(None) 时鉴权应当被整体关闭（保留 DATAFACTORY_NO_AUTH 之外的开发态）。"""
+    from fastapi.testclient import TestClient
+    engine_api.set_api_token(None)
+    client = TestClient(engine_api.app)
+    r = client.get("/api/status")
+    assert r.status_code == 200
+
+
 def test_snapshot_contains_required_tags(binding):
     """snapshot 必须包含 contracts.md §9.3 列出的所有必需位号。"""
     snap = engine_api.api_snapshot("second_order_tank")
