@@ -31,6 +31,12 @@ interface RealtimeRunSessionState {
   session: RealtimeRunSession | null
   loading: boolean
   error: string | null
+  /**
+   * bootstrapGen：bootstrap effect 的单调递增代数。
+   * 每次 RealtimeRunPage effect 启动时 ++，await 之后必须先检查代数一致；
+   * 不一致则放弃本次 effect 副作用（防止旧 dfStatus / session 的过期错误写入）。
+   */
+  bootstrapGen: number
   refresh: () => Promise<void>
   startProject: (projectId: string, options: RealtimeStartOptions) => Promise<boolean>
   startSingleYaml: (configPath: string, options: RealtimeStartOptions) => Promise<boolean>
@@ -42,6 +48,7 @@ export const useRealtimeRunSessionStore = create<RealtimeRunSessionState>((set) 
   session: null,
   loading: false,
   error: null,
+  bootstrapGen: 0,
 
   refresh: async () => {
     try {
