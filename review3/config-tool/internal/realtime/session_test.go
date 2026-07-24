@@ -236,3 +236,83 @@ func TestProcessAlive_FreshChild(t *testing.T) {
 		t.Errorf("fresh child PID %d should be alive", cmd.Process.Pid)
 	}
 }
+
+// 阶段 H 收口：CleanupOrphans 不得删除 stop-failed / recovery-required 记录。
+func TestCleanupOrphans_PreservesRecoveryRequiredRecord(t *testing.T) {
+	tmp := t.TempDir()
+	sm := NewSessionManager(tmp)
+
+	// 创建一个 recovery-required 状态的 session（owner/child 都死亡）
+	sessionID, dir, err := sm.CreateSessionDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := SessionRecord{
+		SessionID: sessionID,
+		OwnerPid:  999999, // 不存在的 pid
+		ChildPid:  999998,
+		State:     StateRecoveryRequired,
+	}
+	if err := sm.WriteSessionJSON(dir, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	// CleanupOrphans 不得删除 recovery-required 记录
+	sm.CleanupOrphans("")
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("recovery-required session dir must be preserved: %v", err)
+	}
+}
+
+// 阶段 H 收口：CleanupOrphans 不得删除 stop-failed 记录。
+func TestCleanupOrphans_PreservesStopFailedRecord(t *testing.T) {
+	tmp := t.TempDir()
+	sm := NewSessionManager(tmp)
+
+	sessionID, dir, err := sm.CreateSessionDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := SessionRecord{
+		SessionID: sessionID,
+		OwnerPid:  999999,
+		ChildPid:  999998,
+		State:     StateStopFailed,
+	}
+	if err := sm.WriteSessionJSON(dir, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	sm.CleanupOrphans("")
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("stop-failed session dir must be preserved: %v", err)
+	}
+}
+
+// 阶段 H 收口：CleanupOrphans 正常清理普通死亡孤儿。
+func TestCleanupOrphans_RemovesOrdinaryDeadSession(t *testing.T) {
+	tmp := t.TempDir()
+	sm := NewSessionManager(tmp)
+
+	sessionID, dir, err := sm.CreateSessionDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := SessionRecord{
+		SessionID: sessionID,
+		OwnerPid:  999999,
+		ChildPid:  999998,
+		State:     StateRunning, // 普通状态
+	}
+	if err := sm.WriteSessionJSON(dir, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	sm.CleanupOrphans("")
+
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("ordinary dead session dir must be removed, got: %v", err)
+	}
+}

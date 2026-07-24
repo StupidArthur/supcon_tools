@@ -545,3 +545,187 @@ func TestCleanup_StopFailurePreservesRecoverableChildRecord(t *testing.T) {
 		t.Errorf("clean Cleanup 后 GetSession 必须为 nil，实际 %+v", s2)
 	}
 }
+
+// 阶段 H 收口：Stop 事务期间 exit callback 触发 → callback 不得争抢清理。
+// 确定性验证：orchestratedStop=true 时 onSystemProcessExit 立即返回。
+func TestStop_ArchiveFailureDelayedExitCallbackPreservesRecord(t *testing.T) {
+	var archiveStopCount atomic.Int32
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	apiMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		archiveStopCount.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("flush failed"))
+	})
+	apiSrv := httptest.NewServer(apiMux)
+	defer apiSrv.Close()
+	ports := strings.TrimPrefix(apiSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(filepath.Join(tmp, "DataFactory.exe"), []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "delayed-cb", nil
+	})
+
+	storeRoot := filepath.Join(tmp, "store")
+	os.MkdirAll(storeRoot, 0o755)
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompilerShutdownTest{})
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+
+	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "delayed-cb",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionDir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(sessionDir)
+	if len(entries) == 0 {
+		t.Fatal("session dir must exist")
+	}
+	preDir := filepath.Join(sessionDir, entries[0].Name())
+
+	// Stop：archive stop 失败，system stop 成功
+	// exit callback 在 system.Stop() 内部触发，此时 orchestratedStop=true
+	stopErr := binding.Stop()
+	if stopErr == nil {
+		t.Fatal("Stop must return archive error")
+	}
+
+	// 关键：session dir 必须保留（Stop 事务写入 stop-failed）
+	if _, err := os.Stat(preDir); err != nil {
+		t.Errorf("session dir must be preserved after archive failure: %v", err)
+	}
+	rec, ok := sessionMgr.ReadSessionRecord(preDir)
+	if !ok {
+		t.Fatal("session.json must be readable")
+	}
+	if rec.State != realtime.StateStopFailed {
+		t.Errorf("state must be stop-failed, got %s", rec.State)
+	}
+	// archive stop 只被调用一次（Stop 事务内），exit callback 不得重复调用
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Errorf("archive stop must be called exactly once, got %d", got)
+	}
+	// 内存 session 必须清除
+	s, _ := binding.GetSession()
+	if s != nil {
+		t.Errorf("GetSession must be nil after Stop, got %+v", s)
+	}
+}
+
+// 阶段 H 收口：异常退出 + archive 失败 → 保留 recovery-required 记录。
+func TestUnexpectedExit_ArchiveFailurePreservesRecoveryRecord(t *testing.T) {
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	apiMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("crash flush failed"))
+	})
+	apiSrv := httptest.NewServer(apiMux)
+	defer apiSrv.Close()
+	ports := strings.TrimPrefix(apiSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(filepath.Join(tmp, "DataFactory.exe"), []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(1))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "unexpected-exit", nil
+	})
+
+	storeRoot := filepath.Join(tmp, "store")
+	os.MkdirAll(storeRoot, 0o755)
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompilerShutdownTest{})
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "unexpected-exit",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionDir := filepath.Join(tmp, "sessions")
+	entries, _ := os.ReadDir(sessionDir)
+	if len(entries) == 0 {
+		t.Fatal("session dir must exist")
+	}
+	preDir := filepath.Join(sessionDir, entries[0].Name())
+
+	// 等待进程自动退出 + exit callback 完成写入
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		s, _ := binding.GetSession()
+		if s == nil {
+			// current 已清除，但 exit callback 可能还在写 recovery record
+			// 等待 session.json 状态变为 recovery-required
+			rec, ok := sessionMgr.ReadSessionRecord(preDir)
+			if ok && rec.State == realtime.StateRecoveryRequired {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// 内存 session 必须清除
+	s, _ := binding.GetSession()
+	if s != nil {
+		t.Errorf("GetSession must be nil after unexpected exit, got %+v", s)
+	}
+	// token 必须清除
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("token must be empty after unexpected exit, got %q", got)
+	}
+	// session dir 必须保留（recovery-required）
+	if _, err := os.Stat(preDir); err != nil {
+		t.Errorf("session dir must be preserved: %v", err)
+	}
+	rec, ok := sessionMgr.ReadSessionRecord(preDir)
+	if !ok {
+		t.Fatal("session.json must be readable")
+	}
+	if rec.State != realtime.StateRecoveryRequired {
+		t.Errorf("state must be recovery-required, got %s", rec.State)
+	}
+}

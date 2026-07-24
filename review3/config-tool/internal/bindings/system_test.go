@@ -1932,17 +1932,20 @@ func TestTerminate_ConcurrentCallsNoPanicNoRace(t *testing.T) {
 		currentAttempts atomic.Int32
 		maxAttempts     atomic.Int32
 	)
-	b.terminateAttemptHook = func() {
-		cur := currentAttempts.Add(1)
-		for {
-			old := maxAttempts.Load()
-			if cur <= old || maxAttempts.CompareAndSwap(old, cur) {
-				break
+	b.terminateAttemptHook = func(enter bool) {
+		if enter {
+			cur := currentAttempts.Add(1)
+			for {
+				old := maxAttempts.Load()
+				if cur <= old || maxAttempts.CompareAndSwap(old, cur) {
+					break
+				}
 			}
+			// 模拟一点工作量，增加竞态窗口
+			time.Sleep(5 * time.Millisecond)
+		} else {
+			currentAttempts.Add(-1)
 		}
-		// 模拟一点工作量，增加竞态窗口
-		time.Sleep(5 * time.Millisecond)
-		currentAttempts.Add(-1)
 	}
 
 	cfg := filepath.Join(tmp, "test.yaml")

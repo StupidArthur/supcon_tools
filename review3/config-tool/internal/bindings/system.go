@@ -147,10 +147,11 @@ type SystemBinding struct {
 	// 同时保持 Status().Running=true（不修改 b.proc 状态）。
 	// 生产代码不要设置此字段。
 	terminateErrorOverride error
-	// terminateAttemptHook 仅用于测试：每次真正进入 attemptTermination 前调用。
-	// 用于验证并发串行化（maxConcurrentAttempts == 1）。
+	// terminateAttemptHook 仅用于测试：在实际 attemptTermination 前后调用。
+	// hook(true) = 进入终止尝试；hook(false) = 退出终止尝试。
+	// 不被 stopMu 包住，真正验证 attemptTermination 不并发。
 	// 生产代码不要设置此字段。
-	terminateAttemptHook func()
+	terminateAttemptHook func(enter bool)
 }
 
 // NewSystemBinding 创建系统绑定
@@ -649,9 +650,6 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 		proc.stopMu.Lock()
 	}
 	proc.stopInProgress = true
-	if b.terminateAttemptHook != nil {
-		b.terminateAttemptHook()
-	}
 	proc.stopMu.Unlock()
 
 	defer func() {
@@ -681,7 +679,14 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 	}
 
 	// 第一次：Interrupt；等待；必要时 Kill；再等待。
+	// hook 包住实际终止区间（不在 stopMu 内），真正验证不并发。
+	if b.terminateAttemptHook != nil {
+		b.terminateAttemptHook(true)
+	}
 	err := proc.attemptTermination(stopTimeout)
+	if b.terminateAttemptHook != nil {
+		b.terminateAttemptHook(false)
+	}
 	proc.stopMu.Lock()
 	proc.stopErr = err
 	proc.stopMu.Unlock()

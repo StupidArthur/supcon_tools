@@ -39,6 +39,11 @@ type RealtimeRuntimeBinding struct {
 	curDir        string
 	archiveActive bool // 当前 session 是否已成功启动 /api/archive/start
 
+	// 阶段 H 收口：orchestratedStop 标识 Stop() 事务正在执行。
+	// 受 b.mu 保护。onSystemProcessExit 检测到此标志时不得争抢状态清理，
+	// 由 Stop() 事务统一负责 archive stop / session dir / 内存状态。
+	orchestratedStop bool
+
 	// 阶段 B2 收口：exitListenerOnce 保证 SetContext 多次调用只注册一次监听器，
 	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
 	exitListenerOnce sync.Once
@@ -75,8 +80,16 @@ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
 //   - 删除 session 临时目录
 //   - 保留 system.lastError 供前端 GetSession 读取
 //   - 幂等：多次调用安全
+//
+// 阶段 H 收口：如果 Stop() 事务正在执行（orchestratedStop=true），
+// 本回调不得争抢状态清理 —— 由 Stop() 统一负责 archive/session/内存。
 func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bool) {
 	b.mu.Lock()
+	if b.orchestratedStop {
+		// Stop() 事务正在执行，不干预。
+		b.mu.Unlock()
+		return
+	}
 	s := b.current
 	dir := b.curDir
 	archiveActive := b.archiveActive
@@ -84,12 +97,23 @@ func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bo
 	b.curDir = ""
 	b.archiveActive = false
 	b.mu.Unlock()
+
 	if s != nil {
-		// 状态置为 exited / failed，由调用方按需读取
 		s.State = realtime.StateExited
-		// 进程已退出，archive stop 调用大概率失败；只在 archive 真的启用时尝试。
 		if archiveActive {
-			_ = b.stopArchiveOnShutdown(*s)
+			archiveErr := b.stopArchiveOnShutdown(*s)
+			if archiveErr != nil {
+				// archive flush 失败：保留 session dir 作为恢复记录
+				if dir != "" {
+					rec, _ := b.sessionManager.ReadSessionRecord(dir)
+					rec.State = realtime.StateRecoveryRequired
+					if writeErr := b.sessionManager.WriteSessionJSON(dir, rec); writeErr != nil {
+						fmt.Fprintf(os.Stderr, "[realtime] onSystemProcessExit: write recovery record failed: %v\n", writeErr)
+					}
+				}
+				fmt.Fprintf(os.Stderr, "[realtime] onSystemProcessExit: archive stop failed, recovery record preserved: %v\n", archiveErr)
+				return // 不删除 session dir
+			}
 		}
 	}
 	if dir != "" {
@@ -585,7 +609,16 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	dir := b.curDir
 	sess := b.current
 	archiveActive := b.archiveActive
+	// 阶段 H 收口：标记 Stop 事务开始，阻止 onSystemProcessExit 争抢清理。
+	b.orchestratedStop = true
 	b.mu.Unlock()
+
+	// 事务结束后必须清除标志（无论成功/失败）。
+	defer func() {
+		b.mu.Lock()
+		b.orchestratedStop = false
+		b.mu.Unlock()
+	}()
 
 	// 阶段 C4 收口：归档停止优先（保证 SQLite / jsonl flush / 句柄关闭），
 	// 仅在确实启用归档时调用。带 Bearer 鉴权。
@@ -616,7 +649,9 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 					// 写 stop-failed 状态
 					rec, _ := b.sessionManager.ReadSessionRecord(dir)
 					rec.State = realtime.StateStopFailed
-					_ = b.sessionManager.WriteSessionJSON(dir, rec)
+					if writeErr := b.sessionManager.WriteSessionJSON(dir, rec); writeErr != nil {
+						fmt.Fprintf(os.Stderr, "[realtime] Stop: write stop-failed record failed: %v\n", writeErr)
+					}
 					// 保留 current / curDir，标记 session.state 可见
 					// 关键：archiveActive 使用 archivePending（不恢复旧值）
 					stamped := *sess
@@ -645,12 +680,13 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 
 	// 阶段 H 收口：archive flush 失败时保留 session dir 作为诊断记录。
 	// 进程已死但 archive 数据可能不完整，保留 session.json 供后续分析。
-	// 下次启动由 CleanupOrphans 机制处理该目录。
+	// 下次启动由 CleanupOrphans 机制处理该目录（stop-failed 状态不被自动清理）。
 	if archiveErr != nil {
-		// 标记 stop-failed 状态，保留目录
 		rec, _ := b.sessionManager.ReadSessionRecord(dir)
 		rec.State = realtime.StateStopFailed
-		_ = b.sessionManager.WriteSessionJSON(dir, rec)
+		if writeErr := b.sessionManager.WriteSessionJSON(dir, rec); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "[realtime] Stop: write archive-failure record failed: %v\n", writeErr)
+		}
 	} else {
 		b.sessionManager.RemoveSessionDir(dir)
 	}
@@ -659,8 +695,6 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	b.curDir = ""
 	b.archiveActive = false
 	b.mu.Unlock()
-	// 归档停止错误不影响 Stop 整体成功（用户主动停止语义），但应当作为信号返回，
-	// 由调用方决定是否向用户展示。
 	if archiveErr != nil {
 		return fmt.Errorf("归档停止失败: %v", archiveErr)
 	}

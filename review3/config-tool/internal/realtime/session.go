@@ -188,6 +188,9 @@ func (sm *SessionManager) RemoveSessionDir(dir string) {
 
 // CleanupOrphans removes leftover session dirs whose owner/child process is not
 // alive, skipping activeDir.
+// 阶段 H 收口：stop-failed / recovery-required 状态的记录不被自动清理，
+// 保留为诊断证据。只有普通状态（running/preparing/starting 等）且 owner、child
+// 都死亡的孤儿记录才能自动清理。
 func (sm *SessionManager) CleanupOrphans(activeDir string) {
 	entries, err := os.ReadDir(sm.root)
 	if err != nil {
@@ -204,6 +207,10 @@ func (sm *SessionManager) CleanupOrphans(activeDir string) {
 		rec, ok := sm.readRecord(dir)
 		if !ok {
 			sm.RemoveSessionDir(dir)
+			continue
+		}
+		// 保留失败/恢复记录作为诊断证据
+		if rec.State == StateStopFailed || rec.State == StateRecoveryRequired {
 			continue
 		}
 		if !processAlive(rec.OwnerPid) && !processAlive(rec.ChildPid) {
