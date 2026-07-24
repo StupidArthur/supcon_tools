@@ -123,6 +123,11 @@ type SystemBinding struct {
 	logLines    []string
 	maxLogLines int
 
+	// 进程退出监听器（notifyOnExit 回调列表）。在 monitorProcess 检测到进程退出时调用，
+	// 监听器逻辑必须轻量、非阻塞；用于 RealtimeRuntimeBinding 清理 session。
+	exitMu       sync.Mutex
+	exitListeners []func(exitCode int, normalStop bool)
+
 	// 可注入的依赖（用于测试）
 	commandFactory    commandFactory
 	readinessChecker  readinessChecker
@@ -143,6 +148,42 @@ func NewSystemBinding() *SystemBinding {
 		readyPollInterval: 500 * time.Millisecond,
 		readyTimeout:      10 * time.Second,
 		stopTimeout:       5 * time.Second,
+	}
+}
+
+// AddExitListener 注册进程退出回调。当前 process 退出时（任意原因）调用。
+// 回调在持有 monitorProcess 同一 goroutine 内调用；必须非阻塞。
+// 返回值：可用于 RemoveExitListener 的句柄。
+func (b *SystemBinding) AddExitListener(fn func(exitCode int, normalStop bool)) func() {
+	b.exitMu.Lock()
+	defer b.exitMu.Unlock()
+	b.exitListeners = append(b.exitListeners, fn)
+	i := len(b.exitListeners) - 1
+	return func() {
+		b.exitMu.Lock()
+		defer b.exitMu.Unlock()
+		if i < len(b.exitListeners) {
+			b.exitListeners[i] = func(exitCode int, normalStop bool) {}
+			// 不缩容，避免已触发回调的 index 失效
+		}
+	}
+}
+
+func (b *SystemBinding) dispatchExit(exitCode int, normalStop bool) {
+	b.exitMu.Lock()
+	listeners := make([]func(exitCode int, normalStop bool), len(b.exitListeners))
+	copy(listeners, b.exitListeners)
+	b.exitMu.Unlock()
+	for _, fn := range listeners {
+		if fn == nil {
+			continue
+		}
+		func() {
+			defer func() {
+				_ = recover() // 监听器 panic 必须不影响 monitorProcess
+			}()
+			fn(exitCode, normalStop)
+		}()
 	}
 }
 
@@ -515,8 +556,9 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
 
 	b.mu.Lock()
 	isCurrent := b.proc == proc
+	normalStop := proc.stopRequested
 	if isCurrent {
-		if proc.stopRequested {
+		if normalStop {
 			b.lastError = ""
 		} else {
 			b.lastError = formatProcessError(proc.result)
@@ -528,6 +570,11 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
 	// 进程退出（正常或异常）→ 当前 token 立即失效，避免泄漏给无效监听端。
 	if isCurrent {
 		SetCurrentAPIToken("")
+	}
+
+	// 通知会话层监听器：先于事件 emit，保证监听器先把 session 状态清干净。
+	if isCurrent {
+		b.dispatchExit(exitCode, normalStop)
 	}
 
 	// 发送事件

@@ -3,7 +3,9 @@ package realtime
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -136,6 +138,40 @@ func TestCleanupOrphansKeepsActiveAndAlive(t *testing.T) {
 	}
 }
 
+// TestCleanupOrphansChildPidAlive: 子进程 PID 仍 alive 时，目录必须保留（即使 owner 已死）。
+// 修复前 processAlive(pid)==os.Getpid() 永远等于 os.Getpid()，子进程判断必定为 false。
+// 修复后即使 owner 已死，child alive 仍保留。
+func TestCleanupOrphansChildPidAlive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows: sleep 子进程对此 case 不适用，直接跳过")
+	}
+	root := t.TempDir()
+	sm := NewSessionManager(root)
+
+	// 启动一个长跑子进程，模拟 DataFactory 子进程
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start sleep: %v", err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	}()
+
+	_, aliveChildDir, _ := sm.CreateSessionDir()
+	// owner 死亡，但 child alive → 保留
+	_ = sm.WriteSessionJSON(aliveChildDir, SessionRecord{
+		OwnerPid: 99999999,
+		ChildPid: cmd.Process.Pid,
+		State:    StateRunning,
+	})
+
+	sm.CleanupOrphans("")
+	if _, err := os.Stat(aliveChildDir); err != nil {
+		t.Fatal("alive child PID should keep dir alive even when owner dead")
+	}
+}
+
 func TestSessionJSONRoundTrip(t *testing.T) {
 	sm := NewSessionManager(t.TempDir())
 	_, dir, _ := sm.CreateSessionDir()
@@ -154,5 +190,49 @@ func TestSessionJSONRoundTrip(t *testing.T) {
 	}
 	if got.SessionID != "abc" || got.State != StateRunning {
 		t.Fatalf("round trip mismatch: %+v", got)
+	}
+}
+
+// processAlive 必须能区分：
+//   - 当前进程（owner pid）→ alive
+//   - 一个不存在的 pid → dead
+//   - pid <= 0 → dead
+//   - 启动后立即存在的子进程 → alive
+func TestProcessAlive_CurrentProcess(t *testing.T) {
+	if !processAlive(os.Getpid()) {
+		t.Fatalf("current PID must be alive: %d", os.Getpid())
+	}
+}
+
+func TestProcessAlive_NonExistent(t *testing.T) {
+	if processAlive(99999999) {
+		t.Fatal("non-existent PID must be dead")
+	}
+}
+
+func TestProcessAlive_ZeroOrNegative(t *testing.T) {
+	if processAlive(0) {
+		t.Error("pid=0 must be dead")
+	}
+	if processAlive(-1) {
+		t.Error("pid=-1 must be dead")
+	}
+}
+
+func TestProcessAlive_FreshChild(t *testing.T) {
+	// 启动一个 sleep 子进程，processAlive 应当为 true。
+	if runtime.GOOS == "windows" {
+		t.Skip("windows 子进程用不同方式获取 pid，跳过 sleep 验证")
+	}
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start sleep: %v", err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	}()
+	if !processAlive(cmd.Process.Pid) {
+		t.Errorf("fresh child PID %d should be alive", cmd.Process.Pid)
 	}
 }

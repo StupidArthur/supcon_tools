@@ -37,7 +37,32 @@ func NewRealtimeRuntimeBinding(
 
 func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
 	b.ctx = ctx
+	// 注册进程退出监听器：DataFactory 进程异常退出 / 主动 Stop / 启动期间退出
+	// 都会被 monitorProcess 异步 dispatch 到这里；用于清理 realtime session 状态。
+	b.system.AddExitListener(b.onSystemProcessExit)
 	b.sessionManager.CleanupOrphans("")
+}
+
+// onSystemProcessExit 由 SystemBinding 在 monitorProcess 内同步调用。
+// 无论进程是否正常停止，都必须：
+//   - 清空 current / curDir
+//   - 删除 session 临时目录
+//   - 保留 system.lastError 供前端 GetSession 读取
+//   - 幂等：多次调用安全
+func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bool) {
+	b.mu.Lock()
+	s := b.current
+	dir := b.curDir
+	b.current = nil
+	b.curDir = ""
+	b.mu.Unlock()
+	if s != nil {
+		// 状态置为 exited / failed，由调用方按需读取
+		s.State = realtime.StateExited
+	}
+	if dir != "" {
+		b.sessionManager.RemoveSessionDir(dir)
+	}
 }
 
 func (b *RealtimeRuntimeBinding) Cleanup() {
@@ -203,8 +228,13 @@ func (b *RealtimeRuntimeBinding) launch(
 	session.ConfigHash = st.ConfigHash
 	session.StartedAt = st.StartedAt
 	session.State = realtime.StateRunning
+	// 关键：写入真实子进程 PID，供孤儿清理 / 进程验证使用。
+	stamp := b.system.Status()
+	childPID := stamp.PID
 
-	_ = b.sessionManager.WriteSessionJSON(dir, sessionRecordFor(session))
+	rec := sessionRecordFor(session)
+	rec.ChildPid = childPID
+	_ = b.sessionManager.WriteSessionJSON(dir, rec)
 
 	if session.SourceKind == realtime.RuntimeSourceProject {
 		b.pushAlarmConfig(session)
@@ -404,4 +434,21 @@ func sessionRecordFor(s realtime.RealtimeRunSession) realtime.SessionRecord {
 		CreatedAt:          s.StartedAt,
 		State:              s.State,
 	}
+}
+
+// SetChildPid 写入真实子进程 PID（启动后由 launch 调用）。
+// 该函数保留可供外部测试 / 未来其他场景使用。
+func (b *RealtimeRuntimeBinding) SetChildPid(dir string, pid int) error {
+	if dir == "" {
+		return fmt.Errorf("session dir required")
+	}
+	if pid <= 0 {
+		return fmt.Errorf("invalid pid: %d", pid)
+	}
+	rec, ok := b.sessionManager.ReadSessionRecord(dir)
+	if !ok {
+		return fmt.Errorf("session.json missing: %s", dir)
+	}
+	rec.ChildPid = pid
+	return b.sessionManager.WriteSessionJSON(dir, rec)
 }

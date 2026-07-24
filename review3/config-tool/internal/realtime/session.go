@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -168,6 +171,12 @@ func (sm *SessionManager) WriteSessionJSON(dir string, rec SessionRecord) error 
 	return atomicWrite(filepath.Join(dir, "session.json"), data)
 }
 
+// ReadSessionRecord 读取 session.json 内容；不存在或损坏返回 (zero, false)。
+// 与 readRecord 等价但导出，供 bindings 写入 ChildPid / 状态字段使用。
+func (sm *SessionManager) ReadSessionRecord(dir string) (SessionRecord, bool) {
+	return sm.readRecord(dir)
+}
+
 func (sm *SessionManager) RemoveSessionDir(dir string) {
 	if dir == "" {
 		return
@@ -236,14 +245,60 @@ func atomicWrite(path string, data []byte) error {
 	return os.Rename(tmp, path)
 }
 
+// processAlive 判定 pid 是否仍是活动进程。
+//   - pid <= 0 视为无效/false。
+//   - Unix: 用 Signal 0（不实际发送信号，仅检查权限与存在）。
+//   - Windows: OpenProcess + GetExitCodeProcess（仍 alive 时 exit code = STILL_ACTIVE = 259）。
+//   - 单实例语义：当前 Wails 进程即 owner；DataFactory 子进程的 child pid 必须独立存活。
+//
+// 不再把非当前 PID 一律视为死亡——否则历史 session 永远被误删。
 func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	// Single-instance semantics: the current app process is always alive; any
-	// other owner pid is treated as a leftover from a previous run. Concurrent
-	// instances are not supported (single DataFactory process constraint).
-	return pid == os.Getpid()
+	if pid == os.Getpid() {
+		return true
+	}
+	return platformProcessAlive(pid)
+}
+
+// platformProcessAlive 在 Unix/Windows 下分别实现 pid 存活检查。
+// 任何底层错误（权限拒绝、句柄无效、查询失败）一律视为死亡，但不抛错。
+func platformProcessAlive(pid int) bool {
+	switch runtime.GOOS {
+	case "windows":
+		return windowsProcessAlive(pid)
+	default:
+		return unixProcessAlive(pid)
+	}
+}
+
+func unixProcessAlive(pid int) bool {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if proc == nil {
+		return false
+	}
+	// syscall.Signal(0) 仅做权限/存在检查，不真正发信号。
+	if err := proc.Signal(syscall.Signal(0)); err != nil {
+		// EPERM = 存在但权限不够（仍视为 alive）。
+		if isPermissionError(err) {
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+// isPermissionError 简化判断：底层无 unix.Permitted 类型依赖，使用字符串匹配。
+func isPermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "permission") || strings.Contains(s, "EPERM")
 }
 
 // SortedSourceIDs returns a deterministically sorted copy of source IDs.
