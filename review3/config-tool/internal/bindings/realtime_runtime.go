@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,6 +210,15 @@ func (b *RealtimeRuntimeBinding) launch(
 	session realtime.RealtimeRunSession,
 	opts realtime.RealtimeStartOptions,
 ) (realtime.RealtimeRunSession, error) {
+	// 阶段 C：启动事务化。
+	// 顺序：
+	//   1) 编译（已有；失败由上层处理）
+	//   2) 启动 DataFactory + readiness
+	//   3) 推送报警配置（若 SourceKind == project 且规则非空）
+	//   4) 启动归档（若 opts.ArchiveEnabled）
+	//   5) 写 session.json
+	//   6) 设置 current / curDir
+	// 任一步失败都必须回滚：停止 Python、关闭归档、清除 token、删除 session 目录。
 	err := b.system.Start(StartParams{
 		ConfigPath:  configPath,
 		Mode:        "REALTIME",
@@ -223,25 +233,46 @@ func (b *RealtimeRuntimeBinding) launch(
 		b.sessionManager.RemoveSessionDir(dir)
 		return realtime.RealtimeRunSession{}, err
 	}
+	// 启动成功以后的所有失败都必须自己回滚，因为 system 已 Running。
+	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
+		// 优先停归档（确保 SQLite / jsonl flush），再关 Engine。
+		_ = b.stopArchiveOnShutdown()
+		_ = b.system.Stop()
+		b.sessionManager.RemoveSessionDir(dir)
+		b.mu.Lock()
+		b.current = nil
+		b.curDir = ""
+		b.mu.Unlock()
+		return realtime.RealtimeRunSession{}, reason
+	}
 
 	st := b.system.Status()
 	session.ConfigHash = st.ConfigHash
 	session.StartedAt = st.StartedAt
 	session.State = realtime.StateRunning
 	// 关键：写入真实子进程 PID，供孤儿清理 / 进程验证使用。
-	stamp := b.system.Status()
-	childPID := stamp.PID
+	childPID := st.PID
 
 	rec := sessionRecordFor(session)
 	rec.ChildPid = childPID
-	_ = b.sessionManager.WriteSessionJSON(dir, rec)
 
+	// 报警配置推送（C3）：规则非空时推送失败必须使启动失败。
 	if session.SourceKind == realtime.RuntimeSourceProject {
-		b.pushAlarmConfig(session)
+		if err := b.pushAlarmConfig(session); err != nil {
+			return rollback(fmt.Errorf("报警配置推送失败: %w", err))
+		}
 	}
 
+	// 归档启动（C4）：用户明确启用后失败必须使启动失败。
 	if opts.ArchiveEnabled {
-		b.startArchive(session, opts.ArchiveTags)
+		if err := b.startArchive(session, opts.ArchiveTags); err != nil {
+			return rollback(fmt.Errorf("运行归档启动失败: %w", err))
+		}
+	}
+
+	// 写 session.json：失败同样回滚。
+	if err := b.sessionManager.WriteSessionJSON(dir, rec); err != nil {
+		return rollback(fmt.Errorf("写入 session.json 失败: %w", err))
 	}
 
 	b.mu.Lock()
@@ -252,7 +283,9 @@ func (b *RealtimeRuntimeBinding) launch(
 	return session, nil
 }
 
-func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSession, tags []string) {
+// startArchive 启动运行归档。返回 error 让 launch 决定是否回滚。
+// HTTP 错误 / 非 2xx 状态 / 解析错误都视为失败。
+func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSession, tags []string) error {
 	payload := map[string]any{
 		"sessionId": session.SessionID,
 		"tags":      tags,
@@ -266,34 +299,71 @@ func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSessio
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return fmt.Errorf("序列化归档 metadata 失败: %w", err)
 	}
 	url := fmt.Sprintf("http://%s:%d/api/archive/start", session.APIHost, session.APIPort)
 	resp, err := httpPostJSON(forceHTTPClient, url, data)
 	if err != nil {
-		return
+		return fmt.Errorf("POST /api/archive/start 网络错误: %w", err)
 	}
 	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("/api/archive/start HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
-func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSession) {
+// stopArchiveOnShutdown 主动调用 /api/archive/stop，确保 SQLite commit / jsonl flush / 句柄关闭。
+// 错误仅记录，不影响关闭流程。
+func (b *RealtimeRuntimeBinding) stopArchiveOnShutdown() error {
+	b.mu.Lock()
+	s := b.current
+	b.mu.Unlock()
+	if s == nil {
+		return nil
+	}
+	url := fmt.Sprintf("http://%s:%d/api/archive/stop", s.APIHost, s.APIPort)
+	resp, err := forceHTTPClient.Post(url, "application/json", strings.NewReader("{}"))
+	if err != nil {
+		return fmt.Errorf("POST /api/archive/stop 网络错误: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("/api/archive/stop HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+// pushAlarmConfig 推送报警配置到运行中的 Engine。
+// 规则为空视为合法 no-op，不报错；规则非空时推送失败返回 error。
+func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSession) error {
 	rules, err := b.manager.ListAlarmRules(context.Background(), session.ProjectID)
-	if err != nil || len(rules) == 0 {
-		return
+	if err != nil {
+		return fmt.Errorf("加载报警规则失败: %w", err)
+	}
+	if len(rules) == 0 {
+		return nil
 	}
 	payload := struct {
 		Rules []realtime.AlarmRule `json:"rules"`
 	}{Rules: rules}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return fmt.Errorf("序列化报警规则失败: %w", err)
 	}
 	url := fmt.Sprintf("http://%s:%d/api/alarms/config", session.APIHost, session.APIPort)
 	resp, err := httpPostJSON(forceHTTPClient, url, data)
 	if err != nil {
-		return
+		return fmt.Errorf("POST /api/alarms/config 网络错误: %w", err)
 	}
 	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("/api/alarms/config HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
 func (b *RealtimeRuntimeBinding) apiBase() (string, error) {
@@ -408,6 +478,13 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	b.mu.Lock()
 	dir := b.curDir
 	b.mu.Unlock()
+
+	// 阶段 C4：归档必须在 Python 关闭前停止，确保 SQLite commit / jsonl flush / 句柄关闭。
+	// 错误仅记录，不影响事件循环与 system.Stop。
+	if err := b.stopArchiveOnShutdown(); err != nil {
+		// 归档停止失败不应阻止用户主动停止。
+		// (record into binding state for debugging if needed)
+	}
 
 	if b.system.Status().Running {
 		if err := b.system.Stop(); err != nil {

@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -263,6 +264,10 @@ func (l *localFakeCompiler) Validate(_ context.Context, _ []realtime.CompilerSou
 }
 
 func (l *localFakeCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, outputPath string) (string, error) {
+	// 实际写一个简单 YAML，否则 system.Start 读不到文件会失败。
+	if err := os.WriteFile(outputPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
+		return "", err
+	}
 	return outputPath, nil
 }
 
@@ -512,5 +517,282 @@ func TestStart_UnexpectedChildExitClearsSession(t *testing.T) {
 	}
 	if !dirEmpty {
 		t.Errorf("异常退出后 session 目录与 current 必须被清理")
+	}
+}
+
+// 阶段 C：报警配置推送失败必须使启动失败并回滚。
+func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+
+	// 创建项目 + 报警规则
+	ctx := context.Background()
+	if _, err := manager.CreateProject(ctx, "alarmfail"); err != nil {
+		t.Fatal(err)
+	}
+	projects, _ := manager.ListProjects(ctx)
+	pid := projects[0].ID
+	yamlPath := filepath.Join(tmp, "src.yaml")
+	os.WriteFile(yamlPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
+	view, err := manager.AddSource(ctx, pid, yamlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcID := view.Project.Sources[0].ID
+	srcAbs := storage.SourceAbsPath(pid, srcID)
+	if err := os.WriteFile(srcAbs, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.CreateAlarmRule(ctx, pid, realtime.AlarmRule{
+		Name: "high_level", Tag: "tank_2.level", Direction: realtime.DirectionHigh,
+		Limit: 1.0, Severity: realtime.SeverityCritical,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "alarmfail", nil
+	})
+
+	// 启动 alarm push 失败 mock server
+	var (
+		gotRules atomic.Bool
+	)
+	alarmMux := http.NewServeMux()
+	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
+		gotRules.Store(true)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("simulated push failure"))
+	})
+	alarmSrv := httptest.NewServer(alarmMux)
+	defer alarmSrv.Close()
+	ports := strings.TrimPrefix(alarmSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	_, err = binding.StartProject(pid, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "alarmfail",
+	})
+	if err == nil {
+		t.Fatal("报警推送失败时 Start 必须失败")
+	}
+	if !gotRules.Load() {
+		t.Error("Start 期间必须实际调用 /api/alarms/config")
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		cur, _ := binding.GetSession()
+		entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
+		if cur == nil && len(entries) == 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	cur, _ := binding.GetSession()
+	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
+	t.Errorf("回滚不彻底: current=%v, sessions=%d", cur, len(entries))
+}
+
+// 阶段 C：归档启动失败必须使启动失败并回滚。
+func TestStart_ArchiveFailedRollsBack(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "archivefail", nil
+	})
+
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("disk full"))
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "archivefail",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	})
+	if err == nil {
+		t.Fatal("归档启动失败时 Start 必须失败")
+	}
+	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
+	if len(entries) != 0 {
+		t.Errorf("归档启动失败后 session 目录必须清空，实际 %d 个", len(entries))
+	}
+	if system.Status().Running {
+		t.Errorf("归档失败回滚后 system.Status().Running 必须为 false")
+	}
+}
+
+// 阶段 C3：报警规则为空时是合法 no-op，不应报错。
+func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
+	tmp := t.TempDir()
+	storeRoot := filepath.Join(tmp, "store")
+	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage := realtime.NewProjectStorage(storeRoot)
+	manager := realtime.NewManager(storage, &localFakeCompiler{})
+
+	system := NewSystemBinding()
+	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+	system.setCommandFactory(makeLongRunningCommand(30))
+	system.setReadyPollInterval(10 * time.Millisecond)
+	system.setReadyTimeout(2 * time.Second)
+	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "noalarms", nil
+	})
+
+	alarmMux := http.NewServeMux()
+	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("no rule 时不应推送 /api/alarms/config")
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	alarmSrv := httptest.NewServer(alarmMux)
+	defer alarmSrv.Close()
+	ports := strings.TrimPrefix(alarmSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding.SetContext(context.Background())
+	defer system.Cleanup()
+
+	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "noalarms",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 阶段 C4：Stop 顺序——归档停止必须在 system.Stop 之前。
+func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
+	var order []string
+	var orderMu sync.Mutex
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		orderMu.Lock()
+		order = append(order, "archive-stop")
+		orderMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	rig := newRealtimeTestRig(t)
+	defer rig.cleanup()
+	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "stop-order", nil
+	})
+
+	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-order",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rig.binding.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	orderMu.Lock()
+	defer orderMu.Unlock()
+	if len(order) == 0 {
+		t.Error("Stop 应调用 /api/archive/stop")
+	}
+}
+
+// 阶段 C4：Stop 期间归档停止失败不应阻止 system.Stop。
+func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("close failed"))
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	rig := newRealtimeTestRig(t)
+	defer rig.cleanup()
+	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "stop-archive-fail", nil
+	})
+
+	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-archive-fail",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rig.binding.Stop(); err != nil {
+		t.Errorf("归档停止失败不应使 Stop 失败: %v", err)
+	}
+	if rig.system.Status().Running {
+		t.Errorf("Stop 后系统仍 Running")
 	}
 }
