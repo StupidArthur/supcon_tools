@@ -16,6 +16,8 @@ const OVERSCAN = 8
 
 export function RuntimeTagTable() {
   const rawSnapshot = useRuntimeStore((s) => s.rawSnapshot)
+  const latestFrame = useRuntimeStore((s) => s.latestFrame)
+  const tagCatalog = useRuntimeStore((s) => s.tagCatalog)
   const connectionState = useRuntimeStore((s) => s.connectionState)
   const stale = useRuntimeStore((s) => s.stale)
   const apiHost = useRuntimeStore((s) => s.apiHost)
@@ -49,17 +51,35 @@ export function RuntimeTagTable() {
     return () => clearInterval(id)
   }, [connectionState, refreshForces])
 
+  // 阶段 D4 收口：位号表的"权威行列表"必须来自 tagCatalog（启动后已加载），
+  // 不能从 rawSnapshot 派生。rawSnapshot 在订阅模式下只含当前可见 tag + 元数据，
+  // 若以它为行源会产生自我过滤闭环（订阅 → 缩窄 rawSnapshot → 表行消失 → 永不滚动到）。
+  // 行值则从 latestFrame.values[tag] / rawSnapshot[tag] 读取，没有时显示 '—'，
+  // 绝不能因此把 tag 从表里删掉。
+  const numericCatalog = useMemo(() => {
+    // 取 numeric tag；再以 validTags（来自 /api/force 校验）做交集，
+    // 避免显示后端实际不接受 force / override 的字段。
+    const numeric = tagCatalog.filter((t) => t.dataType === 'number').map((t) => t.name)
+    if (validTags === null) return numeric
+    const set = new Set(validTags)
+    return numeric.filter((n) => set.has(n))
+  }, [tagCatalog, validTags])
+
   const tags = useMemo(() => {
-    if (!rawSnapshot) return []
-    const allowed = validTags ? new Set(validTags) : null
-    const entries = Object.entries(rawSnapshot)
-      .filter(([k, v]) => typeof v === 'number' && (allowed === null || allowed.has(k)))
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => a.name.localeCompare(b.name))
+    const entries = numericCatalog.map((name) => {
+      // 优先 latestFrame（阶段 6 通用 frame，包含全部订阅 tag），其次 rawSnapshot
+      let value: unknown = null
+      if (latestFrame && Object.prototype.hasOwnProperty.call(latestFrame.values, name)) {
+        value = latestFrame.values[name]
+      } else if (rawSnapshot && Object.prototype.hasOwnProperty.call(rawSnapshot, name)) {
+        value = rawSnapshot[name]
+      }
+      return { name, value }
+    })
     if (!filter) return entries
     const lower = filter.toLowerCase()
     return entries.filter((e) => e.name.toLowerCase().includes(lower))
-  }, [rawSnapshot, filter, validTags])
+  }, [numericCatalog, latestFrame, rawSnapshot, filter])
 
   const visibleTags = useMemo(() => {
     const total = tags.length
@@ -73,30 +93,28 @@ export function RuntimeTagTable() {
     return out
   }, [tags, scrollTop])
 
-  // 阶段 D4：滚动 / 过滤变化 → 防抖注册 tag-table 订阅。
-  // 关键约束：
-  //   - 卸载 / activeDir 切换时必须 unregisterSubscription，避免遗留 source。
-  //   - filter 为空 + 无可见 tag 时，传 null（"全量"），让其它 source（趋势 / dashboard）继续生效。
-  //   - 防抖：连续滚动只在静止 100ms 后才发一次 registerSubscription 调用。
+  // 阶段 D4 收口：拆成两个 effect。
+  // 1) visibleTags 变化时：debounce 后只调用 registerSubscription。
+  //    cleanup 仅取消 pending 计时器，不会触发 unregister，避免滚动时
+  //    立刻发送一次"无 tagTable"的 subscribe 消息再重发。
+  // 2) 组件卸载时：unregisterSubscription 一次。
+  // 空可见集合显式注册 []（"我订阅空集，server 只回元数据"），不要用 null
+  // 让聚合器误把 tagTable 视为"缺席"。
   useEffect(() => {
-    const debounceId = setTimeout(() => {
-      const visibleNames = visibleTags.map((v) => v.tag.name).filter((n) => typeof n === 'string')
-      // 如果表是空的（无 rawSnapshot / 无 filter match）则传 null（"我不要任何 tag"）
-      // 让 computeSubscriptionUnion 在 store 内合并时不会因 tag-table 占一个空数组
-      // 而错把 union 锁到 []。
-      const payload: string[] | null = visibleNames.length === 0 ? null : visibleNames
+    const visibleNames = visibleTags.map((v) => v.tag.name).filter((n) => typeof n === 'string')
+    const id = setTimeout(() => {
       try {
-        registerSubscription('tagTable', payload)
+        registerSubscription('tagTable', visibleNames)
       } catch (e) {
         setForceError(String(e))
       }
     }, SCROLL_SUBSCRIPTION_DEBOUNCE_MS)
-    return () => {
-      clearTimeout(debounceId)
-      // 卸载 / deps 变化时主动注销，确保离开该页面后 union 不再包含本 source。
-      unregisterSubscription('tagTable')
-    }
-  }, [visibleTags, registerSubscription, unregisterSubscription])
+    return () => clearTimeout(id)
+  }, [visibleTags, registerSubscription])
+
+  useEffect(() => {
+    return () => unregisterSubscription('tagTable')
+  }, [unregisterSubscription])
 
   const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {
     setForceError(null)
@@ -125,7 +143,9 @@ export function RuntimeTagTable() {
     return n
   }
 
-  if (!rawSnapshot) {
+  // 即便 rawSnapshot 还没有，tagCatalog 也可能已加载；位号表可以基于 catalog 显示。
+  // 完全没数据时仍然显示空状态。
+  if (tagCatalog.length === 0 && !rawSnapshot) {
     return (
       <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground" data-testid="tag-table-empty">
         未运行。启动实时工程后此处显示位号表。
@@ -136,13 +156,13 @@ export function RuntimeTagTable() {
   const getUaValue = (name: string, runtimeValue: unknown): string => {
     const force = forces[name]
     if (!force || force.mode === 'follow') {
-      return typeof runtimeValue === 'number' ? runtimeValue.toFixed(4) : String(runtimeValue ?? '—')
+      return typeof runtimeValue === 'number' ? runtimeValue.toFixed(4) : '—'
     }
     if (force.mode === 'zero') return '0.0000'
     if (force.mode === 'fixed' || force.mode === 'hold') {
       return typeof force.value === 'number' ? force.value.toFixed(4) : '—'
     }
-    return typeof runtimeValue === 'number' ? runtimeValue.toFixed(4) : String(runtimeValue ?? '—')
+    return typeof runtimeValue === 'number' ? runtimeValue.toFixed(4) : '—'
   }
 
   const getForceLabel = (name: string): string => {
@@ -193,15 +213,17 @@ export function RuntimeTagTable() {
           {visibleTags.map(({ tag, index }) => (
             <div
               key={tag.name}
+              data-testid="tag-table-row"
+              data-tag-name={tag.name}
               className="absolute grid w-full grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center border-b border-border/50 text-xs"
               style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT }}
             >
               <div className="truncate px-3 font-mono">{tag.name}</div>
               <div className="px-3 text-right font-mono">
-                {typeof tag.value === 'number' ? tag.value.toFixed(4) : String(tag.value ?? '—')}
+                {typeof tag.value === 'number' ? tag.value.toFixed(4) : '—'}
               </div>
               <div className="px-3 text-right font-mono">{getUaValue(tag.name, tag.value)}</div>
-              <div className="px-3 text-center">
+              <div className="text-center">
                 <span className={forces[tag.name] ? 'text-amber-700' : 'text-muted-foreground'}>
                   {getForceLabel(tag.name)}
                 </span>
@@ -213,7 +235,7 @@ export function RuntimeTagTable() {
                       type="button"
                       onClick={() => void handleClearForce(tag.name)}
                       className="rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-secondary"
-                      title="恢复跟随"
+                      data-testid="force-clear"
                     >
                       ↺
                     </button>
@@ -229,7 +251,6 @@ export function RuntimeTagTable() {
                           void handleForce(tag.name, 'hold', undefined, dur)
                         }}
                         className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                        title="保持当前输出（后端原子捕获）"
                       >
                         H
                       </button>
@@ -243,7 +264,6 @@ export function RuntimeTagTable() {
                           void handleForce(tag.name, 'zero', undefined, dur)
                         }}
                         className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                        title="置零"
                       >
                         0
                       </button>
@@ -261,7 +281,6 @@ export function RuntimeTagTable() {
                           void handleForce(tag.name, 'fixed', fv, dur)
                         }}
                         className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
-                        title="固定值"
                       >
                         F
                       </button>
