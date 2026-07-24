@@ -99,9 +99,18 @@ type managedProcess struct {
 
 	// 取消 ready 等待
 	cancelReady   context.CancelFunc
-	stopOnce      sync.Once
-	stopErr       error
 	stopRequested bool // 仅在 SystemBinding.mu 下访问
+
+	// 阶段 5-2 收口：终止可重试。
+	// - stopMu 防并发：同一时刻只有一个 goroutine 真正执行 Interrupt/Kill。
+	// - stopInProgress 标识是否有 goroutine 正在执行。
+	// - stopDone 当前 stop 完成的 channel；新一次 Stop 会等待它。
+	// - stopErr 仅在进程已经死了（proc.done 已 close）时才复用，
+	//   否则下一次 Stop 必须真正重新尝试 Interrupt/Kill。
+	stopMu          sync.Mutex
+	stopInProgress  bool
+	stopDone        chan struct{}
+	stopErr         error
 
 	// 启动时的参数
 	params     StartParams
@@ -442,6 +451,7 @@ func (b *SystemBinding) Start(params StartParams) error {
 		stdoutDone:  make(chan struct{}),
 		stderrDone:  make(chan struct{}),
 		cancelReady: cancelReady,
+		stopDone:    make(chan struct{}),
 		params:      params,
 		startedAt:   time.Now(),
 		configHash:  hash,
@@ -597,6 +607,12 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
 }
 
 // terminateProcess 终止进程
+// terminateProcess 真实地尝试停止子进程。
+//
+// 关键设计：不得用 sync.Once 永久缓存首次失败（这会禁止重试）。
+// - 防并发：stopMu 互斥；in-progress 标记 + wait channel。
+// - 缓存逻辑：仅当进程已经死了（proc.done 已 close）才返回缓存错误；
+//   进程仍存活时下一次 Stop 必须重新执行 Interrupt → Kill → wait。
 func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool) error {
 	b.mu.Lock()
 	if expectedStop {
@@ -606,60 +622,97 @@ func (b *SystemBinding) terminateProcess(proc *managedProcess, expectedStop bool
 	override := b.terminateErrorOverride
 	b.mu.Unlock()
 
+	// 测试 hook：直接返回 override，进程仍 Running；
+	// 第二次 Stop 时清除 override，真实执行 Kill/等待。
 	if override != nil {
-		// 测试 hook：直接返回 override，进程仍 Running。
+		proc.stopMu.Lock()
 		proc.stopErr = override
+		proc.stopMu.Unlock()
 		proc.cancelReady()
 		return override
 	}
 
-	proc.cancelReady()
-	proc.stopOnce.Do(func() {
-		select {
-		case <-proc.done:
-			return
-		default:
-		}
+	// 并发合并：如果另一个 goroutine 正在执行终止，等待其完成
+	// 然后基于实际进程状态决定返回值。
+	proc.stopMu.Lock()
+	if proc.stopInProgress {
+		proc.stopMu.Unlock()
+		<-proc.stopDone
+		proc.stopMu.Lock()
+	}
+	proc.stopInProgress = true
+	proc.stopMu.Unlock()
 
-		if proc.cmd.Process == nil {
-			proc.stopErr = fmt.Errorf("受管进程句柄不存在")
-			return
-		}
+	defer func() {
+		proc.stopMu.Lock()
+		proc.stopInProgress = false
+		close(proc.stopDone)
+		// 为下次 Stop 准备新的 stopDone channel
+		proc.stopDone = make(chan struct{})
+		proc.stopMu.Unlock()
+	}()
 
-		if err := proc.cmd.Process.Signal(os.Interrupt); err != nil {
-			// Windows 通常不支持 os.Interrupt；此时立即 Kill，不等待无意义的超时。
-			if killErr := proc.cmd.Process.Kill(); killErr != nil {
-				select {
-				case <-proc.done:
-					return
-				default:
-					proc.stopErr = fmt.Errorf("发送 Interrupt 失败 (%v)，Kill 也失败: %w", err, killErr)
-					return
-				}
-			}
-			if !waitForDone(proc.done, stopTimeout) {
-				proc.stopErr = fmt.Errorf("Kill 后进程未在 %s 内退出", stopTimeout)
-			}
-			return
-		}
+	// 进程已经死了：直接返回上次的错误（如果有），否则 nil
+	select {
+	case <-proc.done:
+		proc.stopMu.Lock()
+		err := proc.stopErr
+		proc.stopMu.Unlock()
+		return err
+	default:
+	}
 
-		if waitForDone(proc.done, stopTimeout) {
-			return
-		}
-		if err := proc.cmd.Process.Kill(); err != nil {
+	// 进程句柄异常
+	if proc.cmd.Process == nil {
+		err := fmt.Errorf("受管进程句柄不存在")
+		proc.stopMu.Lock()
+		proc.stopErr = err
+		proc.stopMu.Unlock()
+		return err
+	}
+
+	// 第一次：Interrupt；等待；必要时 Kill；再等待。
+	err := proc.attemptTermination(stopTimeout)
+	proc.stopMu.Lock()
+	proc.stopErr = err
+	proc.stopMu.Unlock()
+	return err
+}
+
+// attemptTermination 实际执行 Interrupt → wait → Kill → wait 序列。
+// 与 terminateProcess 分离以便单元测试。
+func (proc *managedProcess) attemptTermination(stopTimeout time.Duration) error {
+	if err := proc.cmd.Process.Signal(os.Interrupt); err != nil {
+		// Windows 通常不支持 os.Interrupt；此时立即 Kill，不等待无意义的超时。
+		if killErr := proc.cmd.Process.Kill(); killErr != nil {
 			select {
 			case <-proc.done:
-				return
+				return nil
 			default:
-				proc.stopErr = fmt.Errorf("优雅停止超时且 Kill 失败: %w", err)
-				return
+				return fmt.Errorf("发送 Interrupt 失败 (%v)，Kill 也失败: %w", err, killErr)
 			}
 		}
 		if !waitForDone(proc.done, stopTimeout) {
-			proc.stopErr = fmt.Errorf("强制 Kill 后进程未在 %s 内退出", stopTimeout)
+			return fmt.Errorf("Kill 后进程未在 %s 内退出", stopTimeout)
 		}
-	})
-	return proc.stopErr
+		return nil
+	}
+
+	if waitForDone(proc.done, stopTimeout) {
+		return nil
+	}
+	if err := proc.cmd.Process.Kill(); err != nil {
+		select {
+		case <-proc.done:
+			return nil
+		default:
+			return fmt.Errorf("优雅停止超时且 Kill 失败: %w", err)
+		}
+	}
+	if !waitForDone(proc.done, stopTimeout) {
+		return fmt.Errorf("强制 Kill 后进程未在 %s 内退出", stopTimeout)
+	}
+	return nil
 }
 
 func waitForDone(done <-chan struct{}, timeout time.Duration) bool {

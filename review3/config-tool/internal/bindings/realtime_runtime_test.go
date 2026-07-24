@@ -1095,6 +1095,76 @@ func TestStart_StopFailurePreservesSessionForRetry(t *testing.T) {
 	}
 }
 
+// 阶段 5-2 收口：进程终止可重试。
+// 关键：旧实现用 sync.Once 永久缓存第一次失败，第二次 Stop 直接返回缓存错误。
+// 新实现：仅当进程已死时才复用错误；进程仍存活时必须真实重新尝试 Interrupt/Kill。
+// 这里直接测 system.terminateProcess：第一次以 override 失败，第二次无 override
+// 必须真实 Kill。
+func TestTerminate_Retryable_RealKillAfterOverride(t *testing.T) {
+	b := NewSystemBinding()
+	tmp := t.TempDir()
+	b.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0o755)
+	// 长跑 30s
+	b.setCommandFactory(makeLongRunningCommand(30))
+	b.setReadyPollInterval(10 * time.Millisecond)
+	b.setReadyTimeout(2 * time.Second)
+	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "rt-retry", nil
+	})
+
+	cfg := filepath.Join(tmp, "test.yaml")
+	os.WriteFile(cfg, []byte("test: true"), 0o644)
+	sm := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+	bind := NewRealtimeRuntimeBinding(&realtime.Manager{}, b, sm)
+	bind.SetContext(context.Background())
+	defer b.Cleanup()
+
+	if _, err := bind.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "rt-retry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	proc := b.proc
+	if proc == nil {
+		t.Fatal("proc must be non-nil")
+	}
+
+	// 第一次：override 强制返回错误，进程仍 Running
+	b.terminateErrorOverride = fmt.Errorf("simulated")
+	if err := b.terminateProcess(proc, true); err == nil {
+		t.Error("first terminate must return error")
+	}
+	if !b.Status().Running {
+		t.Error("after override, process must still be running")
+	}
+
+	// 第二次：override 清除，必须真实 Kill
+	b.terminateErrorOverride = nil
+	if err := b.terminateProcess(proc, true); err != nil {
+		t.Errorf("second terminate must succeed: %v", err)
+	}
+	// 等待 process 真的退出
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !b.Status().Running {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if b.Status().Running {
+		t.Error("after real terminate, process must be dead")
+	}
+
+	// 第三次：进程已死，应该快速返回（无错误）
+	if err := b.terminateProcess(proc, true); err != nil {
+		t.Errorf("third terminate on dead process must succeed, got: %v", err)
+	}
+}
+
 // 阶段 C 收口：archive 未启用时 Stop 不调用 archive/stop（避免无意义请求）。
 func TestStart_StopWithoutArchive_DoesNotCallArchiveStop(t *testing.T) {
 	// 启动监听：/api/archive/stop 一旦被调用就 fail
