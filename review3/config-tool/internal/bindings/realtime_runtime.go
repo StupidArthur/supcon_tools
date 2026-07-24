@@ -98,23 +98,24 @@ func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bo
 }
 
 func (b *RealtimeRuntimeBinding) Cleanup() {
-	b.mu.Lock()
-	dir := b.curDir
-	b.mu.Unlock()
-	if b.system.Status().Running {
-		_ = b.system.Stop()
-	}
-	b.sessionManager.RemoveSessionDir(dir)
-	b.mu.Lock()
-	b.current = nil
-	b.curDir = ""
-	b.mu.Unlock()
+	// 阶段 5-3：Cleanup 走和 Stop 一致的内部事务：
+	//   1) 停归档（带 Bearer 鉴权）
+	//   2) 关 Python
+	//   3) 删除 session 目录
+	//   4) 清状态、注销监听器
+	// 错误被合并：归档停止失败不阻塞 system.Stop。
+	_ = b.Stop()
 	// 注销监听器，避免 Wails 应用销毁时回调仍引用已释放的 binding。
 	if b.removeExitListener != nil {
 		b.removeExitListener()
 		b.removeExitListener = nil
 	}
 }
+
+// IsPriorityCleanup 标记为 priority cleanup。
+// Lifecycle 关闭时，priority cleanup（RealtimeRuntimeBinding）先于
+// SystemBinding 关闭，确保归档 stop 在 Python 被 kill 之前完成。
+func (b *RealtimeRuntimeBinding) IsPriorityCleanup() bool { return true }
 
 func (b *RealtimeRuntimeBinding) GetProjectRevision(projectID string) (string, error) {
 	return b.manager.RuntimeRevision(projectID)
