@@ -51,57 +51,47 @@ export function RuntimeTagTable() {
     return () => clearInterval(id)
   }, [connectionState, refreshForces])
 
-  // 阶段 D4 收口：位号表的"权威行列表"必须来自 tagCatalog（启动后已加载），
-  // 不能从 rawSnapshot 派生。rawSnapshot 在订阅模式下只含当前可见 tag + 元数据，
-  // 若以它为行源会产生自我过滤闭环（订阅 → 缩窄 rawSnapshot → 表行消失 → 永不滚动到）。
-  // 行值则从 latestFrame.values[tag] / rawSnapshot[tag] 读取，没有时显示 '—'，
-  // 绝不能因此把 tag 从表里删掉。
-  const numericCatalog = useMemo(() => {
-    // 取 numeric tag；再以 validTags（来自 /api/force 校验）做交集，
-    // 避免显示后端实际不接受 force / override 的字段。
+  // 阶段 D4 收口 + 5-4 收口：位号表四层数据分离。
+  //
+  // numericNames  ← tagCatalog + validTags       （变化：catalog / validTags 加载时）
+  // filteredNames ← numericNames + filter        （变化：filter 输入时）
+  // visibleNames  ← filteredNames + scrollTop    （变化：滚动时）
+  // visibleRows   ← visibleNames + 当前 frame 值  （变化：每帧 snapshot）
+  //
+  // 订阅 effect 只依赖 visibleNames：高频 snapshot 不会让 visibleNames 变化，
+  // 100ms debounce 不会被持续重置。
+  // 渲染只对可见 ~30 行读取 latestFrame / rawSnapshot，不做全 catalog 重建。
+  // 严格禁止：visibleNames 依赖 latestFrame / rawSnapshot / 每帧重建对象。
+  const numericNames = useMemo(() => {
     const numeric = tagCatalog.filter((t) => t.dataType === 'number').map((t) => t.name)
     if (validTags === null) return numeric
     const set = new Set(validTags)
     return numeric.filter((n) => set.has(n))
   }, [tagCatalog, validTags])
 
-  const tags = useMemo(() => {
-    const entries = numericCatalog.map((name) => {
-      // 优先 latestFrame（阶段 6 通用 frame，包含全部订阅 tag），其次 rawSnapshot
-      let value: unknown = null
-      if (latestFrame && Object.prototype.hasOwnProperty.call(latestFrame.values, name)) {
-        value = latestFrame.values[name]
-      } else if (rawSnapshot && Object.prototype.hasOwnProperty.call(rawSnapshot, name)) {
-        value = rawSnapshot[name]
-      }
-      return { name, value }
-    })
-    if (!filter) return entries
+  const filteredNames = useMemo(() => {
+    if (!filter) return numericNames
     const lower = filter.toLowerCase()
-    return entries.filter((e) => e.name.toLowerCase().includes(lower))
-  }, [numericCatalog, latestFrame, rawSnapshot, filter])
+    return numericNames.filter((n) => n.toLowerCase().includes(lower))
+  }, [numericNames, filter])
 
-  const visibleTags = useMemo(() => {
-    const total = tags.length
+  const visibleNames = useMemo(() => {
+    const total = filteredNames.length
     const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
     const visibleCount = Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN * 2
     const end = Math.min(total, start + visibleCount)
-    const out: { tag: { name: string; value: unknown }; index: number }[] = []
-    for (let i = start; i < end; i++) {
-      out.push({ tag: tags[i], index: i })
-    }
-    return out
-  }, [tags, scrollTop])
+    return filteredNames.slice(start, end)
+  }, [filteredNames, scrollTop])
 
   // 阶段 D4 收口：拆成两个 effect。
-  // 1) visibleTags 变化时：debounce 后只调用 registerSubscription。
+  // 1) visibleNames 变化时：debounce 后只调用 registerSubscription。
   //    cleanup 仅取消 pending 计时器，不会触发 unregister，避免滚动时
   //    立刻发送一次"无 tagTable"的 subscribe 消息再重发。
   // 2) 仅组件卸载时：unregisterSubscription 一次。
-  // 空可见集合显式注册 []（"我订阅空集，server 只回元数据"），不要用 null
-  // 让聚合器误把 tagTable 视为"缺席"。
+  // 关键：effect deps 只包含 visibleNames / registerSubscription / unregisterSubscription。
+  // 不得把 latestFrame / rawSnapshot / tags 对象放进 deps，
+  // 否则 100ms debounce 会被持续重置。
   useEffect(() => {
-    const visibleNames = visibleTags.map((v) => v.tag.name).filter((n) => typeof n === 'string')
     const id = setTimeout(() => {
       try {
         registerSubscription('tagTable', visibleNames)
@@ -110,15 +100,9 @@ export function RuntimeTagTable() {
       }
     }, SCROLL_SUBSCRIPTION_DEBOUNCE_MS)
     return () => clearTimeout(id)
-  }, [visibleTags, registerSubscription])
+  }, [visibleNames, registerSubscription])
 
-  useEffect(() => {
-    return () => unregisterSubscription('tagTable')
-  }, [unregisterSubscription])
-
-  // 阶段 D5：force 订阅源。
-  // 用户已经设置了 force 的 tag 即使滚出可见区也必须持续订阅，
-  // 否则 force UI 显示的运行值会失联。force 集合变化时 debounce 注册。
+  // 阶段 D5：force 订阅源（同样只依赖稳定数据，debounce 100ms）
   const forceTags = useMemo(
     () => Object.keys(forces).filter((k) => typeof k === 'string' && k.length > 0).sort(),
     [forces],
@@ -133,6 +117,11 @@ export function RuntimeTagTable() {
     }, SCROLL_SUBSCRIPTION_DEBOUNCE_MS)
     return () => clearTimeout(id)
   }, [forceTags, registerSubscription])
+
+  useEffect(() => {
+    return () => unregisterSubscription('tagTable')
+  }, [unregisterSubscription])
+
   useEffect(() => {
     return () => unregisterSubscription('force')
   }, [unregisterSubscription])
@@ -166,13 +155,29 @@ export function RuntimeTagTable() {
 
   // 即便 rawSnapshot 还没有，tagCatalog 也可能已加载；位号表可以基于 catalog 显示。
   // 完全没数据时仍然显示空状态。
-  if (tagCatalog.length === 0 && !rawSnapshot) {
+  if (tagCatalog.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground" data-testid="tag-table-empty">
         未运行。启动实时工程后此处显示位号表。
       </div>
     )
   }
+
+  // 阶段 5-4 收口：visibleRows 渲染阶段才读 frame 值；
+  // 不参与订阅 effect deps。每帧 snapshot 不会触发本 useMemo 重算全集。
+  // 只对 ~30 行读值，O(visible) 而非 O(catalog)。
+  const visibleRows = useMemo(() => {
+    const readValue = (name: string): unknown => {
+      if (latestFrame && Object.prototype.hasOwnProperty.call(latestFrame.values, name)) {
+        return latestFrame.values[name]
+      }
+      if (rawSnapshot && Object.prototype.hasOwnProperty.call(rawSnapshot, name)) {
+        return rawSnapshot[name]
+      }
+      return null
+    }
+    return visibleNames.map((name, idx) => ({ name, value: readValue(name), index: idx }))
+  }, [visibleNames, latestFrame, rawSnapshot])
 
   const getUaValue = (name: string, runtimeValue: unknown): string => {
     const force = forces[name]
@@ -199,7 +204,7 @@ export function RuntimeTagTable() {
     <section className="space-y-2" data-testid="runtime-tag-table">
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium">位号表</span>
-        <span className="text-xs text-muted-foreground">({tags.length})</span>
+        <span className="text-xs text-muted-foreground">({filteredNames.length})</span>
         {connectionState === 'disconnected' ? (
           <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">连接断开</span>
         ) : stale ? (
@@ -230,31 +235,31 @@ export function RuntimeTagTable() {
           <div className="px-3 py-1.5 text-center">强制</div>
           <div className="px-3 py-1.5 text-center">操作</div>
         </div>
-        <div style={{ height: tags.length * ROW_HEIGHT, position: 'relative' }}>
-          {visibleTags.map(({ tag, index }) => (
+        <div style={{ height: filteredNames.length * ROW_HEIGHT, position: 'relative' }}>
+          {visibleRows.map(({ name, value, index }) => (
             <div
-              key={tag.name}
+              key={name}
               data-testid="tag-table-row"
-              data-tag-name={tag.name}
+              data-tag-name={name}
               className="absolute grid w-full grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center border-b border-border/50 text-xs"
               style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT }}
             >
-              <div className="truncate px-3 font-mono">{tag.name}</div>
+              <div className="truncate px-3 font-mono">{name}</div>
               <div className="px-3 text-right font-mono">
-                {typeof tag.value === 'number' ? tag.value.toFixed(4) : '—'}
+                {typeof value === 'number' ? value.toFixed(4) : '—'}
               </div>
-              <div className="px-3 text-right font-mono">{getUaValue(tag.name, tag.value)}</div>
+              <div className="px-3 text-right font-mono">{getUaValue(name, value)}</div>
               <div className="text-center">
-                <span className={forces[tag.name] ? 'text-amber-700' : 'text-muted-foreground'}>
-                  {getForceLabel(tag.name)}
+                <span className={forces[name] ? 'text-amber-700' : 'text-muted-foreground'}>
+                  {getForceLabel(name)}
                 </span>
               </div>
               <div className="px-3 text-center">
                 <div className="flex items-center justify-center gap-0.5">
-                  {forces[tag.name] ? (
+                  {forces[name] ? (
                     <button
                       type="button"
-                      onClick={() => void handleClearForce(tag.name)}
+                      onClick={() => void handleClearForce(name)}
                       className="rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-secondary"
                       data-testid="force-clear"
                     >
@@ -269,7 +274,7 @@ export function RuntimeTagTable() {
                           if (d === null) return
                           const dur = parseDuration(d)
                           if (dur === null) { setForceError('持续时间必须是有限正数'); return }
-                          void handleForce(tag.name, 'hold', undefined, dur)
+                          void handleForce(name, 'hold', undefined, dur)
                         }}
                         className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
                       >
@@ -282,7 +287,7 @@ export function RuntimeTagTable() {
                           if (d === null) return
                           const dur = parseDuration(d)
                           if (dur === null) { setForceError('持续时间必须是有限正数'); return }
-                          void handleForce(tag.name, 'zero', undefined, dur)
+                          void handleForce(name, 'zero', undefined, dur)
                         }}
                         className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
                       >
@@ -299,7 +304,7 @@ export function RuntimeTagTable() {
                           if (d === null) return
                           const dur = parseDuration(d)
                           if (dur === null) { setForceError('持续时间必须是有限正数'); return }
-                          void handleForce(tag.name, 'fixed', fv, dur)
+                          void handleForce(name, 'fixed', fv, dur)
                         }}
                         className="rounded px-1 py-0.5 text-xs hover:bg-secondary"
                       >
