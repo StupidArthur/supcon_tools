@@ -44,6 +44,12 @@ type RealtimeRuntimeBinding struct {
 	// 由 Stop() 事务统一负责 archive stop / session dir / 内存状态。
 	orchestratedStop bool
 
+	// 阶段 I 收口：stopTxnMu 保护完整 Realtime Stop 事务：
+	//   archive stop → system stop → session.json 更新 → current/curDir 清理
+	// 必须先于任何 session 快照读取获得；事务结束（defer）后才释放。
+	// 这样第二个 Stop 会在第一个完整事务结束前阻塞，不会重复调用 archive stop。
+	stopTxnMu sync.Mutex
+
 	// 阶段 B2 收口：exitListenerOnce 保证 SetContext 多次调用只注册一次监听器，
 	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
 	exitListenerOnce sync.Once
@@ -605,9 +611,24 @@ func (b *RealtimeRuntimeBinding) DeleteRunHistory(sessionID string) error {
 }
 
 func (b *RealtimeRuntimeBinding) Stop() error {
+	// 阶段 I 收口：stopTxnMu 保护完整 Stop 事务。必须先于任何 session
+	// 快照读取获得；事务结束（defer）后才释放。
+	// 这样第二个 Stop 会在第一个完整事务结束前阻塞，不会重复调用 archive stop，
+	// 也不会读取到被第一个 Stop 清理后的过期 session 状态。
+	b.stopTxnMu.Lock()
+	defer b.stopTxnMu.Unlock()
+
+	// 幂等退出条件：session 已被清理且进程不在运行 → 第二个 Stop 直接返回 nil。
+	// 必须在 stopTxnMu 内判断，避免两个 Stop 同时进入清理流程。
+	running := b.system.Status().Running
 	b.mu.Lock()
-	dir := b.curDir
 	sess := b.current
+	if sess == nil && !running {
+		b.mu.Unlock()
+		return nil
+	}
+	// 读取完整 session 快照（必须在 stopTxnMu 内，避免其他事务并发修改）
+	dir := b.curDir
 	archiveActive := b.archiveActive
 	// 阶段 H 收口：标记 Stop 事务开始，阻止 onSystemProcessExit 争抢清理。
 	b.orchestratedStop = true

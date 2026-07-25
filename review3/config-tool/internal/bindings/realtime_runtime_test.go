@@ -1363,3 +1363,295 @@ func TestStop_ArchiveAlreadyStoppedIsNotRetried(t *testing.T) {
 		t.Errorf("archive stop must NOT be retried after success, total calls = %d (want 1)", got)
 	}
 }
+
+// 阶段 I 收口：两个并发 Stop 必须串行化为一个完整事务。
+// 第一个 Stop 在 archive stop 内被阻塞时，第二个 Stop 不得进入 archive stop。
+func TestStop_ConcurrentCallsSerialized(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var archiveStopCount atomic.Int32
+	var enteredOnce sync.Once
+
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		call := archiveStopCount.Add(1)
+		if call == 1 {
+			// 第一个请求：通知测试 + 阻塞等待释放
+			enteredOnce.Do(func() {
+				close(entered)
+			})
+			<-release
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	rig := newRealtimeTestRig(t)
+	defer rig.cleanup()
+	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "conc-stop", nil
+	})
+
+	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "conc-stop",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 启动 Stop A
+	errA := make(chan error, 1)
+	go func() {
+		errA <- rig.binding.Stop()
+	}()
+
+	// 等 Stop A 进入 archive stop（被 handler 阻塞）
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop A did not enter archive stop within 3s")
+	}
+
+	// 启动 Stop B
+	errB := make(chan error, 1)
+	go func() {
+		errB <- rig.binding.Stop()
+	}()
+
+	// 给 Stop B 一些时间尝试获取 stopTxnMu
+	time.Sleep(150 * time.Millisecond)
+
+	// 关键断言 1：archive endpoint 只被调用一次（Stop B 被 stopTxnMu 阻塞）
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Fatalf("concurrent Stop B entered archive transaction before A completed: archive calls = %d, want 1", got)
+	}
+
+	// 关键断言 2：Stop B 尚未返回（被 stopTxnMu 阻塞）
+	select {
+	case err := <-errB:
+		t.Fatalf("Stop B returned before Stop A transaction completed: %v", err)
+	default:
+	}
+
+	// 释放 Stop A，让它完成 archive stop + system stop + cleanup
+	close(release)
+
+	// 等两个 Stop 都返回
+	var gotA, gotB error
+	select {
+	case gotA = <-errA:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop A deadlocked")
+	}
+	select {
+	case gotB = <-errB:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop B deadlocked")
+	}
+
+	// 验收
+	if gotA != nil {
+		t.Errorf("Stop A must return nil, got %v", gotA)
+	}
+	if gotB != nil {
+		t.Errorf("Stop B must return nil (idempotent), got %v", gotB)
+	}
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Errorf("archive stop must be called exactly once, got %d", got)
+	}
+	if rig.system.Status().Running {
+		t.Error("system must be stopped")
+	}
+	if s, _ := rig.binding.GetSession(); s != nil {
+		t.Errorf("GetSession must be nil, got %+v", s)
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("token must be cleared, got %q", got)
+	}
+	// session dir 必须被清理（archive stop 成功）
+	sessionRoot := filepath.Join(filepath.Dir(rig.storeRoot), "sessions")
+	entries, _ := os.ReadDir(sessionRoot)
+	for _, e := range entries {
+		if e.IsDir() {
+			t.Errorf("session dir must be removed after successful Stop, found: %s", e.Name())
+		}
+	}
+	// orchestratedStop 必须恢复为 false
+	rig.binding.mu.Lock()
+	orchFlag := rig.binding.orchestratedStop
+	rig.binding.mu.Unlock()
+	if orchFlag {
+		t.Error("orchestratedStop must be false after Stop completes")
+	}
+}
+
+// 阶段 I 收口：两个并发 Stop + archive 返回 500 →
+//   - archive endpoint 只调用一次
+//   - 第一个 Stop 写入 stop-failed 诊断记录
+//   - 第二个 Stop 幂等返回 nil，不删除诊断记录
+//   - 最终只有一个 session 目录
+func TestStop_ConcurrentArchiveFailurePreservesSingleRecord(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var archiveStopCount atomic.Int32
+	var enteredOnce sync.Once
+
+	archiveMux := http.NewServeMux()
+	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+		call := archiveStopCount.Add(1)
+		if call == 1 {
+			enteredOnce.Do(func() {
+				close(entered)
+			})
+			<-release
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("flush failed"))
+	})
+	archiveSrv := httptest.NewServer(archiveMux)
+	defer archiveSrv.Close()
+	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
+	apiPort := 0
+	fmt.Sscanf(ports, "%d", &apiPort)
+
+	rig := newRealtimeTestRig(t)
+	defer rig.cleanup()
+	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+		if token == "" {
+			return false, "", nil
+		}
+		return true, "conc-archive-fail", nil
+	})
+
+	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "conc-archive-fail",
+		ArchiveEnabled: true,
+		ArchiveTags:    []string{"tank_2.level"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionRoot := filepath.Join(filepath.Dir(rig.storeRoot), "sessions")
+	entries, _ := os.ReadDir(sessionRoot)
+	if len(entries) == 0 {
+		t.Fatal("session dir must exist after start")
+	}
+	preDir := filepath.Join(sessionRoot, entries[0].Name())
+
+	// 启动 Stop A
+	errA := make(chan error, 1)
+	go func() {
+		errA <- rig.binding.Stop()
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop A did not enter archive stop within 3s")
+	}
+
+	// 启动 Stop B
+	errB := make(chan error, 1)
+	go func() {
+		errB <- rig.binding.Stop()
+	}()
+
+	time.Sleep(150 * time.Millisecond)
+
+	// 关键断言：archive endpoint 只被调用一次
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Fatalf("concurrent Stop B entered archive transaction: archive calls = %d, want 1", got)
+	}
+
+	// Stop B 尚未返回（被 stopTxnMu 阻塞）
+	select {
+	case err := <-errB:
+		t.Fatalf("Stop B returned before Stop A: %v", err)
+	default:
+	}
+
+	// 释放 Stop A
+	close(release)
+
+	var gotA, gotB error
+	select {
+	case gotA = <-errA:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop A deadlocked")
+	}
+	select {
+	case gotB = <-errB:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop B deadlocked")
+	}
+
+	// Stop A 返回 archive 错误，Stop B 幂等返回 nil
+	if gotA == nil {
+		t.Error("Stop A must return archive error")
+	} else if !strings.Contains(gotA.Error(), "归档") {
+		t.Errorf("Stop A must report archive error, got %v", gotA)
+	}
+	if gotB != nil {
+		t.Errorf("Stop B must return nil (idempotent), got %v", gotB)
+	}
+
+	// 最终断言
+	if got := archiveStopCount.Load(); got != 1 {
+		t.Errorf("archive stop must be called exactly once, got %d", got)
+	}
+	if rig.system.Status().Running {
+		t.Error("system must be stopped")
+	}
+	if s, _ := rig.binding.GetSession(); s != nil {
+		t.Errorf("GetSession must be nil, got %+v", s)
+	}
+	if got := CurrentAPIToken(); got != "" {
+		t.Errorf("token must be cleared, got %q", got)
+	}
+	// 恰好一个 session 目录（保留为 stop-failed 诊断记录）
+	entries, _ = os.ReadDir(sessionRoot)
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one preserved recovery record, got %d", len(entries))
+	}
+	preservedDir := filepath.Join(sessionRoot, entries[0].Name())
+	if preservedDir != preDir {
+		t.Errorf("preserved dir must be the original session dir: got %s, want %s", preservedDir, preDir)
+	}
+	// session.json state 必须为 stop-failed
+	rec, ok := rig.binding.sessionManager.ReadSessionRecord(preservedDir)
+	if !ok {
+		t.Fatal("session.json must be readable")
+	}
+	if rec.State != realtime.StateStopFailed {
+		t.Errorf("session state must be stop-failed, got %s", rec.State)
+	}
+	// orchestratedStop 必须恢复为 false
+	rig.binding.mu.Lock()
+	orchFlag := rig.binding.orchestratedStop
+	rig.binding.mu.Unlock()
+	if orchFlag {
+		t.Error("orchestratedStop must be false after Stop completes")
+	}
+	// 等待异步回调，确认 exit callback 不会延迟删除记录
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(preservedDir); err != nil {
+		t.Fatalf("preserved archive failure record was removed asynchronously: %v", err)
+	}
+}
