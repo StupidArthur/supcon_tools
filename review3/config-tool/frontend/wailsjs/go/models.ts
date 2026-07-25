@@ -118,6 +118,20 @@ export namespace bindings {
 	        this.apiToken = source["apiToken"];
 	    }
 	}
+	export class RecentProjectEntry {
+	    projectFile: string;
+	    lastOpened: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecentProjectEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectFile = source["projectFile"];
+	        this.lastOpened = source["lastOpened"];
+	    }
+	}
 	export class StartParams {
 	    configPath: string;
 	    mode: string;

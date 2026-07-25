@@ -114,10 +114,11 @@ export const realtimeProjectApi = {
     RealtimeProjectBinding.ClearAllForces(apiHost, apiPort),
   getForces: (apiHost: string, apiPort: number) =>
     RealtimeProjectBinding.GetForces(apiHost, apiPort),
-  // 新工程存储路径
-  chooseProjectDirectory: () => RealtimeProjectBinding.ChooseProjectDirectory(),
+  // 工程入口：CreateProject 不再选择父目录，自动落到 <exe>/project/
+  createProject: (name: string) => RealtimeProjectBinding.CreateProject(name),
   chooseProjectFile: () => RealtimeProjectBinding.ChooseProjectFile(),
   chooseSourceYAML: () => RealtimeProjectBinding.ChooseSourceYAML(),
+  chooseYamlForDsl: () => RealtimeProjectBinding.ChooseYamlForDsl(),
   createProjectAt: (name: string, parentDir: string) =>
     RealtimeProjectBinding.CreateProjectAt(name, parentDir),
   openProjectFile: (file: string) => RealtimeProjectBinding.OpenProjectFile(file),
@@ -129,6 +130,10 @@ export const realtimeProjectApi = {
     RealtimeProjectBinding.UpdateReplicasAt(projectId, projectFile, sourceId, replicas),
   updateRuntime: (projectId: string, projectFile: string, rt: any) =>
     RealtimeProjectBinding.UpdateRuntime(projectId, projectFile, rt),
+  // 最近工程
+  listRecentProjects: () => RealtimeProjectBinding.ListRecentProjects() as unknown as Promise<RecentProjectEntry[]>,
+  addRecentProject: (projectFile: string) => RealtimeProjectBinding.AddRecentProject(projectFile),
+  removeRecentProject: (projectFile: string) => RealtimeProjectBinding.RemoveRecentProject(projectFile),
   // 运行时操作
   setQuality: (apiHost: string, apiPort: number, tag: string, quality: string) =>
     RealtimeProjectBinding.SetQuality(apiHost, apiPort, tag, quality),
@@ -138,6 +143,11 @@ export const realtimeProjectApi = {
     RealtimeProjectBinding.GetQualities(apiHost, apiPort),
   setRuntimeValue: (apiHost: string, apiPort: number, instanceName: string, tag: string, value: number) =>
     RealtimeProjectBinding.SetRuntimeValue(apiHost, apiPort, instanceName, tag, value),
+}
+
+export interface RecentProjectEntry {
+  projectFile: string
+  lastOpened: string
 }
 
 export const realtimeRuntimeApi = {

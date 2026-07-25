@@ -4,15 +4,17 @@ import {realtime} from '../models';
 import {bindings} from '../models';
 import {context} from '../models';
 
+export function AddRecentProject(arg1:string):Promise<void>;
+
 export function AddSource(arg1:string):Promise<realtime.ProjectView>;
 
 export function AddSourceAt(arg1:string,arg2:string,arg3:string):Promise<realtime.OpenedProjectView>;
 
-export function ChooseProjectDirectory():Promise<string>;
-
 export function ChooseProjectFile():Promise<string>;
 
 export function ChooseSourceYAML():Promise<string>;
+
+export function ChooseYamlForDsl():Promise<string>;
 
 export function ClearAllForces(arg1:string,arg2:number):Promise<void>;
 
@@ -23,6 +25,8 @@ export function ClearQuality(arg1:string,arg2:number,arg3:string):Promise<void>;
 export function CompileProject(arg1:string,arg2:string):Promise<string>;
 
 export function CreateAlarmRule(arg1:string,arg2:realtime.AlarmRule):Promise<Array<realtime.AlarmRule>>;
+
+export function CreateProject(arg1:string):Promise<realtime.OpenedProject>;
 
 export function CreateProjectAt(arg1:string,arg2:string):Promise<realtime.OpenedProject>;
 
@@ -40,9 +44,13 @@ export function ListAlarmRules(arg1:string):Promise<Array<realtime.AlarmRule>>;
 
 export function ListProjects():Promise<Array<realtime.ProjectSummary>>;
 
+export function ListRecentProjects():Promise<Array<bindings.RecentProjectEntry>>;
+
 export function OpenProject(arg1:string):Promise<realtime.Project>;
 
 export function OpenProjectFile(arg1:string):Promise<realtime.OpenedProject>;
+
+export function RemoveRecentProject(arg1:string):Promise<void>;
 
 export function RemoveSource(arg1:string,arg2:string):Promise<realtime.ProjectView>;
 

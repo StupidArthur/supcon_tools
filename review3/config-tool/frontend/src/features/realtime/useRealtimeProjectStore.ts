@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { realtimeProjectApi } from '../../lib/api'
+import { realtimeProjectApi, type RecentProjectEntry } from '../../lib/api'
 import type {
   DuplicateInstance,
   ExpandedInstance,
@@ -16,14 +16,41 @@ interface RealtimeProjectState {
   duplicates: DuplicateInstance[]
   loading: boolean
   error: string | null
+  /** 最近打开工程（持久化到 <exe>/recent_projects.json） */
+  recentProjects: RecentProjectEntry[]
 
   openExistingProject: () => Promise<void>
+  /** 新建工程：自动创建到 <exe>/project/<工程名>/，不弹出目录选择器。 */
+  createProject: (name: string) => Promise<void>
+  /** 保留显式 parentDir 入口，供测试 / 高级用户使用。 */
   createProjectAt: (name: string, parentDir: string) => Promise<void>
   addSource: (projectId: string, projectFile: string) => Promise<void>
   removeSource: (projectId: string, projectFile: string, sourceId: string) => Promise<void>
   updateReplicas: (projectId: string, projectFile: string, sourceId: string, replicas: number) => Promise<boolean>
   updateRuntime: (projectId: string, projectFile: string, rt: RealtimeRuntime) => Promise<void>
+  refreshRecentProjects: () => Promise<void>
+  openRecentProject: (projectFile: string) => Promise<void>
   clearError: () => void
+}
+
+async function fetchValidation(projectId: string): Promise<{ instances: ExpandedInstance[]; duplicates: DuplicateInstance[] }> {
+  try {
+    const validation = (await realtimeProjectApi.validateProject(projectId)) as any
+    return {
+      instances: validation?.instances || [],
+      duplicates: validation?.duplicates || [],
+    }
+  } catch {
+    return { instances: [], duplicates: [] }
+  }
+}
+
+async function rememberRecent(projectFile: string): Promise<void> {
+  try {
+    await realtimeProjectApi.addRecentProject(projectFile)
+  } catch {
+    // 单条失败不应阻断主流程
+  }
 }
 
 export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) => ({
@@ -33,6 +60,16 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
   duplicates: [],
   loading: false,
   error: null,
+  recentProjects: [],
+
+  refreshRecentProjects: async () => {
+    try {
+      const list = await realtimeProjectApi.listRecentProjects()
+      set({ recentProjects: list })
+    } catch {
+      set({ recentProjects: [] })
+    }
+  },
 
   openExistingProject: async () => {
     set({ loading: true, error: null, duplicates: [] })
@@ -42,19 +79,46 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
         set({ loading: false })
         return
       }
-      const view = await realtimeProjectApi.openProjectFile(path)
-      // view 是 OpenedProject，包含 projectFile
-      const proj = view as unknown as ProjectView
-      // 不重新走 addSource 校验；openProjectFile 内部已完成编译校验。
-      // instances/duplicates 由 validate API 显式拉取。
-      const validation = await realtimeProjectApi.validateProject(proj.id).catch(() => null)
+      await get().openRecentProject(path)
+    } catch (e: any) {
+      set({ error: String(e), loading: false })
+    }
+  },
+
+  openRecentProject: async (projectFile: string) => {
+    set({ loading: true, error: null, duplicates: [] })
+    try {
+      const view = (await realtimeProjectApi.openProjectFile(projectFile)) as unknown as ProjectView
+      const validation = await fetchValidation(view.id)
+      // 记录到最近列表
+      void rememberRecent(view.projectFile || projectFile)
       set({
-        currentProject: proj,
-        currentProjectFile: proj.projectFile || path,
-        instances: (validation as any)?.instances || [],
-        duplicates: (validation as any)?.duplicates || [],
+        currentProject: view,
+        currentProjectFile: view.projectFile || projectFile,
+        instances: validation.instances,
+        duplicates: validation.duplicates,
         loading: false,
       })
+      // 刷新最近列表，使已打开的项前移
+      void get().refreshRecentProjects()
+    } catch (e: any) {
+      set({ error: String(e), loading: false })
+    }
+  },
+
+  createProject: async (name: string) => {
+    set({ loading: true, error: null, duplicates: [] })
+    try {
+      const proj = (await realtimeProjectApi.createProject(name)) as unknown as ProjectView
+      void rememberRecent(proj.projectFile || '')
+      set({
+        currentProject: proj,
+        currentProjectFile: proj.projectFile || null,
+        instances: [],
+        duplicates: [],
+        loading: false,
+      })
+      void get().refreshRecentProjects()
     } catch (e: any) {
       set({ error: String(e), loading: false })
     }
@@ -64,6 +128,7 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
     set({ loading: true, error: null, duplicates: [] })
     try {
       const proj = (await realtimeProjectApi.createProjectAt(name, parentDir)) as unknown as ProjectView
+      void rememberRecent(proj.projectFile || '')
       set({
         currentProject: proj,
         currentProjectFile: proj.projectFile || null,
@@ -71,7 +136,7 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
         duplicates: [],
         loading: false,
       })
-      void get()
+      void get().refreshRecentProjects()
     } catch (e: any) {
       set({ error: String(e), loading: false })
     }

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
-import { realtimeProjectApi } from '../../lib/api'
 import type { ProjectView } from './types'
 
 interface Props {
@@ -8,8 +7,13 @@ interface Props {
   onCreated?: (proj: ProjectView) => void
 }
 
+/**
+ * 新建工程对话框（设计文档 §二.3）：
+ *   - 只输入工程名称，不弹出目录选择器；
+ *   - 自动创建到 <exe>/project/<工程名>/。
+ */
 export function CreateRealtimeProjectDialog({ onClose, onCreated }: Props) {
-  const createProjectAt = useRealtimeProjectStore((s) => s.createProjectAt)
+  const createProject = useRealtimeProjectStore((s) => s.createProject)
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -23,12 +27,7 @@ export function CreateRealtimeProjectDialog({ onClose, onCreated }: Props) {
     setSubmitting(true)
     setError(null)
     try {
-      const parentDir = await realtimeProjectApi.chooseProjectDirectory()
-      if (!parentDir) {
-        setSubmitting(false)
-        return
-      }
-      await createProjectAt(trimmed, parentDir)
+      await createProject(trimmed)
       const proj = useRealtimeProjectStore.getState().currentProject
       setSubmitting(false)
       if (proj) {
@@ -46,6 +45,7 @@ export function CreateRealtimeProjectDialog({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="create-project-dialog">
       <div className="w-80 rounded-lg border border-border bg-card p-4 shadow-lg">
         <h3 className="text-sm font-medium">新建实时工程</h3>
+        <p className="mt-1 text-xs text-muted-foreground">工程将创建到默认 project 目录下。</p>
         <input
           type="text"
           value={name}
@@ -77,7 +77,7 @@ export function CreateRealtimeProjectDialog({ onClose, onCreated }: Props) {
             className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-40"
             data-testid="create-project-confirm"
           >
-            下一步
+            创建
           </button>
         </div>
       </div>

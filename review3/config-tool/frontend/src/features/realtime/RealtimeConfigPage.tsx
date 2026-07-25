@@ -5,6 +5,17 @@ import { CreateRealtimeProjectDialog } from './CreateRealtimeProjectDialog'
 import { DuplicateInstancesDialog } from './DuplicateInstancesDialog'
 import type { ProjectView } from './types'
 
+function basenameFromPath(projectFile: string): string {
+  // 工程目录名为路径中 project/ 之后的最后一段；fallback 到文件名
+  const norm = projectFile.replace(/\\/g, '/')
+  const parts = norm.split('/')
+  if (parts.length >= 2 && parts[parts.length - 2] !== 'project') {
+    return parts[parts.length - 2]
+  }
+  const file = parts[parts.length - 1] || projectFile
+  return file.replace(/\.ya?ml$/i, '')
+}
+
 export function RealtimeConfigPage() {
   const {
     currentProject,
@@ -13,12 +24,15 @@ export function RealtimeConfigPage() {
     duplicates,
     loading,
     error,
+    recentProjects,
     openExistingProject,
-    createProjectAt,
+    createProject,
+    openRecentProject,
     addSource,
     removeSource,
     updateReplicas,
     updateRuntime,
+    refreshRecentProjects,
     clearError,
   } = useRealtimeProjectStore()
 
@@ -27,6 +41,11 @@ export function RealtimeConfigPage() {
   const [opcUaHost, setOpcUaHost] = useState('0.0.0.0')
   const [opcUaPort, setOpcUaPort] = useState(18951)
   const [runtimeDirty, setRuntimeDirty] = useState(false)
+
+  // 首次进入时拉取最近工程
+  useEffect(() => {
+    void refreshRecentProjects()
+  }, [refreshRecentProjects])
 
   // 打开工程后，加载持久化的 runtime 默认值
   useEffect(() => {
@@ -57,33 +76,22 @@ export function RealtimeConfigPage() {
     setRuntimeDirty(false)
   }
 
+  const handleOpenRecent = async (projectFile: string) => {
+    try {
+      await openRecentProject(projectFile)
+    } catch (e: any) {
+      // 设计文档 §二.2：文件不存在时点击显示错误，不影响当前工程。
+      // openRecentProject 内部已 set error。
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-background p-6" data-testid="realtime-config-page">
       <div className="mx-auto max-w-4xl space-y-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-medium">实时工程组态</h2>
-          <div className="ml-auto flex gap-2">
-            <button
-              type="button"
-              onClick={() => void openExistingProject()}
-              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary"
-              data-testid="realtime-open-project"
-            >
-              打开工程
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary"
-              data-testid="realtime-create-project"
-            >
-              新建工程
-            </button>
-          </div>
-        </div>
+        <h2 className="text-lg font-medium">实时工程组态</h2>
 
         {!currentProject ? (
-          <div className="flex flex-col items-center gap-4 rounded-md border border-dashed border-border p-12 text-center" data-testid="realtime-empty-state">
+          <div className="flex flex-col items-center gap-6 rounded-md border border-dashed border-border p-12 text-center" data-testid="realtime-empty-state">
             <div className="flex gap-3">
               <button
                 type="button"
@@ -102,7 +110,31 @@ export function RealtimeConfigPage() {
                 新建工程
               </button>
             </div>
-            <div className="text-xs text-muted-foreground">没有打开的工程。新建或打开一个实时工程。</div>
+
+            <section className="w-full max-w-2xl space-y-2 text-left" data-testid="realtime-recent-section">
+              <h3 className="text-sm font-medium">最近打开工程</h3>
+              {recentProjects.length === 0 ? (
+                <p className="text-xs text-muted-foreground" data-testid="realtime-recent-empty">
+                  暂无最近工程
+                </p>
+              ) : (
+                <ul className="space-y-1" data-testid="realtime-recent-list">
+                  {recentProjects.map((e) => (
+                    <li key={e.projectFile}>
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenRecent(e.projectFile)}
+                        className="w-full rounded-md border border-border bg-card px-3 py-2 text-left text-xs hover:bg-secondary"
+                        data-testid="realtime-recent-item"
+                      >
+                        <div className="font-medium">{basenameFromPath(e.projectFile)}</div>
+                        <div className="mt-0.5 truncate text-muted-foreground">路径：{e.projectFile}</div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
         ) : (
           <>

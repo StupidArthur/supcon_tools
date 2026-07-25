@@ -34,6 +34,16 @@ func (b *RealtimeProjectBinding) ListProjects() ([]realtime.ProjectSummary, erro
 	return b.manager.ListProjects(b.ctx)
 }
 
+// CreateProject 在 EXE 同级目录的 project/<name>/ 下创建工程。
+// 不再让用户选择父目录（设计文档 §二.3）。
+func (b *RealtimeProjectBinding) CreateProject(name string) (realtime.OpenedProject, error) {
+	parentDir, err := EnsureProjectsRootDir()
+	if err != nil {
+		return realtime.OpenedProject{}, err
+	}
+	return b.manager.CreateProjectAt(b.ctx, name, parentDir)
+}
+
 func (b *RealtimeProjectBinding) CreateProjectAt(name, parentDir string) (realtime.OpenedProject, error) {
 	return b.manager.CreateProjectAt(b.ctx, name, parentDir)
 }
@@ -306,27 +316,16 @@ func ResolveRealtimeProjectsDir() (string, error) {
 	return dir, nil
 }
 
-// ChooseProjectDirectory 打开目录选择器，让用户选择工程父目录。
-func (b *RealtimeProjectBinding) ChooseProjectDirectory() (string, error) {
-	if b.ctx == nil {
-		return "", fmt.Errorf("wails context 未注入")
-	}
-	dir, err := runtime.OpenDirectoryDialog(b.ctx, runtime.OpenDialogOptions{
-		Title: "选择工程父目录",
-	})
-	if err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
 // ChooseProjectFile 打开文件选择器，让用户选择 project.yaml。
+// 文件选择器默认进入 <EXE 同级目录>/project/（设计文档 §三 路径统一规则）。
 func (b *RealtimeProjectBinding) ChooseProjectFile() (string, error) {
 	if b.ctx == nil {
 		return "", fmt.Errorf("wails context 未注入")
 	}
+	defaultDir, _ := ResolveProjectsRootDir()
 	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
-		Title: "选择 project.yaml",
+		Title:            "选择 project.yaml",
+		DefaultDirectory: defaultDir,
 		Filters: []runtime.FileFilter{
 			{DisplayName: "工程文件", Pattern: "project.yaml;*.yaml"},
 		},
@@ -344,6 +343,26 @@ func (b *RealtimeProjectBinding) ChooseSourceYAML() (string, error) {
 	}
 	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
 		Title: "选择 YAML 文件",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "YAML 文件", Pattern: "*.yaml;*.yml"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// ChooseYamlForDsl 打开 YAML 文件选择器，默认进入 <EXE 同级目录>/template/。
+// 用于组态调试首页"打开 YML"按钮（设计文档 §一.1）。
+func (b *RealtimeProjectBinding) ChooseYamlForDsl() (string, error) {
+	if b.ctx == nil {
+		return "", fmt.Errorf("wails context 未注入")
+	}
+	defaultDir, _ := ResolveTemplateDir()
+	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
+		Title:            "打开 YML",
+		DefaultDirectory: defaultDir,
 		Filters: []runtime.FileFilter{
 			{DisplayName: "YAML 文件", Pattern: "*.yaml;*.yml"},
 		},
