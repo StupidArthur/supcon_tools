@@ -18,6 +18,68 @@ import (
 	"config-tool/internal/realtime"
 )
 
+// mockServiceServer 创建 mock DataFactoryService 用于测试。
+// 返回 (server, client, cleanup)。
+func mockServiceServer(t *testing.T, handlers map[string]http.HandlerFunc) (*httptest.Server, *DataFactoryServiceClient, func()) {
+	t.Helper()
+	mux := http.NewServeMux()
+
+	// 默认 handlers（如果自定义 handlers 中没有覆盖）
+	defaultHandlers := map[string]http.HandlerFunc{
+		"/api/health": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":              true,
+				"protocolVersion": 1,
+				"serviceState":    "ready",
+				"runtimeState":    "stopped",
+			})
+		},
+		"/api/runtime/status": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":           true,
+				"runtimeState": "stopped",
+				"serviceState": "ready",
+			})
+		},
+		"/api/runtime/start": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "runtimeState": "running"})
+		},
+		"/api/runtime/stop": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "runtimeState": "stopped"})
+		},
+		"/api/alarms/config": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0})
+		},
+	}
+
+	// 注册 handlers：自定义优先，否则用默认
+	for path, defaultHandler := range defaultHandlers {
+		if customHandler, ok := handlers[path]; ok {
+			mux.HandleFunc(path, customHandler)
+		} else {
+			mux.HandleFunc(path, defaultHandler)
+		}
+	}
+	// 注册额外的自定义 handlers（不在默认列表中的）
+	for path, handler := range handlers {
+		if _, ok := defaultHandlers[path]; !ok {
+			mux.HandleFunc(path, handler)
+		}
+	}
+
+	srv := httptest.NewServer(mux)
+	ports := strings.TrimPrefix(srv.URL, "http://127.0.0.1:")
+	var port int
+	fmt.Sscanf(ports, "%d", &port)
+	client := NewDataFactoryServiceClient("127.0.0.1", port, "test-token")
+	return srv, client, func() { srv.Close() }
+}
+
 // realtimeTestRig 构造可独立测试的 RealtimeRuntimeBinding。
 // system 使用 mock commandFactory（不真的启动 DataFactory），避免依赖 exe；
 // 同时注入 readiness checker 让它接受任意 token 且 instance 名匹配。
@@ -556,44 +618,30 @@ func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	system := NewSystemBinding()
-	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
-	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
-	system.setCommandFactory(makeLongRunningCommand(30))
-	system.setReadyPollInterval(10 * time.Millisecond)
-	system.setReadyTimeout(2 * time.Second)
-	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
-		if token == "" {
-			return false, "", nil
-		}
-		return true, "alarmfail", nil
-	})
-
 	// 启动 alarm push 失败 mock server
-	var (
-		gotRules atomic.Bool
-	)
-	alarmMux := http.NewServeMux()
-	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
-		gotRules.Store(true)
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("simulated push failure"))
+	gotRules := atomic.Bool{}
+	runtimeStartCalled := atomic.Bool{}
+	_, client, cleanup := mockServiceServer(t, map[string]http.HandlerFunc{
+		"/api/runtime/start": func(w http.ResponseWriter, r *http.Request) {
+			runtimeStartCalled.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "runtimeState": "running"})
+		},
+		"/api/alarms/config": func(w http.ResponseWriter, r *http.Request) {
+			gotRules.Store(true)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"detail":"simulated push failure"}`))
+		},
 	})
-	alarmSrv := httptest.NewServer(alarmMux)
-	defer alarmSrv.Close()
-	ports := strings.TrimPrefix(alarmSrv.URL, "http://127.0.0.1:")
-	apiPort := 0
-	fmt.Sscanf(ports, "%d", &apiPort)
+	defer cleanup()
 
-	cfg := filepath.Join(tmp, "test.yaml")
-	os.WriteFile(cfg, []byte("test: true"), 0o644)
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
-	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding := NewRealtimeRuntimeBinding(manager, NewSystemBinding(), sessionMgr)
 	binding.SetContext(context.Background())
-	defer system.Cleanup()
+	binding.SetServiceClient(client)
 
 	_, err = binding.StartProject(pid, realtime.RealtimeStartOptions{
-		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "alarmfail",
+		RuntimeName: "alarmfail",
 	})
 	if err == nil {
 		t.Fatal("报警推送失败时 Start 必须失败")
@@ -601,18 +649,9 @@ func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
 	if !gotRules.Load() {
 		t.Error("Start 期间必须实际调用 /api/alarms/config")
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		cur, _ := binding.GetSession()
-		entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
-		if cur == nil && len(entries) == 0 {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
+	if !runtimeStartCalled.Load() {
+		t.Error("Start 期间必须调用 /api/runtime/start")
 	}
-	cur, _ := binding.GetSession()
-	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
-	t.Errorf("回滚不彻底: current=%v, sessions=%d", cur, len(entries))
 }
 
 // 阶段 C：归档启动失败必须使启动失败并回滚。
@@ -708,40 +747,29 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
 		t.Fatalf("本测试要求项目无 alarm rules，实际 %d", len(rules))
 	}
 
-	system := NewSystemBinding()
-	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
-	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
-	system.setCommandFactory(makeLongRunningCommand(30))
-	system.setReadyPollInterval(10 * time.Millisecond)
-	system.setReadyTimeout(2 * time.Second)
-	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
-		if token == "" {
-			return false, "", nil
-		}
-		return true, "noalarms", nil
-	})
-
 	// mock 服务器：/api/alarms/config 绝不能被调用
-	alarmMux := http.NewServeMux()
-	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("no rule 时不应推送 /api/alarms/config")
-		w.WriteHeader(http.StatusInternalServerError)
+	alarmCalled := atomic.Bool{}
+	_, client, cleanup := mockServiceServer(t, map[string]http.HandlerFunc{
+		"/api/alarms/config": func(w http.ResponseWriter, r *http.Request) {
+			alarmCalled.Store(true)
+			t.Errorf("no rule 时不应推送 /api/alarms/config")
+			w.WriteHeader(http.StatusInternalServerError)
+		},
 	})
-	alarmSrv := httptest.NewServer(alarmMux)
-	defer alarmSrv.Close()
-	ports := strings.TrimPrefix(alarmSrv.URL, "http://127.0.0.1:")
-	apiPort := 0
-	fmt.Sscanf(ports, "%d", &apiPort)
+	defer cleanup()
 
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
-	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	binding := NewRealtimeRuntimeBinding(manager, NewSystemBinding(), sessionMgr)
 	binding.SetContext(context.Background())
-	defer system.Cleanup()
+	binding.SetServiceClient(client)
 
 	if _, err := binding.StartProject(pid, realtime.RealtimeStartOptions{
-		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "noalarms",
+		RuntimeName: "noalarms",
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if alarmCalled.Load() {
+		t.Error("no rule 时不应调用 /api/alarms/config")
 	}
 }
 

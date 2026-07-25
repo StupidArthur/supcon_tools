@@ -309,6 +309,13 @@ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime
 		return realtime.RealtimeRunSession{}, fmt.Errorf("启动实时运行失败: %w", err)
 	}
 
+	// todo.md §9.2 步骤 9：推送报警配置
+	if err := b.pushAlarmConfigViaService(projectID); err != nil {
+		b.stopRuntimeViaService()
+		b.sessionManager.RemoveSessionDir(dir)
+		return realtime.RealtimeRunSession{}, fmt.Errorf("报警配置推送失败: %w", err)
+	}
+
 	// 创建 session 记录
 	session := realtime.RealtimeRunSession{
 		SessionID:          sessionID,
@@ -906,4 +913,37 @@ func (b *RealtimeRuntimeBinding) getRuntimeStatusViaService() (string, error) {
 		return "", err
 	}
 	return resp.RuntimeState, nil
+}
+
+// pushAlarmConfigViaService 推送报警配置到服务（todo.md §9.2 步骤 9）。
+func (b *RealtimeRuntimeBinding) pushAlarmConfigViaService(projectID string) error {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return nil // 服务未注入时跳过（兼容旧测试）
+	}
+
+	// 获取报警规则
+	rules, err := b.manager.ListAlarmRules(b.ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("加载报警规则失败: %w", err)
+	}
+	if len(rules) == 0 {
+		return nil // 无规则时 no-op
+	}
+
+	// 推送到服务
+	req := map[string]any{"rules": rules}
+	var resp struct {
+		OK    bool `json:"ok"`
+		Count int  `json:"count"`
+	}
+	if err := client.DoJSON(b.ctx, "POST", "/api/alarms/config", req, &resp); err != nil {
+		return err
+	}
+	if !resp.OK {
+		return fmt.Errorf("报警配置推送返回 ok=false")
+	}
+	return nil
 }
