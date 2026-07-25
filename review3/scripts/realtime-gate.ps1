@@ -94,8 +94,26 @@ try {
     $script:frontendTestOutput = ""
     Invoke-GateStep "Step 5: Frontend tests" {
         Push-Location (Join-Path $RepoRoot "config-tool\frontend")
-        $script:frontendTestOutput = npm test -- --run 2>&1
-        Pop-Location
+        try {
+            # Windows PowerShell 5.1 会把重定向后的 native stderr 包装为
+            # ErrorRecord。Vitest 即使成功也可能向 stderr 输出内容。
+            # 这里只临时允许捕获 stderr，随后显式检查 native exit code，
+            # 保持真实测试失败时 fail-closed。
+            $previousErrorActionPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = "Continue"
+                $script:frontendTestOutput = npm test -- --run 2>&1
+                $frontendTestExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+
+            if ($frontendTestExitCode -ne 0) {
+                throw "npm test failed with exit code $frontendTestExitCode"
+            }
+        } finally {
+            Pop-Location
+        }
     }
     $ansiEsc = [char]27
     [void]$ansiEsc.ToString()  # 显式 cast 触发类型推断（PowerShell 5.1 兼容性）
