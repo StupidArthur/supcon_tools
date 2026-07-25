@@ -104,6 +104,32 @@ def binding() -> engine_api.EngineBinding:
 
 
 # --------------------------------------------------------------------------- #
+# -1. 启动窗口期：engine 尚未注入时 /api/status 必须返回 200 而不是 500         #
+# --------------------------------------------------------------------------- #
+def test_api_status_returns_200_when_engine_holder_unfilled():
+    """回归：standalone_main 启动后 Uvicorn 已 listen 但 engine holder 还没填上。
+
+    /api/status 必须返回合法 STARTING 状态，不能 AttributeError，否则 Go 端
+    readinessChecker 收到 500 → 'API ready 超时'，整次启动事务回滚。
+    """
+    b = engine_api.EngineBinding(
+        instance_name="starting_runtime",
+        engine=None,  # 模拟 launch 循环还没把 engine 注入
+        shared_data={},
+    )
+    engine_api.set_binding(b)
+    try:
+        resp = engine_api.api_status()
+        assert resp.instance_name == "starting_runtime"
+        assert resp.mode == "STARTING"
+        assert resp.cycle_count == 0
+        assert resp.sim_time == 0.0
+        assert resp.cycle_time == 0.5
+    finally:
+        engine_api.set_binding(None)  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- #
 # 0. status 与 /snapshot 同源 + cycle_count/sim_time 推进                       #
 # --------------------------------------------------------------------------- #
 def test_status_and_snapshot_share_same_cycle_count(binding):

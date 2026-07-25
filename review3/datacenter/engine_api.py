@@ -420,8 +420,22 @@ def api_status() -> StatusResponse:
     ``cycle_count`` / ``sim_time`` 与 ``/snapshot`` 来自同一份最近完整 snapshot：
     EngineBinding 在锁内保存，REST / status 一致读取，绝不通过 engine.clock
     二次推断，避免和 snapshot 出现分叉。
+
+    启动窗口期（``b.engine`` 尚未注入）的处理：API 已 listen 但 engine holder
+    还没填上，get_statistics / clock 会抛 AttributeError。这里返回合法的"启动中"
+    状态而不是 500，让 readiness 探测成功、Go 端完成 launch 事务。
     """
     b = get_binding()
+    if b.engine is None:
+        return StatusResponse(
+            instance_name=b.instance_name,
+            mode="STARTING",
+            cycle_count=0,
+            sim_time=0.0,
+            cycle_time=0.5,
+            safe_state=False,
+            consecutive_failures=0,
+        )
     stats = b.engine.get_statistics()
     latest = b.get_latest_snapshot()  # 与 /snapshot 同源
     cycle_count = int(latest["cycle_count"]) if latest and "cycle_count" in latest else 0
