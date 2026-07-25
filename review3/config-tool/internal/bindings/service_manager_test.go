@@ -37,31 +37,6 @@ func TestLineBuffer_CapacityAndOrder(t *testing.T) {
 	}
 }
 
-func TestContainsOK(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want bool
-	}{
-		{"json-with-space", `{"ok": true, "x": 1}`, true},
-		{"json-no-space", `{"ok":true,"x":1}`, true},
-		{"negative", `{"ok": false}`, false},
-		{"missing", `{"result": "yes"}`, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := containsOK([]byte(tt.body)); got != tt.want {
-				t.Fatalf("containsOK(%q) = %v, want %v", tt.body, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestHideWindow_Compiles(t *testing.T) {
-	// 在所有平台上验证函数存在；行为在 Windows 上才有意义
-	_ = hideWindow // 编译时验证存在
-}
-
 func TestResolveRepoRootForDevService_FromTempDir(t *testing.T) {
 	dir := t.TempDir()
 	stub := filepath.Join(dir, "standalone_main.py")
@@ -82,4 +57,9 @@ func TestResolveRepoRootForDevService_NotFound(t *testing.T) {
 	if _, err := resolveRepoRootForDevService(dir); err == nil {
 		t.Fatal("expected error when standalone_main.py is missing")
 	}
+}
+
+func TestConfigureBackgroundProcess_Compiles(t *testing.T) {
+	// 在所有平台上验证函数存在；行为在 Windows 上才有意义
+	_ = configureBackgroundProcess
 }

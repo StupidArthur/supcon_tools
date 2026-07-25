@@ -49,12 +49,8 @@ func (l *Lifecycle) Startup(ctx context.Context) {
 	for _, r := range l.receivers {
 		r.SetContext(rootCtx)
 	}
-	// 应用启动时即确保 <exe>/project/ 和 <exe>/template/ 存在。
-	// 与用户是否点击"新建工程"无关；即使用户只启动应用、不进行任何操作，
-	// 目录也会自动出现（todo.md §3.2）。
-	if _, err := bindings.EnsureAppWorkspaceDirs(); err != nil {
-		log.Printf("应用工作目录初始化失败: %v", err)
-	}
+	// 注意：工作目录初始化已在 NewContainerWithDevMode 中完成（todo.md §4.2）。
+	// 此处不再重复调用 EnsureAppWorkspaceDirs。
 	log.Println("DataFactory 组态工具启动")
 }
 

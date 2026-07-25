@@ -323,7 +323,10 @@ func (b *RealtimeProjectBinding) ChooseProjectFile() (string, error) {
 	if b.ctx == nil {
 		return "", fmt.Errorf("wails context 未注入")
 	}
-	defaultDir := mustDefaultDirForChoose(ResolveProjectsRootDir)
+	defaultDir, err := defaultDirForChoose(ResolveProjectsRootDir)
+	if err != nil {
+		return "", fmt.Errorf("工程目录初始化失败: %w", err)
+	}
 	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
 		Title:            "选择 project.yaml",
 		DefaultDirectory: defaultDir,
@@ -361,7 +364,10 @@ func (b *RealtimeProjectBinding) ChooseYamlForDsl() (string, error) {
 	if b.ctx == nil {
 		return "", fmt.Errorf("wails context 未注入")
 	}
-	defaultDir := mustDefaultDirForChoose(ResolveTemplateDir)
+	defaultDir, err := defaultDirForChoose(ResolveTemplateDir)
+	if err != nil {
+		return "", fmt.Errorf("模板目录初始化失败: %w", err)
+	}
 	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
 		Title:            "打开 YML",
 		DefaultDirectory: defaultDir,
@@ -375,22 +381,20 @@ func (b *RealtimeProjectBinding) ChooseYamlForDsl() (string, error) {
 	return path, nil
 }
 
-// mustDefaultDirForChoose 在显示文件选择器前确保默认目录存在。
-// 优先调用 EnsureAppWorkspaceDirs（一次创建 project/ + template/），
-// 失败时退回单目录 EnsureXxxDir，确保 Wails 拿到一个真实存在的路径。
-func mustDefaultDirForChoose(resolve func() (string, error)) string {
-	if _, err := EnsureAppWorkspaceDirs(); err == nil {
-		if p, err := resolve(); err == nil {
-			return p
-		}
+// defaultDirForChoose 在显示文件选择器前确保默认目录存在（todo.md §4.3）。
+// 返回 (路径, error)；失败时返回错误，不静默打开其他目录。
+func defaultDirForChoose(resolve func() (string, error)) (string, error) {
+	if _, err := EnsureAppWorkspaceDirs(); err != nil {
+		return "", err
 	}
-	// 兜底：单目录创建
-	if p, err := resolve(); err == nil {
-		if err := os.MkdirAll(p, 0o755); err == nil {
-			return p
-		}
+	p, err := resolve()
+	if err != nil {
+		return "", err
 	}
-	return "" // Wails 收到空路径时使用上次目录或默认目录
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		return "", fmt.Errorf("创建目录失败: %w", err)
+	}
+	return p, nil
 }
 
 // SetQuality 写入 OPC UA 质量码覆盖。
