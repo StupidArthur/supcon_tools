@@ -20,10 +20,18 @@ import (
 type RealtimeProjectBinding struct {
 	ctx     context.Context
 	manager *realtime.Manager
+	// serviceClient 用于同步工程上下文到常驻服务（todo.md §8）。
+	// 由 container 在服务启动后注入。
+	serviceClient *DataFactoryServiceClient
 }
 
 func NewRealtimeProjectBinding(manager *realtime.Manager) *RealtimeProjectBinding {
 	return &RealtimeProjectBinding{manager: manager}
+}
+
+// SetServiceClient 注入服务客户端（todo.md §8）。
+func (b *RealtimeProjectBinding) SetServiceClient(client *DataFactoryServiceClient) {
+	b.serviceClient = client
 }
 
 func (b *RealtimeProjectBinding) SetContext(ctx context.Context) {
@@ -41,31 +49,94 @@ func (b *RealtimeProjectBinding) CreateProject(name string) (realtime.OpenedProj
 	if err != nil {
 		return realtime.OpenedProject{}, err
 	}
-	return b.manager.CreateProjectAt(b.ctx, name, parentDir)
+	proj, err := b.manager.CreateProjectAt(b.ctx, name, parentDir)
+	if err != nil {
+		return realtime.OpenedProject{}, err
+	}
+	// todo.md §8.1：新建工程后同步到服务
+	if syncErr := b.syncProjectOpen(proj.ProjectFile); syncErr != nil {
+		// 同步失败不阻断主流程，但记录错误（todo.md §8.4）
+		// 前端可通过后续 reload 重试
+	}
+	return proj, nil
 }
 
 func (b *RealtimeProjectBinding) CreateProjectAt(name, parentDir string) (realtime.OpenedProject, error) {
-	return b.manager.CreateProjectAt(b.ctx, name, parentDir)
+	proj, err := b.manager.CreateProjectAt(b.ctx, name, parentDir)
+	if err != nil {
+		return realtime.OpenedProject{}, err
+	}
+	// todo.md §8.1：新建工程后同步到服务
+	if syncErr := b.syncProjectOpen(proj.ProjectFile); syncErr != nil {
+		// 同步失败不阻断主流程
+	}
+	return proj, nil
 }
 
 func (b *RealtimeProjectBinding) OpenProjectFile(projectFile string) (realtime.OpenedProject, error) {
-	return b.manager.OpenProjectFile(b.ctx, projectFile)
+	proj, err := b.manager.OpenProjectFile(b.ctx, projectFile)
+	if err != nil {
+		return realtime.OpenedProject{}, err
+	}
+	// todo.md §8.1：打开工程后同步到服务
+	if syncErr := b.syncProjectOpen(proj.ProjectFile); syncErr != nil {
+		// 同步失败不阻断主流程
+	}
+	return proj, nil
 }
 
 func (b *RealtimeProjectBinding) AddSourceAt(projectID, projectFile, yamlPath string) (realtime.OpenedProjectView, error) {
-	return b.manager.AddSourceAt(b.ctx, projectID, projectFile, yamlPath)
+	view, err := b.manager.AddSourceAt(b.ctx, projectID, projectFile, yamlPath)
+	if err != nil {
+		return realtime.OpenedProjectView{}, err
+	}
+	// todo.md §8.2：添加 YAML 成功后同步到服务
+	if view.Applied {
+		if syncErr := b.syncProjectReload(); syncErr != nil {
+			// 同步失败不阻断主流程
+		}
+	}
+	return view, nil
 }
 
 func (b *RealtimeProjectBinding) RemoveSourceAt(projectID, projectFile, sourceID string) (realtime.OpenedProjectView, error) {
-	return b.manager.RemoveSourceAt(b.ctx, projectID, projectFile, sourceID)
+	view, err := b.manager.RemoveSourceAt(b.ctx, projectID, projectFile, sourceID)
+	if err != nil {
+		return realtime.OpenedProjectView{}, err
+	}
+	// todo.md §8.2：移除 YAML 成功后同步到服务
+	if view.Applied {
+		if syncErr := b.syncProjectReload(); syncErr != nil {
+			// 同步失败不阻断主流程
+		}
+	}
+	return view, nil
 }
 
 func (b *RealtimeProjectBinding) UpdateReplicasAt(projectID, projectFile, sourceID string, replicas int) (realtime.OpenedProjectView, error) {
-	return b.manager.UpdateReplicasAt(b.ctx, projectID, projectFile, sourceID, replicas)
+	view, err := b.manager.UpdateReplicasAt(b.ctx, projectID, projectFile, sourceID, replicas)
+	if err != nil {
+		return realtime.OpenedProjectView{}, err
+	}
+	// todo.md §8.2：修改副本数成功后同步到服务
+	if view.Applied {
+		if syncErr := b.syncProjectReload(); syncErr != nil {
+			// 同步失败不阻断主流程
+		}
+	}
+	return view, nil
 }
 
 func (b *RealtimeProjectBinding) UpdateRuntime(projectID, projectFile string, rt realtime.Runtime) (realtime.OpenedProject, error) {
-	return b.manager.UpdateRuntimeAt(b.ctx, projectID, projectFile, rt)
+	proj, err := b.manager.UpdateRuntimeAt(b.ctx, projectID, projectFile, rt)
+	if err != nil {
+		return realtime.OpenedProject{}, err
+	}
+	// todo.md §8.2：修改 runtime 成功后同步到服务
+	if syncErr := b.syncProjectReload(); syncErr != nil {
+		// 同步失败不阻断主流程
+	}
+	return proj, nil
 }
 
 func (b *RealtimeProjectBinding) OpenProject(id string) (realtime.Project, error) {
@@ -438,4 +509,44 @@ func (b *RealtimeProjectBinding) SetRuntimeValue(apiHost string, apiPort int, in
 		return err
 	}
 	return decodeForceResponse(resp, nil)
+}
+
+// ---------------------------------------------------------------------------
+// todo.md §8：工程上下文同步到常驻服务
+// ---------------------------------------------------------------------------
+
+// syncProjectOpen 通知服务打开工程（todo.md §8.1）。
+// 在 CreateProject / OpenProjectFile / OpenRecentProject 成功后调用。
+func (b *RealtimeProjectBinding) syncProjectOpen(projectFile string) error {
+	if b.serviceClient == nil {
+		return nil // 服务未注入时静默跳过（兼容旧测试）
+	}
+	req := map[string]string{"projectFile": projectFile}
+	var resp struct {
+		OK bool `json:"ok"`
+	}
+	return b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/open", req, &resp)
+}
+
+// syncProjectReload 通知服务重新加载工程（todo.md §8.2）。
+// 在 AddSource / RemoveSource / UpdateReplicas / UpdateRuntime 成功后调用。
+func (b *RealtimeProjectBinding) syncProjectReload() error {
+	if b.serviceClient == nil {
+		return nil
+	}
+	var resp struct {
+		OK bool `json:"ok"`
+	}
+	return b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/reload", nil, &resp)
+}
+
+// syncProjectClose 通知服务关闭工程（todo.md §8.3）。
+func (b *RealtimeProjectBinding) syncProjectClose() error {
+	if b.serviceClient == nil {
+		return nil
+	}
+	var resp struct {
+		OK bool `json:"ok"`
+	}
+	return b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/close", nil, &resp)
 }

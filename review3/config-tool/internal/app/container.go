@@ -88,8 +88,9 @@ func NewContainerWithDevMode(devMode bool) (*Container, error) {
 	sessionManager := realtime.NewSessionManager(sessionRoot)
 	runtimeBinding := bindings.NewRealtimeRuntimeBinding(manager, systemBinding, sessionManager)
 
-	// 7. 注入统一服务客户端（todo.md §5.2）
+	// 7. 注入统一服务客户端（todo.md §5.2 / §8）
 	runtimeBinding.SetServiceEndpoint(service.Host(), service.Port(), service.Token())
+	realtimeBinding.SetServiceClient(service.Client())
 
 	// 8. 创建 lifecycle
 	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding, templateBinding, realtimeBinding, runtimeBinding)
