@@ -42,8 +42,16 @@ export function ListRunHistory() {
   return window['go']['bindings']['RealtimeRuntimeBinding']['ListRunHistory']();
 }
 
+export function ServiceEndpoint() {
+  return window['go']['bindings']['RealtimeRuntimeBinding']['ServiceEndpoint']();
+}
+
 export function SetContext(arg1) {
   return window['go']['bindings']['RealtimeRuntimeBinding']['SetContext'](arg1);
+}
+
+export function SetServiceEndpoint(arg1, arg2, arg3) {
+  return window['go']['bindings']['RealtimeRuntimeBinding']['SetServiceEndpoint'](arg1, arg2, arg3);
 }
 
 export function StartProject(arg1, arg2) {
