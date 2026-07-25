@@ -770,3 +770,99 @@ func sessionRecordFor(s realtime.RealtimeRunSession) realtime.SessionRecord {
 		State:              s.State,
 	}
 }
+
+// ---------------------------------------------------------------------------
+// todo.md §9：通过常驻服务 API 启动/停止实时运行
+// ---------------------------------------------------------------------------
+
+// runtimeStartRequest 是 POST /api/runtime/start 的请求体（todo.md §9.3）。
+type runtimeStartRequest struct {
+	ConfigPath  string  `json:"configPath"`
+	RuntimeName string  `json:"runtimeName"`
+	CycleTime   float64 `json:"cycleTime"`
+	OPCUAHost   string  `json:"opcUaHost"`
+	OPCUAPort   int     `json:"opcUaPort"`
+}
+
+// runtimeStartResponse 是 POST /api/runtime/start 的响应体。
+type runtimeStartResponse struct {
+	OK           bool    `json:"ok"`
+	RuntimeState string  `json:"runtimeState"`
+	CycleTime    float64 `json:"cycleTime"`
+	OPCUAHost    string  `json:"opcUaHost"`
+	OPCUAPort    int     `json:"opcUaPort"`
+	RuntimeName  string  `json:"runtimeName"`
+}
+
+// runtimeStatusResponse 是 GET /api/runtime/status 的响应体。
+type runtimeStatusResponse struct {
+	OK           bool   `json:"ok"`
+	RuntimeState string `json:"runtimeState"`
+	ServiceState string `json:"serviceState"`
+}
+
+// startRuntimeViaService 通过服务 API 启动实时运行（todo.md §9.2）。
+// 不再创建 DataFactory 子进程。
+func (b *RealtimeRuntimeBinding) startRuntimeViaService(configPath, runtimeName string, cycleTime float64, opcUaHost string, opcUaPort int) error {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("服务客户端未注入")
+	}
+
+	req := runtimeStartRequest{
+		ConfigPath:  configPath,
+		RuntimeName: runtimeName,
+		CycleTime:   cycleTime,
+		OPCUAHost:   opcUaHost,
+		OPCUAPort:   opcUaPort,
+	}
+	var resp runtimeStartResponse
+	if err := client.DoJSON(b.ctx, "POST", "/api/runtime/start", req, &resp); err != nil {
+		return fmt.Errorf("服务启动实时运行失败: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("服务启动实时运行返回 ok=false")
+	}
+	return nil
+}
+
+// stopRuntimeViaService 通过服务 API 停止实时运行（todo.md §9.4）。
+// 不停止 DataFactoryService 进程。
+func (b *RealtimeRuntimeBinding) stopRuntimeViaService() error {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("服务客户端未注入")
+	}
+
+	var resp struct {
+		OK           bool   `json:"ok"`
+		RuntimeState string `json:"runtimeState"`
+	}
+	if err := client.DoJSON(b.ctx, "POST", "/api/runtime/stop", nil, &resp); err != nil {
+		return fmt.Errorf("服务停止实时运行失败: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("服务停止实时运行返回 ok=false")
+	}
+	return nil
+}
+
+// getRuntimeStatusViaService 查询实时运行状态（todo.md §9）。
+func (b *RealtimeRuntimeBinding) getRuntimeStatusViaService() (string, error) {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return "", fmt.Errorf("服务客户端未注入")
+	}
+
+	var resp runtimeStatusResponse
+	if err := client.DoJSON(b.ctx, "GET", "/api/runtime/status", nil, &resp); err != nil {
+		return "", err
+	}
+	return resp.RuntimeState, nil
+}
