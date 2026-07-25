@@ -38,8 +38,13 @@ export function RealtimeRunPage() {
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null)
   const initOnce = useRef(false)
 
-  // 工程组态里持久化的运行时默认参数（页面不再编辑）
-  const runtimeDefaults = currentProject?.runtime
+  // 工程组态里持久化的运行时默认参数（页面不再编辑）。
+  // 旧工程可能没有 runtime 字段，回退到与 Go 端一致的默认值（0.5s / 0.0.0.0 / 18951）。
+  const runtimeDefaults = currentProject?.runtime ?? {
+    cycleTime: 0.5,
+    opcUaHost: '0.0.0.0',
+    opcUaPort: 18951,
+  }
 
   useEffect(() => {
     systemApi.getDataFactoryPath().then((p) => {

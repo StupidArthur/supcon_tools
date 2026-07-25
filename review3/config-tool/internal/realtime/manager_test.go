@@ -325,6 +325,18 @@ func TestCreateProjectAtCreatesDirectory(t *testing.T) {
 	if _, err := os.Stat(proj.ProjectFile); err != nil {
 		t.Fatalf("project file should exist: %v", err)
 	}
+	if proj.Project.Runtime == nil {
+		t.Fatal("expected runtime defaults to be written for new project")
+	}
+	if proj.Project.Runtime.CycleTime != 0.5 {
+		t.Fatalf("expected default cycleTime 0.5, got %v", proj.Project.Runtime.CycleTime)
+	}
+	if proj.Project.Runtime.OPCUAHost != "0.0.0.0" {
+		t.Fatalf("expected default opcUaHost 0.0.0.0, got %v", proj.Project.Runtime.OPCUAHost)
+	}
+	if proj.Project.Runtime.OPCUAPort != 18951 {
+		t.Fatalf("expected default opcUaPort 18951, got %v", proj.Project.Runtime.OPCUAPort)
+	}
 }
 
 func TestCreateProjectAtRejectsExisting(t *testing.T) {

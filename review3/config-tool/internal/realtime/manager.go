@@ -61,11 +61,18 @@ func (m *Manager) CreateProjectAt(_ context.Context, name, parentDir string) (Op
 		return OpenedProject{}, fmt.Errorf("创建工程目录失败: %w", err)
 	}
 	id := uuid.New().String()
+	// 写入 runtime 默认值（设计文档 §5.7 示例字段）。前端不再单独提供运行参数输入，
+	// 必须保证 project.yaml 从创建起就带有合法默认 runtime，避免后续打开得到空值。
 	p := Project{
 		Version: 1,
 		ID:      id,
 		Name:    name,
 		Sources: []Source{},
+		Runtime: &Runtime{
+			CycleTime: 0.5,
+			OPCUAHost: "0.0.0.0",
+			OPCUAPort: 18951,
+		},
 	}
 	projectFile := filepath.Join(targetDir, "project.yaml")
 	if err := SaveProjectToFile(projectFile, p); err != nil {
