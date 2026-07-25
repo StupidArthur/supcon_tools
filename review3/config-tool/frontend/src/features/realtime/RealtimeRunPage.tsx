@@ -8,13 +8,19 @@ import { useRealtimeRunSessionStore } from './useRealtimeRunSessionStore'
 import { RuntimeInstanceTable } from './RuntimeInstanceTable'
 import { RuntimeInstanceDetail } from './RuntimeInstanceDetail'
 
+/**
+ * 实时运行页：
+ * - 运行参数（控制周期 / UA 地址 / UA 端口）来自工程组态持久化的 runtime 默认值，
+ *   本页面不再提供输入框，统一在「工程组态」维护。
+ * - 整页主体交给实例列表 / 实例详情（位号表）。
+ * - 顶部仅保留一行状态条 + 启停按钮，方便用户启动 / 停止实时服务。
+ */
 export function RealtimeRunPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
   const setDfPath = useCanvasStore((s) => s.setDfPath)
   const refreshStatus = useCanvasStore((s) => s.refreshStatus)
 
   const currentProject = useRealtimeProjectStore((s) => s.currentProject)
-  const currentProjectFile = useRealtimeProjectStore((s) => s.currentProjectFile)
   const instances = useRealtimeProjectStore((s) => s.instances)
 
   const session = useRealtimeRunSessionStore((s) => s.session)
@@ -28,23 +34,12 @@ export function RealtimeRunPage() {
   const offlineRunning = useGenericSimStore((s) => s.status === 'running')
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
 
-  // 初始默认值（来自工程 runtime 持久化）
-  const [cycleTime, setCycleTime] = useState(0.5)
-  const [opcUaHost, setOpcUaHost] = useState('0.0.0.0')
-  const [opcUaPort, setOpcUaPort] = useState(18951)
   const [error, setError] = useState('')
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null)
   const initOnce = useRef(false)
 
-  // 当工程打开 / runtime 变化时，加载持久化默认值
-  useEffect(() => {
-    if (initOnce.current) return
-    if (currentProject?.runtime) {
-      setCycleTime(currentProject.runtime.cycleTime || 0.5)
-      setOpcUaHost(currentProject.runtime.opcUaHost || '0.0.0.0')
-      setOpcUaPort(currentProject.runtime.opcUaPort || 18951)
-    }
-  }, [currentProject?.id, currentProject?.runtime])
+  // 工程组态里持久化的运行时默认参数（页面不再编辑）
+  const runtimeDefaults = currentProject?.runtime
 
   useEffect(() => {
     systemApi.getDataFactoryPath().then((p) => {
@@ -60,8 +55,6 @@ export function RealtimeRunPage() {
     const myGen = ++useRealtimeRunSessionStore.getState().bootstrapGen
     const mySessionId = session?.sessionId ?? null
     if (dfStatus.running && dfStatus.apiReady && session?.sourceKind === 'project') {
-      const host = session.apiHost
-      const port = session.apiPort
       void (async () => {
         let info
         try {
@@ -122,7 +115,7 @@ export function RealtimeRunPage() {
       setError('离线批量任务正在运行，禁止启动实时运行')
       return
     }
-    if (!currentProject || !currentProjectFile) {
+    if (!currentProject) {
       setError('请先打开一个实时工程')
       return
     }
@@ -130,10 +123,14 @@ export function RealtimeRunPage() {
       setError('工程没有可运行的实例')
       return
     }
+    if (!runtimeDefaults) {
+      setError('工程组态中尚未配置运行时默认参数（控制周期 / UA 地址 / UA 端口）')
+      return
+    }
     const ok = await startProject(currentProject.id, {
-      cycleTime,
-      opcUaHost,
-      opcUaPort,
+      cycleTime: runtimeDefaults.cycleTime,
+      opcUaHost: runtimeDefaults.opcUaHost,
+      opcUaPort: runtimeDefaults.opcUaPort,
       apiHost: '127.0.0.1',
       apiPort: 8000,
       runtimeName: currentProject.name,
@@ -151,7 +148,6 @@ export function RealtimeRunPage() {
     clearSessionError()
   }
 
-  // 未打开工程 → 占位提示
   if (!currentProject) {
     return (
       <div className="flex flex-1 items-center justify-center bg-background p-6 text-sm text-muted-foreground" data-testid="realtime-run-no-project">
@@ -161,59 +157,45 @@ export function RealtimeRunPage() {
   }
 
   const isRunning = Boolean(dfStatus.running && session)
-  const inputsDisabled = isRunning
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-background" data-testid="realtime-run-page">
-      {/* 左侧运行控制 */}
-      <aside className="flex w-72 shrink-0 flex-col gap-3 border-r border-border p-4" data-testid="runtime-control-panel">
-        <h3 className="text-sm font-medium">运行控制</h3>
-        <label className="space-y-1 text-xs">
-          <span className="text-muted-foreground">控制周期 (秒)</span>
-          <input
-            type="number"
-            min={0.01}
-            step={0.1}
-            value={cycleTime}
-            disabled={inputsDisabled}
-            onChange={(e) => setCycleTime(Number(e.target.value))}
-            className="block w-full rounded-md border border-border bg-card px-3 py-1.5 disabled:opacity-50"
-            data-testid="runtime-control-cycle"
-          />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="text-muted-foreground">UA 地址</span>
-          <input
-            value={opcUaHost}
-            disabled={inputsDisabled}
-            onChange={(e) => setOpcUaHost(e.target.value)}
-            className="block w-full rounded-md border border-border bg-card px-3 py-1.5 disabled:opacity-50"
-            data-testid="runtime-control-opc-host"
-          />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="text-muted-foreground">UA 端口</span>
-          <input
-            type="number"
-            value={opcUaPort}
-            disabled={inputsDisabled}
-            onChange={(e) => setOpcUaPort(Number(e.target.value))}
-            className="block w-full rounded-md border border-border bg-card px-3 py-1.5 disabled:opacity-50"
-            data-testid="runtime-control-opc-port"
-          />
-        </label>
-        <div className="rounded-md border border-border bg-card px-3 py-2 text-xs" data-testid="runtime-control-status">
-          <div className="text-muted-foreground">服务状态</div>
-          <div className="mt-1 text-sm font-medium">{status}</div>
-          {dfStatus.running ? <div className="text-xs text-muted-foreground">PID: {dfStatus.pid}</div> : null}
-        </div>
-        <div className="mt-auto flex flex-col gap-2">
+    <div className="flex flex-1 flex-col overflow-hidden bg-background" data-testid="realtime-run-page">
+      {/* 顶部状态条：状态 + 启停（运行参数统一在「工程组态」维护） */}
+      <header
+        className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-2 text-xs"
+        data-testid="runtime-status-bar"
+      >
+        <span className="text-muted-foreground">服务状态</span>
+        <span className="rounded bg-secondary px-2 py-0.5 text-xs font-medium" data-testid="runtime-status-value">
+          {status}
+        </span>
+        {dfStatus.running ? (
+          <span className="text-xs text-muted-foreground">PID: {dfStatus.pid}</span>
+        ) : null}
+        {runtimeDefaults ? (
+          <span className="ml-2 text-xs text-muted-foreground">
+            周期 {runtimeDefaults.cycleTime}s · UA {runtimeDefaults.opcUaHost}:{runtimeDefaults.opcUaPort}
+          </span>
+        ) : (
+          <span className="ml-2 text-xs text-destructive" data-testid="runtime-missing-config">
+            工程组态尚未配置运行时参数
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {error || sessionError ? (
+            <span
+              className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-0.5 text-xs text-destructive"
+              data-testid="runtime-status-error"
+            >
+              {error || sessionError}
+            </span>
+          ) : null}
           {isRunning ? (
             <button
               type="button"
               onClick={() => void handleStop()}
               disabled={sessionLoading}
-              className="rounded-md bg-destructive px-4 py-2 text-sm text-destructive-foreground disabled:opacity-40"
+              className="rounded-md bg-destructive px-3 py-1 text-xs text-destructive-foreground disabled:opacity-40"
               data-testid="runtime-control-stop"
             >
               停止
@@ -222,23 +204,18 @@ export function RealtimeRunPage() {
             <button
               type="button"
               onClick={() => void handleStart()}
-              disabled={sessionLoading || offlineRunning || globalBatchRunning}
-              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-40"
+              disabled={sessionLoading || offlineRunning || globalBatchRunning || !runtimeDefaults}
+              className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-40"
               data-testid="runtime-control-start"
             >
               启动
             </button>
           )}
-          {error || sessionError ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-xs text-destructive" data-testid="runtime-control-error">
-              {error || sessionError}
-            </div>
-          ) : null}
         </div>
-      </aside>
+      </header>
 
-      {/* 右侧：实例列表 / 实例详情 */}
-      <main className="flex min-w-0 flex-1 flex-col p-4" data-testid="runtime-instance-area">
+      {/* 主体：实例列表 / 实例详情 */}
+      <main className="flex min-h-0 flex-1 flex-col p-4" data-testid="runtime-instance-area">
         {selectedInstance ? (
           <RuntimeInstanceDetail
             instanceName={selectedInstance}
@@ -247,7 +224,7 @@ export function RealtimeRunPage() {
         ) : (
           <RuntimeInstanceTable
             instances={instances}
-            sources={currentProject.sources}
+            sources={currentProject.sources || []}
             onSelect={(name) => setSelectedInstance(name)}
           />
         )}
