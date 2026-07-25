@@ -235,24 +235,37 @@ type RealtimeConnectionInfo struct {
 	APIToken    string `json:"apiToken"`
 }
 
-// GetConnectionInfo 返回当前实时运行的连接信息（host / port / runtimeName / token）。
-// 必须在 session 活跃时调用才返回有效 token；进程启动失败 / 退出 / 停止后 token 为空，
-// 前端不得用空 token 继续访问 REST / WS。
+// GetConnectionInfo 返回当前实时运行的连接信息（todo.md §9 过渡实现）。
+// Phase E 将进一步删除前端 Token 暴露，由 Go 代理所有 runtime API。
 func (b *RealtimeRuntimeBinding) GetConnectionInfo() (RealtimeConnectionInfo, error) {
 	b.mu.Lock()
 	s := b.current
+	client := b.serviceClient
+	host := b.serviceHost
+	port := b.servicePort
 	b.mu.Unlock()
+
 	if s == nil {
 		return RealtimeConnectionInfo{}, fmt.Errorf("没有运行会话")
 	}
-	if !b.system.Status().Running {
-		return RealtimeConnectionInfo{}, fmt.Errorf("实时进程未在运行")
+
+	// todo.md §9：检查服务 runtime 状态，不依赖旧 SystemBinding.Status()
+	if client != nil {
+		runtimeState, err := b.getRuntimeStatusViaService()
+		if err != nil {
+			return RealtimeConnectionInfo{}, fmt.Errorf("查询运行状态失败: %w", err)
+		}
+		if runtimeState != "running" {
+			return RealtimeConnectionInfo{}, fmt.Errorf("实时运行未在运行中（当前状态: %s）", runtimeState)
+		}
 	}
+
+	// todo.md §13.2 过渡：仍返回 Token，Phase E 将删除
 	return RealtimeConnectionInfo{
-		APIHost:     s.APIHost,
-		APIPort:     s.APIPort,
+		APIHost:     host,
+		APIPort:     port,
 		RuntimeName: s.RuntimeName,
-		APIToken:    CurrentAPIToken(),
+		APIToken:    CurrentAPIToken(), // Phase E 将删除此行
 	}, nil
 }
 
