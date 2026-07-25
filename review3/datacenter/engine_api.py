@@ -952,6 +952,8 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
         b.opcua_server = opcua_server  # type: ignore[attr-defined]
         b.engine_thread = engine_thread  # type: ignore[attr-defined]
         b.engine_stop_event = stop_event  # type: ignore[attr-defined]
+        # todo.md §10.1：更新 instance_name
+        b.instance_name = req.runtimeName
 
         with b._state_lock:
             b.runtime_state = RUNTIME_STATE_RUNNING
@@ -990,12 +992,13 @@ def api_runtime_status() -> Dict[str, Any]:
 
 @app.post("/api/runtime/stop")
 def api_runtime_stop() -> Dict[str, Any]:
-    """进程内停止 Engine + OPC UA（todo.md §6.2）。不停止 DataFactoryService。"""
+    """进程内停止 Engine + OPC UA（todo.md §10.3-§10.4）。不停止 DataFactoryService。"""
     b = get_binding()
     with b._state_lock:
         if b.runtime_state in (RUNTIME_STATE_STOPPED, RUNTIME_STATE_FAILED):
             return {"ok": True, "runtimeState": b.runtime_state, "noop": True}
         b.runtime_state = RUNTIME_STATE_STOPPING
+
     # OPC UA 先停（依赖 force/quality state）；Engine 线程设置 stop_event 让循环退出
     try:
         opcua = getattr(b, "opcua_server", None)
@@ -1004,16 +1007,51 @@ def api_runtime_stop() -> Dict[str, Any]:
                 opcua.stop()
             except Exception:
                 logger.exception("opcua stop error")
+
         stop_event = getattr(b, "engine_stop_event", None)
         if stop_event is not None:
             stop_event.set()
+
         thread = getattr(b, "engine_thread", None)
         if thread is not None:
-            thread.join(timeout=2.0)
-    finally:
+            thread.join(timeout=5.0)  # todo.md §10.3：增加超时时间
+            # todo.md §10.3：检查线程是否真正退出
+            if thread.is_alive():
+                with b._state_lock:
+                    b.runtime_state = RUNTIME_STATE_FAILED
+                raise HTTPException(
+                    status_code=500,
+                    detail="Engine 线程在 5s 内未退出，停止失败",
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("runtime stop error")
         with b._state_lock:
-            b.runtime_state = RUNTIME_STATE_STOPPED
-        # force / quality / archiver 状态保持运行期，不随 stop 清空（这是会话内临时状态）
+            b.runtime_state = RUNTIME_STATE_FAILED
+        raise HTTPException(status_code=500, detail=f"停止运行失败: {e}")
+
+    # todo.md §10.4：stop 成功后清空全部运行期状态
+    b.engine = None
+    b.shared_data = {}
+    b.force_manager = None
+    b.quality_manager = None
+    b.opcua_server = None  # type: ignore[attr-defined]
+    b.engine_thread = None  # type: ignore[attr-defined]
+    b.engine_stop_event = None  # type: ignore[attr-defined]
+    b.engine_holder = None  # type: ignore[attr-defined]
+    # 清空 snapshot
+    with b._latest_snapshot_lock:
+        b._latest_snapshot = None
+    with b._buffer_lock:
+        b.snapshot_buffer.clear()
+    # 清空归档和报警运行状态
+    b.archiver = None
+    b.alarm_manager = None
+
+    with b._state_lock:
+        b.runtime_state = RUNTIME_STATE_STOPPED
+
     return {"ok": True, "runtimeState": b.runtime_state}
 
 
@@ -1086,10 +1124,21 @@ def api_export_convert(req: ExportConvertRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"export 失败: {e}")
 
 
+# ---------------------------------------------------------------------------
+# todo.md §10.5：Engine 未运行接口统一返回 409
+# ---------------------------------------------------------------------------
+
+def _require_engine_running(b: "EngineBinding") -> None:
+    """检查 Engine 是否运行中，未运行则抛 409（todo.md §10.5）。"""
+    if b.engine is None:
+        raise HTTPException(status_code=409, detail="当前工程未运行")
+
+
 @app.get("/api/instances/{name}/meta")
 def api_meta(name: str) -> Dict[str, Any]:
     """所有 program 项的 stored_attributes + default_params + param_descriptions。"""
     b = get_binding()
+    _require_engine_running(b)  # todo.md §10.5
     if name != b.instance_name:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
     return {
@@ -1116,6 +1165,7 @@ def api_tags(name: str) -> Dict[str, Any]:
     - 不从名称后缀推断类型或权限。
     """
     b = get_binding()
+    _require_engine_running(b)  # todo.md §10.5
     if name != b.instance_name:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
 
@@ -1152,6 +1202,7 @@ def api_snapshot(name: str) -> Dict[str, Any]:
     snapshot 缺失的字段（如 cycle_count/sim_time 未推送过）原样缺失，绝不替换为 0。
     """
     b = get_binding()
+    _require_engine_running(b)  # todo.md §10.5
     if name != b.instance_name:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
     latest = b.get_latest_snapshot()
@@ -1171,6 +1222,7 @@ def api_set_param(name: str, req: ParamUpdateRequest) -> Dict[str, Any]:
     注意：只能改 instance 上的属性（PB/TI/TD 等）。要改 VARIABLE 类型用 /override。
     """
     b = get_binding()
+    _require_engine_running(b)  # todo.md §10.5
     if name != b.instance_name:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
     b.engine.queue_param_update(name, req.param, req.value)
@@ -1185,6 +1237,7 @@ def api_override(name: str, req: OverrideRequest) -> Dict[str, Any]:
     body: ``{"tag": "v_name.SV", "value": 1.5}``
     """
     b = get_binding()
+    _require_engine_running(b)  # todo.md §10.5
     if name != b.instance_name:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}")
     b.engine.override_variable(req.tag, req.value)
