@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"raymonitor/alert"
 	"raymonitor/collector"
@@ -15,10 +16,6 @@ import (
 	"raymonitor/storage"
 )
 
-// App 是 Wails 绑定层：持有采集管理器、存储、配置，暴露方法给前端。
-//
-// v2 多集群：用 CollectorManager 管多个集群采集器。前端方法带 clusterID 参数。
-// 错误通过返回结构体的 Error 字段传递，不 panic（遵循 wails-backend 规范）。
 type App struct {
 	ctx context.Context
 
@@ -27,16 +24,14 @@ type App struct {
 	store   *storage.Store
 	manager *collector.CollectorManager
 	alerts  *alert.Manager
+
+	cleanupCancel context.CancelFunc
 }
 
-// NewApp 构造 App。实际资源在 startup 时初始化。
 func NewApp() *App {
 	return &App{}
 }
 
-// startup Wails 启动回调。初始化日志、存储、采集管理器，但不自动开始采集
-// （由前端调用 StartAll/StartCluster 控制）。
-// 顺序：日志最先初始化，确保后续任何错误都能落盘可见。
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	dbg := []string{"=== startup diagnostic ==="}
@@ -50,7 +45,6 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.cfg = cfg
 
-	// 日志最先初始化
 	logPath, err := logx.Init(cfg.LogDir)
 	if err != nil {
 		dbg = append(dbg, "logx.Init FAILED: "+err.Error())
@@ -58,23 +52,26 @@ func (a *App) startup(ctx context.Context) {
 	} else {
 		dbg = append(dbg, "logx.Init ok, logPath="+logPath)
 	}
-	logx.L().Info("app starting", "clusters", len(cfg.Clusters), "dbPath", cfg.DBPath)
 
-	store, err := storage.Open(cfg.DBPath)
+	dbPath := a.resolveDBPath(cfg.DBPath)
+	logx.L().Info("app starting", "clusters", len(cfg.Clusters), "dbPath", dbPath)
+
+	store, err := storage.Open(dbPath)
 	if err != nil {
 		dbg = append(dbg, "storage.Open FAILED: "+err.Error())
-		logx.L().Error("open store failed", "err", err, "dbPath", cfg.DBPath)
+		logx.L().Error("open store failed", "err", err, "dbPath", dbPath)
 	} else {
-		dbg = append(dbg, "storage.Open ok")
+		dbg = append(dbg, "storage.Open ok, path="+dbPath)
 		a.store = store
 	}
 
 	if a.store != nil {
 		a.manager = collector.NewManager(a.store, cfg)
-		// 创建告警引擎并注入 manager
 		a.alerts = alert.NewManager(a.store, cfg.RecoverConsecutive)
 		a.manager.SetAlertChecker(a.alerts)
 		dbg = append(dbg, "manager created, clusters="+itoa(len(cfg.Clusters)))
+
+		a.startCleanupLoop(cfg)
 	} else {
 		dbg = append(dbg, "manager NOT created (store nil)")
 	}
@@ -84,7 +81,61 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
-// itoa 简单整数转字符串（避免引入 strconv 仅为这一处）。
+func (a *App) resolveDBPath(dbPath string) string {
+	baseDir := ""
+	if exe, err := os.Executable(); err == nil {
+		baseDir = filepath.Dir(exe)
+	} else {
+		baseDir = "."
+	}
+	resolved := config.ResolveRuntimePath(dbPath, baseDir)
+	if dir := filepath.Dir(resolved); dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
+	}
+	return resolved
+}
+
+func (a *App) startCleanupLoop(cfg config.Config) {
+	cleanupCtx, cancel := context.WithCancel(a.ctx)
+	a.cleanupCancel = cancel
+
+	retentionDays := cfg.EffectiveRetentionDays()
+	everyHours := cfg.EffectiveCleanupEveryHours()
+
+	go func() {
+		a.runCleanup(retentionDays)
+
+		ticker := time.NewTicker(time.Duration(everyHours) * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-cleanupCtx.Done():
+				return
+			case <-ticker.C:
+				a.runCleanup(retentionDays)
+			}
+		}
+	}()
+}
+
+func (a *App) runCleanup(retentionDays int) {
+	if a.store == nil {
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -retentionDays).UnixMilli()
+	start := time.Now()
+	result, err := a.store.CleanupBefore(cutoff)
+	if err != nil {
+		logx.L().Warn("retention cleanup failed", "err", err, "cutoff", cutoff)
+		return
+	}
+	logx.L().Info("retention cleanup done",
+		"cutoff", cutoff, "ms", time.Since(start).Milliseconds(),
+		"nodeMetric", result.NodeMetric, "workerSnapshot", result.WorkerSnapshot,
+		"actorSnapshot", result.ActorSnapshot, "jobSnapshot", result.JobSnapshot,
+		"clusterMetric", result.ClusterMetric)
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"
@@ -107,7 +158,6 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// dumpDebug 把启动诊断写到 exe 同目录 debug.txt（绕开 logger）。
 func dumpDebug(lines []string) error {
 	exe, err := os.Executable()
 	if err != nil {
@@ -121,8 +171,10 @@ func dumpDebug(lines []string) error {
 	return os.WriteFile(filepath.Join(dir, "debug.txt"), []byte(content), 0o644)
 }
 
-// shutdown Wails 关闭回调。停止所有采集、关闭存储。
 func (a *App) shutdown(ctx context.Context) {
+	if a.cleanupCancel != nil {
+		a.cleanupCancel()
+	}
 	if a.manager != nil {
 		a.manager.StopAll()
 	}
@@ -134,7 +186,6 @@ func (a *App) shutdown(ctx context.Context) {
 
 // ---- 采集控制 ----
 
-// StartAll 启动所有集群采集。
 func (a *App) StartAll() {
 	if a.manager == nil {
 		return
@@ -142,7 +193,6 @@ func (a *App) StartAll() {
 	a.manager.StartAll()
 }
 
-// StopAll 停止所有集群采集。
 func (a *App) StopAll() {
 	if a.manager == nil {
 		return
@@ -150,7 +200,6 @@ func (a *App) StopAll() {
 	a.manager.StopAll()
 }
 
-// StartCluster 启动单个集群采集（热加场景）。
 func (a *App) StartCluster(clusterID string) {
 	if a.manager == nil {
 		return
@@ -158,7 +207,6 @@ func (a *App) StartCluster(clusterID string) {
 	a.manager.StartCluster(clusterID)
 }
 
-// StopCluster 停止单个集群采集。
 func (a *App) StopCluster(clusterID string) {
 	if a.manager == nil {
 		return
@@ -166,7 +214,6 @@ func (a *App) StopCluster(clusterID string) {
 	a.manager.StopCluster(clusterID)
 }
 
-// ListClusterIDs 所有集群 ID。
 func (a *App) ListClusterIDs() []string {
 	if a.manager == nil {
 		return nil
@@ -174,7 +221,6 @@ func (a *App) ListClusterIDs() []string {
 	return a.manager.ListClusterIDs()
 }
 
-// GetClusterStatus 某集群采集状态。
 func (a *App) GetClusterStatus(clusterID string) model.CollectorStatus {
 	if a.manager == nil {
 		return model.CollectorStatus{}
@@ -182,7 +228,6 @@ func (a *App) GetClusterStatus(clusterID string) model.CollectorStatus {
 	return a.manager.Status(clusterID)
 }
 
-// GetPerf 某集群性能评估。
 func (a *App) GetPerf(clusterID string) model.PerfMetrics {
 	if a.manager == nil {
 		return model.PerfMetrics{}
@@ -190,7 +235,6 @@ func (a *App) GetPerf(clusterID string) model.PerfMetrics {
 	return a.manager.Perf(clusterID)
 }
 
-// GetGlobalPerf 全局负荷评估。
 func (a *App) GetGlobalPerf() model.GlobalPerf {
 	if a.manager == nil {
 		return model.GlobalPerf{}
@@ -200,7 +244,6 @@ func (a *App) GetGlobalPerf() model.GlobalPerf {
 
 // ---- 告警 ----
 
-// ListAlerts 列出未消除报警。clusterID 为空则所有集群。
 func (a *App) ListAlerts(clusterID string) []model.Alert {
 	if a.alerts == nil {
 		return nil
@@ -213,7 +256,6 @@ func (a *App) ListAlerts(clusterID string) []model.Alert {
 	return res
 }
 
-// CountAlerts 统计未消除报警数。clusterID 为空则全部。
 func (a *App) CountAlerts(clusterID string) int {
 	if a.alerts == nil {
 		return 0
@@ -225,7 +267,6 @@ func (a *App) CountAlerts(clusterID string) int {
 	return n
 }
 
-// AckAlert 确认报警。
 func (a *App) AckAlert(alertID int64) bool {
 	if a.alerts == nil {
 		return false
@@ -237,9 +278,8 @@ func (a *App) AckAlert(alertID int64) bool {
 	return true
 }
 
-// ---- 当前态查询（带 clusterID）----
+// ---- 当前态查询 ----
 
-// GetSnapshot 某集群当前态快照。
 func (a *App) GetSnapshot(clusterID string) *collector.Snapshot {
 	if a.manager == nil {
 		return nil
@@ -247,7 +287,6 @@ func (a *App) GetSnapshot(clusterID string) *collector.Snapshot {
 	return a.manager.Snapshot(clusterID)
 }
 
-// GetNodes 某集群当前节点列表。
 func (a *App) GetNodes(clusterID string) []model.NodeMetric {
 	snap := a.GetSnapshot(clusterID)
 	if snap == nil {
@@ -256,7 +295,6 @@ func (a *App) GetNodes(clusterID string) []model.NodeMetric {
 	return snap.Nodes
 }
 
-// GetWorkers 某集群当前 worker 进程。
 func (a *App) GetWorkers(clusterID string) []model.WorkerSnapshot {
 	snap := a.GetSnapshot(clusterID)
 	if snap == nil {
@@ -265,7 +303,6 @@ func (a *App) GetWorkers(clusterID string) []model.WorkerSnapshot {
 	return snap.Workers
 }
 
-// GetActors 某集群当前 Actor。
 func (a *App) GetActors(clusterID string) []model.ActorSnapshot {
 	snap := a.GetSnapshot(clusterID)
 	if snap == nil {
@@ -274,7 +311,6 @@ func (a *App) GetActors(clusterID string) []model.ActorSnapshot {
 	return snap.Actors
 }
 
-// GetJobs 某集群当前作业。
 func (a *App) GetJobs(clusterID string) []model.JobSnapshot {
 	snap := a.GetSnapshot(clusterID)
 	if snap == nil {
@@ -283,15 +319,13 @@ func (a *App) GetJobs(clusterID string) []model.JobSnapshot {
 	return snap.Jobs
 }
 
-// ---- 历史查询（带 clusterID，阶段4存储改造后生效）----
+// ---- 历史查询 ----
 
-// HistoryRange 时间范围参数（毫秒时间戳）。
 type HistoryRange struct {
 	From int64 `json:"from"`
 	To   int64 `json:"to"`
 }
 
-// GetNodeHistory 查询某集群某节点硬件时序历史。
 func (a *App) GetNodeHistory(clusterID, nodeID string, r HistoryRange) []model.NodeMetric {
 	if a.store == nil {
 		return nil
@@ -304,7 +338,6 @@ func (a *App) GetNodeHistory(clusterID, nodeID string, r HistoryRange) []model.N
 	return res
 }
 
-// GetActorEvents 查询某集群 Actor 状态变迁事件。
 func (a *App) GetActorEvents(clusterID string, r HistoryRange) []model.ActorEvent {
 	if a.store == nil {
 		return nil
@@ -317,7 +350,6 @@ func (a *App) GetActorEvents(clusterID string, r HistoryRange) []model.ActorEven
 	return res
 }
 
-// GetJobHistory 查询某集群作业历史。status 为空则不限。
 func (a *App) GetJobHistory(clusterID string, r HistoryRange, status string) []model.JobSnapshot {
 	if a.store == nil {
 		return nil
@@ -332,100 +364,140 @@ func (a *App) GetJobHistory(clusterID string, r HistoryRange, status string) []m
 
 // ---- 配置 ----
 
-// GetConfig 返回当前配置。
 func (a *App) GetConfig() config.Config {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.cfg
 }
 
-// SaveConfigResult 保存配置结果。
 type SaveConfigResult struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }
 
-// SaveConfig 保存全局配置。集群列表变更由 Manager 热增减；
-// 采样间隔变更则重建所有采集器（应用新间隔）。
 func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
+	if err := config.Validate(cfg); err != nil {
+		return SaveConfigResult{Error: err.Error()}
+	}
+
 	a.mu.Lock()
 	old := a.cfg
-	a.cfg = cfg
 	a.mu.Unlock()
+
 	if err := config.Save(cfg); err != nil {
 		return SaveConfigResult{Error: err.Error()}
 	}
+
 	if a.manager != nil {
-		// 采样间隔变了 → 重建所有采集器应用新间隔
-		if old.SampleEvery != cfg.SampleEvery {
+		needReload := old.SampleEvery != cfg.SampleEvery ||
+			old.TimeoutSec != cfg.TimeoutSec ||
+			old.Concurrency != cfg.Concurrency ||
+			old.GlobalConcurrency != cfg.GlobalConcurrency
+		if needReload {
 			a.manager.ReloadAll(cfg)
 		} else {
 			a.manager.SyncClusters(old.Clusters, cfg.Clusters)
 		}
 	}
+
+	a.mu.Lock()
+	a.cfg = cfg
+	a.mu.Unlock()
+
 	logx.L().Info("config saved", "clusters", len(cfg.Clusters), "sampleEvery", cfg.SampleEvery)
 	return SaveConfigResult{Success: true}
 }
 
-// AddCluster 添加集群（热启动）。
 func (a *App) AddCluster(cl config.ClusterConfig) SaveConfigResult {
 	a.mu.Lock()
-	a.cfg.Clusters = append(a.cfg.Clusters, cl)
+	newCfg := a.cfg
+	newCfg.Clusters = make([]config.ClusterConfig, len(a.cfg.Clusters), len(a.cfg.Clusters)+1)
+	copy(newCfg.Clusters, a.cfg.Clusters)
+	newCfg.Clusters = append(newCfg.Clusters, cl)
 	a.mu.Unlock()
-	if err := config.Save(a.cfg); err != nil {
+
+	if err := config.Validate(newCfg); err != nil {
 		return SaveConfigResult{Error: err.Error()}
 	}
+	if err := config.Save(newCfg); err != nil {
+		return SaveConfigResult{Error: err.Error()}
+	}
+
+	a.mu.Lock()
+	a.cfg = newCfg
+	a.mu.Unlock()
+
 	if a.manager != nil {
 		a.manager.AddCluster(cl)
 	}
 	return SaveConfigResult{Success: true}
 }
 
-// RemoveCluster 删除集群。
 func (a *App) RemoveCluster(id string) SaveConfigResult {
 	a.mu.Lock()
-	out := a.cfg.Clusters[:0]
+	newCfg := a.cfg
+	out := make([]config.ClusterConfig, 0, len(a.cfg.Clusters))
 	for _, c := range a.cfg.Clusters {
 		if c.ID != id {
 			out = append(out, c)
 		}
 	}
-	a.cfg.Clusters = out
+	newCfg.Clusters = out
 	a.mu.Unlock()
-	if err := config.Save(a.cfg); err != nil {
+
+	if err := config.Save(newCfg); err != nil {
 		return SaveConfigResult{Error: err.Error()}
 	}
+
+	a.mu.Lock()
+	a.cfg = newCfg
+	a.mu.Unlock()
+
 	if a.manager != nil {
 		a.manager.RemoveCluster(id)
 	}
 	return SaveConfigResult{Success: true}
 }
 
-// UpdateCluster 更新集群配置（URL/间隔/阈值变更，热重建）。
 func (a *App) UpdateCluster(cl config.ClusterConfig) SaveConfigResult {
 	a.mu.Lock()
-	for i, c := range a.cfg.Clusters {
+	newCfg := a.cfg
+	newCfg.Clusters = make([]config.ClusterConfig, len(a.cfg.Clusters))
+	copy(newCfg.Clusters, a.cfg.Clusters)
+	found := false
+	for i, c := range newCfg.Clusters {
 		if c.ID == cl.ID {
-			a.cfg.Clusters[i] = cl
+			newCfg.Clusters[i] = cl
+			found = true
 			break
 		}
 	}
 	a.mu.Unlock()
-	if err := config.Save(a.cfg); err != nil {
+
+	if !found {
+		return SaveConfigResult{Error: "cluster not found: " + cl.ID}
+	}
+	if err := config.Validate(newCfg); err != nil {
 		return SaveConfigResult{Error: err.Error()}
 	}
+	if err := config.Save(newCfg); err != nil {
+		return SaveConfigResult{Error: err.Error()}
+	}
+
+	a.mu.Lock()
+	a.cfg = newCfg
+	a.mu.Unlock()
+
 	if a.manager != nil {
 		a.manager.UpdateCluster(cl)
 	}
 	return SaveConfigResult{Success: true}
 }
 
-// OpenInFolder 打开目录（跨平台）。
 func (a *App) OpenInFolder(path string) {
 	openInFolder(a.ctx, path)
 }
 
-// GetLogPath 返回日志文件实际路径。
 func (a *App) GetLogPath() string {
 	dir := a.cfg.LogDir
 	if dir == "" {
@@ -439,14 +511,6 @@ func (a *App) GetLogPath() string {
 	return filepath.Join(dir, "ray_monitor.log")
 }
 
-// GetDBPath 返回数据库实际路径。
 func (a *App) GetDBPath() string {
-	dir := a.cfg.DBPath
-	if filepath.IsAbs(dir) {
-		return dir
-	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exe), dir)
-	}
-	return dir
+	return a.resolveDBPath(a.cfg.DBPath)
 }

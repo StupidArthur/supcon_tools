@@ -3,6 +3,7 @@ import { Sidebar, type Selection } from '@/components/Sidebar'
 import { TopBar } from '@/components/TopBar'
 import { ConfigDialog } from '@/components/ConfigDialog'
 import { ClusterControlDialog } from '@/components/ClusterControlDialog'
+import { CollectionHealthNotice } from '@/components/CollectionHealthNotice'
 import { OverviewView } from '@/components/views/OverviewView'
 import { NodesView } from '@/components/views/NodesView'
 import { WorkersView } from '@/components/views/WorkersView'
@@ -158,11 +159,12 @@ export default function App() {
                 </button>
               ))}
             </div>
+            <CollectionHealthNotice health={snap?.health} />
             <div className="flex-1 overflow-y-auto p-7">
               {tab === 'overview' && <OverviewView data={snap ? buildOverview(snap) : null} perf={perf ?? null} />}
               {tab === 'nodes' && <NodesView nodes={snap?.nodes ?? []} sortBy={sortBy} />}
               {tab === 'workers' && (
-                <WorkersView workers={snap?.workers ?? []} nodes={snap?.nodes ?? []} sortBy={sortBy} />
+                <WorkersView workers={snap?.workers ?? []} nodes={snap?.nodes ?? []} sortBy={sortBy} health={snap?.health} />
               )}
               {tab === 'alerts' && (
                 <AlertsView clusterID={clusterID} onJumpObject={() => setTab('nodes')} />

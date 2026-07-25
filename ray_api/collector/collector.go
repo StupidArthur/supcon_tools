@@ -1,25 +1,11 @@
-// Package collector 采集调度器。
-//
-// 本文件 collector.go 实现双层定时采集 + 状态变迁事件生成。
-// 对外接口（仅以下允许被 collector 包外调用）：
-//
-//   - NewCollector(client, store, cfg) *Collector
-//   - (c *Collector) Start(ctx)   // 启动采集循环，ctx 取消即停止（A 模式：关窗口停）
-//   - (c *Collector) Status() CollectorStatus
-//   - (c *Collector) Snapshot() *Snapshot   // 当前态快照（供前端）
-//
-// 双层频率（设计文档 §2.2）：
-//   - summary 高频（15s）：节点硬件
-//   - detail/cluster/jobs 低频（60s）：workers/actors/调度资源/作业
-//
-// 事件生成（设计文档 §4 路线2）：
-//   - 内存保留上一轮 actor/job 快照，状态变化时生成 event 交 store 落库。
-//   - 两次采集间状态变两次会漏中间态——采样监控固有局限，标准未要求捕捉。
 package collector
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -27,7 +13,6 @@ import (
 	"raymonitor/model"
 )
 
-// Store 存储层接口。采集器只依赖此接口，不直接依赖 storage 实现，便于测试解耦。
 type Store interface {
 	WriteNodeMetrics(clusterID string, ns []model.NodeMetric) error
 	WriteWorkers(clusterID string, ws []model.WorkerSnapshot) error
@@ -38,17 +23,15 @@ type Store interface {
 	WriteJobEvents(clusterID string, es []model.JobEvent) error
 }
 
-// Snapshot 当前态快照，采集后推送给前端。
 type Snapshot struct {
 	Cluster model.ClusterMetric    `json:"cluster"`
 	Nodes   []model.NodeMetric     `json:"nodes"`
 	Workers []model.WorkerSnapshot `json:"workers"`
 	Actors  []model.ActorSnapshot  `json:"actors"`
 	Jobs    []model.JobSnapshot    `json:"jobs"`
+	Health  model.CollectionHealth `json:"health"`
 }
 
-// CollectorOpts 采集器运行所需配置，由 Manager 从 config.Config + ClusterConfig 解析得出。
-// 解耦 collector 与全局 config 结构：collector 只依赖自己需要的字段。
 type CollectorOpts struct {
 	ClusterID    string
 	PlatformURL  string
@@ -59,64 +42,95 @@ type CollectorOpts struct {
 	Concurrency  int
 }
 
-// Collector 采集调度器。
-type Collector struct {
-	client *Client
-	store  Store
-	opts   CollectorOpts
-
-	mu          sync.RWMutex
-	status      model.CollectorStatus
-	snap        *Snapshot
-	perf        model.PerfMetrics // 采集器自身性能评估
-	prevActors  map[string]model.ActorSnapshot // 上一轮 actor 快照，用于 diff 事件
-	prevJobs    map[string]model.JobSnapshot   // 上一轮 job 快照
-
-	// onAlert: 采集后回调，供告警引擎检查阈值。注入式，解耦 collector 与 alert 包。
-	// 参数：clusterID, nodes(当前快照节点), workers(当前快照worker)
-	onAlert func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot)
+type RequestLimiter interface {
+	Acquire(ctx context.Context) error
+	Release()
+	Capacity() int
 }
 
-// SetOnAlert 注入告警检查回调。
-func (c *Collector) SetOnAlert(fn func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot)) {
+type Collector struct {
+	client  *Client
+	store   Store
+	opts    CollectorOpts
+	limiter RequestLimiter
+
+	mu     sync.RWMutex
+	status model.CollectorStatus
+	snap   *Snapshot
+	perf   model.PerfMetrics
+	health model.CollectionHealth
+
+	workersByNode map[string][]model.WorkerSnapshot
+	actorsByNode  map[string][]model.ActorSnapshot
+	nodeState     map[string]*model.NodeCollectionState
+
+	prevActorsByNode map[string]map[string]model.ActorSnapshot
+	prevJobs         map[string]model.JobSnapshot
+
+	clusterStale bool
+	jobsStale    bool
+	prevCluster  model.ClusterMetric
+	prevJobsList []model.JobSnapshot
+
+	onAlert func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool)
+}
+
+func (c *Collector) SetOnAlert(fn func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool)) {
 	c.onAlert = fn
 }
 
-// NewCollector 构造采集器。
 func NewCollector(client *Client, store Store, opts CollectorOpts) *Collector {
 	return &Collector{
-		client: client, store: store, opts: opts,
-		prevActors: map[string]model.ActorSnapshot{},
-		prevJobs:   map[string]model.JobSnapshot{},
+		client:           client,
+		store:            store,
+		opts:             opts,
+		workersByNode:    map[string][]model.WorkerSnapshot{},
+		actorsByNode:     map[string][]model.ActorSnapshot{},
+		nodeState:        map[string]*model.NodeCollectionState{},
+		prevActorsByNode: map[string]map[string]model.ActorSnapshot{},
+		prevJobs:         map[string]model.JobSnapshot{},
 	}
 }
 
-// Status 返回采集器状态（线程安全）。
+func (c *Collector) SetLimiter(l RequestLimiter) {
+	c.limiter = l
+}
+
 func (c *Collector) Status() model.CollectorStatus {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.status
 }
 
-// Snapshot 返回当前态快照副本（线程安全）。尚未采集时返回 nil。
 func (c *Collector) Snapshot() *Snapshot {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.snap == nil {
 		return nil
 	}
-	s := *c.snap
-	return &s
+	s := &Snapshot{
+		Cluster: c.snap.Cluster,
+		Health:  c.snap.Health,
+	}
+	s.Nodes = make([]model.NodeMetric, len(c.snap.Nodes))
+	copy(s.Nodes, c.snap.Nodes)
+	s.Workers = make([]model.WorkerSnapshot, len(c.snap.Workers))
+	copy(s.Workers, c.snap.Workers)
+	s.Actors = make([]model.ActorSnapshot, len(c.snap.Actors))
+	copy(s.Actors, c.snap.Actors)
+	s.Jobs = make([]model.JobSnapshot, len(c.snap.Jobs))
+	copy(s.Jobs, c.snap.Jobs)
+	s.Health.FailedNodes = make([]model.NodeCollectionState, len(c.snap.Health.FailedNodes))
+	copy(s.Health.FailedNodes, c.snap.Health.FailedNodes)
+	return s
 }
 
-// Perf 返回采集器自身性能评估（线程安全）。
 func (c *Collector) Perf() model.PerfMetrics {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.perf
 }
 
-// concurrency 并发上限，配置非正则兜底 10。
 func (c *Collector) concurrency() int {
 	if c.opts.Concurrency <= 0 {
 		return 10
@@ -124,35 +138,21 @@ func (c *Collector) concurrency() int {
 	return c.opts.Concurrency
 }
 
-// refreshPerf 更新性能指标（锁内）。
-func (c *Collector) refreshPerf(p model.PerfMetrics) {
-	c.mu.Lock()
-	c.perf = p
-	c.mu.Unlock()
-}
-
-// assessRisk 根据性能指标自评风险等级，供前端提示是否需改架构。
-// 判断依据：detail 耗时接近采集周期、单节点请求过慢、内存过高。
 func assessRisk(p model.PerfMetrics, summaryEvery, detailEvery int) string {
 	period := summaryEvery
 	if detailEvery < period {
 		period = detailEvery
 	}
 	periodMs := int64(period) * 1000
-	// detail 耗时超过周期的 80% → 危险，可能赶不上下一轮
 	if p.DetailMs > periodMs*80/100 && p.DetailMs > 0 {
 		return "danger"
 	}
-	// 单节点请求超过 3 秒或内存超 500MB → 警告
 	if p.DetailMaxNodeMs > 3000 || p.ProcMemBytes > 500*1024*1024 {
 		return "warn"
 	}
 	return "ok"
 }
 
-// Start 启动双层采集循环，阻塞至 ctx 取消。
-// 采集是无状态轮询，重启即恢复；已存数据在 SQLite 天然持久（runtime-safety 崩溃恢复）。
-// 间隔为非正值时按默认值兜底，避免 NewTicker(0) panic。
 func (c *Collector) Start(ctx context.Context) {
 	summaryEvery := c.opts.SummaryEvery
 	detailEvery := c.opts.DetailEvery
@@ -165,9 +165,8 @@ func (c *Collector) Start(ctx context.Context) {
 	c.mu.Lock()
 	c.status.Running = true
 	c.mu.Unlock()
-	logx.L().Info("collector started", "summary", summaryEvery, "detail", detailEvery)
+	logx.L().Info("collector started", "cluster", c.opts.ClusterID, "summary", summaryEvery, "detail", detailEvery)
 
-	// 首次立即采一次，避免启动后空白等待
 	c.collectSummary(ctx)
 	c.collectDetail(ctx)
 
@@ -179,7 +178,7 @@ func (c *Collector) Start(ctx context.Context) {
 		c.mu.Lock()
 		c.status.Running = false
 		c.mu.Unlock()
-		logx.L().Info("collector stopped")
+		logx.L().Info("collector stopped", "cluster", c.opts.ClusterID)
 	}()
 
 	for {
@@ -194,214 +193,496 @@ func (c *Collector) Start(ctx context.Context) {
 	}
 }
 
-// recordErr 记录采集失败：错误计数 +1，更新最近错误，写日志。
 func (c *Collector) recordErr(stage string, err error) {
+	if errors.Is(err, context.Canceled) {
+		logx.L().Debug("collect canceled", "stage", stage, "cluster", c.opts.ClusterID)
+		return
+	}
 	c.mu.Lock()
 	c.status.ErrCount++
-	c.status.LastError = err.Error()
+	c.status.LastError = truncateErr(err, 300)
+	c.status.LastErrorTs = model.NowMs()
+	c.status.LastErrorStage = stage
 	c.mu.Unlock()
-	logx.L().Warn("collect failed", "stage", stage, "err", err)
+	logx.L().Warn("collect failed", "stage", stage, "cluster", c.opts.ClusterID, "err", err)
 }
 
-// recordOK 记录采集成功。
 func (c *Collector) recordOK() {
 	c.mu.Lock()
 	c.status.LastSuccessTs = model.NowMs()
-	c.status.LastError = ""
 	c.mu.Unlock()
 }
 
-// collectSummary 高频：节点硬件。
+func truncateErr(err error, maxLen int) string {
+	s := err.Error()
+	if len(s) > maxLen {
+		return s[:maxLen]
+	}
+	return s
+}
+
+func (c *Collector) acquireLimiter(ctx context.Context) error {
+	if c.limiter == nil {
+		return nil
+	}
+	return c.limiter.Acquire(ctx)
+}
+
+func (c *Collector) releaseLimiter() {
+	if c.limiter != nil {
+		c.limiter.Release()
+	}
+}
+
 func (c *Collector) collectSummary(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
 	start := time.Now()
-	nodes, err := c.client.FetchNodes()
+
+	if err := c.acquireLimiter(ctx); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			c.recordErr("summary.limiter", err)
+		}
+		return
+	}
+	nodes, err := c.client.FetchNodes(ctx)
+	c.releaseLimiter()
+
 	if err != nil {
-		// 详细记录失败原因：URL/HTTP码/解析错，便于生产环境排查
-		logx.L().Warn("summary collect failed", "url", c.client.baseURL, "nodes", len(nodes), "err", err)
-		c.recordErr("summary", err)
+		if !errors.Is(err, context.Canceled) {
+			c.recordErr("summary", err)
+		}
 		return
 	}
-	// 增量持久化：每批一事务，遵循 runtime-safety
-	if err := c.store.WriteNodeMetrics(c.opts.ClusterID, nodes); err != nil {
-		logx.L().Warn("summary store failed", "err", err)
-		c.recordErr("summary.store", err)
-		return
+
+	var storeErr error
+	if storeErr = c.store.WriteNodeMetrics(c.opts.ClusterID, nodes); storeErr != nil {
+		logx.L().Warn("summary store failed", "cluster", c.opts.ClusterID, "err", storeErr)
+		c.mu.Lock()
+		c.health.LastStorageErrorTs = model.NowMs()
+		c.health.LastStorageError = truncateErr(storeErr, 300)
+		c.mu.Unlock()
 	}
+
 	summaryMs := time.Since(start).Milliseconds()
-	logx.L().Info("summary collected", "nodes", len(nodes), "ms", summaryMs)
 	c.recordOK()
 	c.refreshSnapshotNodes(nodes)
-	// 更新性能指标：summary 耗时与节点数
+
 	c.mu.Lock()
 	c.perf.SummaryMs = summaryMs
 	c.perf.NodeCount = len(nodes)
 	c.perf.Risk = assessRisk(c.perf, c.opts.SummaryEvery, c.opts.DetailEvery)
 	c.mu.Unlock()
 
-	// 告警检查：节点指标（CPU/MEM/GPU）。workers 用上一轮 detail 的（可能为空）。
+	logx.L().Info("summary collected", "cluster", c.opts.ClusterID, "nodes", len(nodes), "ms", summaryMs)
+
 	if c.onAlert != nil {
 		c.mu.RLock()
-		ws := []model.WorkerSnapshot{}
+		var ws []model.WorkerSnapshot
+		staleNodes := map[string]bool{}
 		if c.snap != nil {
-			ws = c.snap.Workers
+			ws = make([]model.WorkerSnapshot, len(c.snap.Workers))
+			copy(ws, c.snap.Workers)
+		}
+		for nid, st := range c.nodeState {
+			if st.CurrentStale {
+				staleNodes[nid] = true
+			}
 		}
 		c.mu.RUnlock()
-		c.onAlert(c.opts.ClusterID, nodes, ws)
+		c.onAlert(c.opts.ClusterID, nodes, ws, staleNodes)
 	}
 }
 
-// collectDetail 低频：节点详情 + 集群 + 作业，并生成状态变迁事件。
-// 节点详情采用限流并发（信号量上限 = cfg.Concurrency），全部完成后一次性更新快照，
-// 保持"攒齐一起提交"语义。cluster/jobs 单独请求。
 func (c *Collector) collectDetail(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
 	detailStart := time.Now()
-	// 先拿当前节点列表（复用 snapshot 中已有的，避免重复请求 summary）
+	now := model.NowMs()
+
 	c.mu.RLock()
 	nodes := c.currentNodeIDs()
 	c.mu.RUnlock()
+
 	if len(nodes) == 0 {
-		// summary 尚未成功，detail 无节点可查。记录原因，避免误以为 detail 没跑。
-		logx.L().Warn("detail skipped: no nodes in snapshot (summary may have failed)")
+		logx.L().Warn("detail skipped: no nodes in snapshot", "cluster", c.opts.ClusterID)
+		return
 	}
 
-	// 限流并发拉取各节点详情。结果按节点顺序聚合，避免乱序。
+	c.mu.Lock()
+	c.health.LastDetailAttemptTs = now
+	c.mu.Unlock()
+
 	type nodeResult struct {
-		nodeID  string // 即使失败也记录，便于定位慢/失败节点
+		nodeID  string
 		workers []model.WorkerSnapshot
 		actors  []model.ActorSnapshot
 		node    model.NodeMetric
 		ok      bool
-		ms      int64 // 该节点请求耗时，用于找瓶颈
+		err     error
+		ms      int64
 	}
 	results := make([]nodeResult, len(nodes))
 	sem := make(chan struct{}, c.concurrency())
 	var wg sync.WaitGroup
-	nodesStart := time.Now()
+
 	for i, nid := range nodes {
 		wg.Add(1)
-		sem <- struct{}{} // 占槽，满则等待
 		go func(idx int, id string) {
 			defer wg.Done()
-			defer func() { <-sem }() // 释放槽
+
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				results[idx] = nodeResult{nodeID: id, ok: false, err: ctx.Err()}
+				return
+			}
+			defer func() { <-sem }()
+
+			if err := c.acquireLimiter(ctx); err != nil {
+				results[idx] = nodeResult{nodeID: id, ok: false, err: err}
+				return
+			}
 			ns := time.Now()
-			d, err := c.client.FetchNodeDetail(id)
+			d, err := c.client.FetchNodeDetail(ctx, id)
 			ms := time.Since(ns).Milliseconds()
+			c.releaseLimiter()
+
 			if err != nil {
-				// 单节点失败不中断整体采集
-				logx.L().Warn("fetch node detail failed", "node", id, "err", err, "ms", ms)
-				results[idx] = nodeResult{nodeID: id, ok: false, ms: ms}
+				results[idx] = nodeResult{nodeID: id, ok: false, err: err, ms: ms}
 				return
 			}
 			results[idx] = nodeResult{nodeID: id, workers: d.Workers, actors: d.Actors, node: d.Node, ok: true, ms: ms}
 		}(i, nid)
 	}
 	wg.Wait()
-	detailNodesMs := time.Since(nodesStart).Milliseconds()
 
-	// 聚合结果（保持节点顺序），同时定位最慢节点
-	var allWorkers []model.WorkerSnapshot
-	var allActors []model.ActorSnapshot
+	if ctx.Err() != nil {
+		return
+	}
+
+	var freshWorkers []model.WorkerSnapshot
+	var freshActors []model.ActorSnapshot
+	var freshNodes []model.NodeMetric
+	var actorEvents []model.ActorEvent
+	var storeErrs []error
 	var maxNodeMs int64
-	var slowNodeID, slowNodeHost string
+	var slowNodeID string
+	freshNodeSet := map[string]bool{}
+	failedNodeSet := map[string]bool{}
+
+	activeNodeSet := map[string]bool{}
+	for _, nid := range nodes {
+		activeNodeSet[nid] = true
+	}
+
 	for _, r := range results {
 		if r.ms > maxNodeMs {
 			maxNodeMs = r.ms
 			slowNodeID = r.nodeID
-			slowNodeHost = r.node.Hostname
-			if slowNodeHost == "" {
-				slowNodeHost = r.node.IP
-			}
 		}
-		if !r.ok {
+
+		st := c.getOrCreateNodeState(r.nodeID)
+		st.LastAttemptTs = now
+
+		if r.ok {
+			freshNodeSet[r.nodeID] = true
+			st.LastSuccessTs = now
+			st.ConsecutiveFailures = 0
+			st.CurrentStale = false
+			st.LastError = ""
+			st.HasCachedData = true
+
+			c.workersByNode[r.nodeID] = r.workers
+			c.actorsByNode[r.nodeID] = r.actors
+
+			freshWorkers = append(freshWorkers, r.workers...)
+			freshActors = append(freshActors, r.actors...)
+			freshNodes = append(freshNodes, r.node)
+
+			c.refreshSnapshotNode(r.node)
+
+			if err := c.store.WriteNodeMetrics(c.opts.ClusterID, []model.NodeMetric{r.node}); err != nil {
+				storeErrs = append(storeErrs, fmt.Errorf("write node metrics node=%s: %w", r.nodeID, err))
+			}
+
+			evts := c.diffActorsForNode(r.nodeID, r.actors)
+			actorEvents = append(actorEvents, evts...)
+
+			if st.ConsecutiveFailures > 0 {
+				logx.L().Info("node detail recovered", "cluster", c.opts.ClusterID,
+					"node", r.nodeID, "previousConsecutiveFailures", st.ConsecutiveFailures)
+			}
+		} else {
+			if errors.Is(r.err, context.Canceled) {
+				return
+			}
+			failedNodeSet[r.nodeID] = true
+			st.ConsecutiveFailures++
+			st.LastFailureTs = now
+			st.LastError = truncateErr(r.err, 300)
+
+			if c.workersByNode[r.nodeID] != nil {
+				st.CurrentStale = true
+				st.ReusedWorkerCount = len(c.workersByNode[r.nodeID])
+				st.ReusedActorCount = len(c.actorsByNode[r.nodeID])
+			} else {
+				st.CurrentStale = false
+				st.HasCachedData = false
+				st.ReusedWorkerCount = 0
+				st.ReusedActorCount = 0
+			}
+
+			logx.L().Warn("fetch node detail failed", "cluster", c.opts.ClusterID,
+				"node", r.nodeID, "consecutiveFailures", st.ConsecutiveFailures,
+				"hasCachedData", st.HasCachedData, "err", r.err, "ms", r.ms)
+		}
+	}
+
+	for nid := range c.workersByNode {
+		if !activeNodeSet[nid] {
+			delete(c.workersByNode, nid)
+			delete(c.actorsByNode, nid)
+			delete(c.nodeState, nid)
+			delete(c.prevActorsByNode, nid)
+		}
+	}
+
+	var allWorkers []model.WorkerSnapshot
+	var allActors []model.ActorSnapshot
+	staleWorkerCount := 0
+	staleActorCount := 0
+	for _, nid := range nodes {
+		if freshNodeSet[nid] {
 			continue
 		}
-		allWorkers = append(allWorkers, r.workers...)
-		allActors = append(allActors, r.actors...)
-		// detail 里的节点资源比 summary 更权威（含 GPU/state），顺便写一份节点指标
-		_ = c.store.WriteNodeMetrics(c.opts.ClusterID, []model.NodeMetric{r.node})
-		c.refreshSnapshotNode(r.node)
+		if cached := c.workersByNode[nid]; cached != nil {
+			allWorkers = append(allWorkers, cached...)
+			staleWorkerCount += len(cached)
+		}
+		if cached := c.actorsByNode[nid]; cached != nil {
+			allActors = append(allActors, cached...)
+			staleActorCount += len(cached)
+		}
 	}
+	allWorkers = append(allWorkers, freshWorkers...)
+	allActors = append(allActors, freshActors...)
 
-	cm, err := c.client.FetchCluster()
-	if err != nil {
-		logx.L().Warn("cluster collect failed", "err", err)
-		c.recordErr("cluster", err)
-	} else {
-		// 记录 dashboard 是否返回 gzip 压缩。FetchCluster 是 detail tick 里唯一每轮
-		// 都打的请求，用它观测最稳定。首页会基于此字段判断带宽优化是否对该集群生效。
-		cm.GzipSupported = c.client.LastGzipUsed()
-		_ = c.store.WriteCluster(c.opts.ClusterID, cm)
+	sort.SliceStable(allWorkers, func(i, j int) bool {
+		a, b := allWorkers[i], allWorkers[j]
+		if a.NodeID != b.NodeID {
+			return a.NodeID < b.NodeID
+		}
+		if a.PID != b.PID {
+			return a.PID < b.PID
+		}
+		return a.ProcessName < b.ProcessName
+	})
+	sort.SliceStable(allActors, func(i, j int) bool {
+		a, b := allActors[i], allActors[j]
+		if a.NodeID != b.NodeID {
+			return a.NodeID < b.NodeID
+		}
+		if a.ActorID != b.ActorID {
+			return a.ActorID < b.ActorID
+		}
+		return a.PID < b.PID
+	})
+
+	if len(freshWorkers) > 0 {
+		if err := c.store.WriteWorkers(c.opts.ClusterID, freshWorkers); err != nil {
+			storeErrs = append(storeErrs, fmt.Errorf("write workers: %w", err))
+		}
 	}
-
-	jobs, err := c.client.FetchJobs()
-	if err != nil {
-		logx.L().Warn("jobs collect failed", "err", err)
-		c.recordErr("jobs", err)
-		jobs = nil
+	if len(freshActors) > 0 {
+		if err := c.store.WriteActors(c.opts.ClusterID, freshActors); err != nil {
+			storeErrs = append(storeErrs, fmt.Errorf("write actors: %w", err))
+		}
 	}
-
-	// 落库 workers/actors/jobs
-	_ = c.store.WriteWorkers(c.opts.ClusterID, allWorkers)
-	_ = c.store.WriteActors(c.opts.ClusterID, allActors)
-	_ = c.store.WriteJobs(c.opts.ClusterID, jobs)
-
-	// 生成状态变迁事件（diff 上一轮）
-	actorEvents := c.diffActors(allActors)
-	jobEvents := c.diffJobs(jobs)
 	if len(actorEvents) > 0 {
-		_ = c.store.WriteActorEvents(c.opts.ClusterID, actorEvents)
+		if err := c.store.WriteActorEvents(c.opts.ClusterID, actorEvents); err != nil {
+			storeErrs = append(storeErrs, fmt.Errorf("write actor events: %w", err))
+		}
 	}
-	if len(jobEvents) > 0 {
-		_ = c.store.WriteJobEvents(c.opts.ClusterID, jobEvents)
+
+	clusterFresh := false
+	if err := c.acquireLimiter(ctx); err == nil {
+		cm, err := c.client.FetchCluster(ctx)
+		c.releaseLimiter()
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				c.recordErr("cluster", err)
+				c.clusterStale = true
+			}
+		} else {
+			cm.GzipSupported = c.client.LastGzipUsed()
+			c.prevCluster = cm
+			c.clusterStale = false
+			clusterFresh = true
+			if err := c.store.WriteCluster(c.opts.ClusterID, cm); err != nil {
+				storeErrs = append(storeErrs, fmt.Errorf("write cluster: %w", err))
+			}
+		}
+	} else if !errors.Is(err, context.Canceled) {
+		c.recordErr("cluster.limiter", err)
 	}
+
+	jobsFresh := false
+	var jobEvents []model.JobEvent
+	if err := c.acquireLimiter(ctx); err == nil {
+		jobs, err := c.client.FetchJobs(ctx)
+		c.releaseLimiter()
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				c.recordErr("jobs", err)
+				c.jobsStale = true
+			}
+		} else {
+			c.prevJobsList = jobs
+			c.jobsStale = false
+			jobsFresh = true
+			jobEvents = c.diffJobs(jobs)
+			if err := c.store.WriteJobs(c.opts.ClusterID, jobs); err != nil {
+				storeErrs = append(storeErrs, fmt.Errorf("write jobs: %w", err))
+			}
+			if len(jobEvents) > 0 {
+				if err := c.store.WriteJobEvents(c.opts.ClusterID, jobEvents); err != nil {
+					storeErrs = append(storeErrs, fmt.Errorf("write job events: %w", err))
+				}
+			}
+		}
+	} else if !errors.Is(err, context.Canceled) {
+		c.recordErr("jobs.limiter", err)
+	}
+
+	incomplete := len(failedNodeSet) > 0 || c.clusterStale || c.jobsStale
+	storageOK := len(storeErrs) == 0
+
+	if len(storeErrs) > 0 {
+		joined := errors.Join(storeErrs...)
+		logx.L().Warn("detail storage errors", "cluster", c.opts.ClusterID, "err", joined)
+		c.mu.Lock()
+		c.health.LastStorageErrorTs = model.NowMs()
+		c.health.LastStorageError = truncateErr(joined, 500)
+		c.mu.Unlock()
+	}
+
+	completeSuccess := !incomplete && storageOK
+
+	c.mu.Lock()
+	if incomplete {
+		c.health.LastIncompleteTs = now
+		c.health.CurrentIncomplete = true
+		c.status.CurrentIncomplete = true
+	} else {
+		c.health.CurrentIncomplete = false
+		c.status.CurrentIncomplete = false
+	}
+	if completeSuccess {
+		c.health.LastCompleteDetailSuccessTs = now
+		c.status.LastCompleteDetailTs = now
+		c.status.LastError = ""
+	}
+
+	c.health.TotalNodeCount = len(nodes)
+	c.health.FreshNodeCount = len(freshNodeSet)
+	c.health.FailedNodeCount = len(failedNodeSet)
+	c.health.StaleNodeCount = len(failedNodeSet)
+	c.health.StaleWorkerCount = staleWorkerCount
+	c.health.StaleActorCount = staleActorCount
+	c.health.ClusterDataStale = c.clusterStale
+	c.health.JobsDataStale = c.jobsStale
+
+	var failedNodes []model.NodeCollectionState
+	for _, nid := range nodes {
+		if st, ok := c.nodeState[nid]; ok && (st.CurrentStale || (!st.HasCachedData && failedNodeSet[nid])) {
+			failedNodes = append(failedNodes, *st)
+		}
+	}
+	c.health.FailedNodes = failedNodes
+
+	if c.snap == nil {
+		c.snap = &Snapshot{}
+	}
+	if clusterFresh {
+		c.snap.Cluster = c.prevCluster
+	} else if c.clusterStale {
+		c.snap.Cluster = c.prevCluster
+	}
+	if jobsFresh {
+		c.snap.Jobs = c.prevJobsList
+	} else if c.jobsStale {
+		c.snap.Jobs = c.prevJobsList
+	}
+	c.snap.Workers = allWorkers
+	c.snap.Actors = allActors
+	c.snap.Health = c.health
+	c.mu.Unlock()
 
 	c.recordOK()
-	c.refreshSnapshotDetail(cm, allWorkers, allActors, jobs)
 
-	// 更新性能指标
 	detailMs := time.Since(detailStart).Milliseconds()
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	p := model.PerfMetrics{
-		SummaryMs:       c.perf.SummaryMs, // 保留最近 summary 耗时
+		SummaryMs:       c.perf.SummaryMs,
 		DetailMs:        detailMs,
-		DetailNodesMs:   detailNodesMs,
 		DetailMaxNodeMs: maxNodeMs,
 		NodeCount:       len(nodes),
 		WorkerCount:     len(allWorkers),
 		ActorCount:      len(allActors),
-		DetailReqs:      len(nodes) + 2, // 节点数 + cluster + jobs
+		DetailReqs:      len(nodes) + 2,
 		ProcMemBytes:    memStats.HeapAlloc,
 		ProcGoroutine:   runtime.NumGoroutine(),
 		Concurrency:     c.concurrency(),
 		SlowNodeID:      slowNodeID,
-		SlowNodeHost:    slowNodeHost,
 		SlowNodeMs:      maxNodeMs,
 	}
 	p.Risk = assessRisk(p, c.opts.SummaryEvery, c.opts.DetailEvery)
-	c.refreshPerf(p)
-	logx.L().Info("detail collected", "workers", len(allWorkers), "actors", len(allActors), "jobs", len(jobs),
-		"detailMs", detailMs, "nodesMs", detailNodesMs, "maxNodeMs", maxNodeMs, "memMB", memStats.HeapAlloc/1024/1024)
+	c.mu.Lock()
+	c.perf = p
+	c.mu.Unlock()
 
-	// 告警检查：用最新节点（snapshot）+ 本轮 workers
+	logx.L().Info("detail collected", "cluster", c.opts.ClusterID,
+		"totalNodes", len(nodes), "freshNodes", len(freshNodeSet),
+		"failedNodes", len(failedNodeSet), "staleNodes", len(failedNodeSet),
+		"freshWorkers", len(freshWorkers), "totalDisplayedWorkers", len(allWorkers),
+		"reusedWorkers", staleWorkerCount,
+		"freshActors", len(freshActors), "totalDisplayedActors", len(allActors),
+		"reusedActors", staleActorCount,
+		"jobsFresh", jobsFresh, "clusterFresh", clusterFresh,
+		"detailMs", detailMs, "maxNodeMs", maxNodeMs, "slowNodeID", slowNodeID,
+		"complete", completeSuccess, "storageOK", storageOK)
+
 	if c.onAlert != nil {
 		c.mu.RLock()
-		ns := []model.NodeMetric{}
+		var ns []model.NodeMetric
 		if c.snap != nil {
-			ns = c.snap.Nodes
+			ns = make([]model.NodeMetric, len(c.snap.Nodes))
+			copy(ns, c.snap.Nodes)
+		}
+		staleNodes := map[string]bool{}
+		for nid, st := range c.nodeState {
+			if st.CurrentStale {
+				staleNodes[nid] = true
+			}
 		}
 		c.mu.RUnlock()
-		c.onAlert(c.opts.ClusterID, ns, allWorkers)
+		c.onAlert(c.opts.ClusterID, ns, freshWorkers, staleNodes)
 	}
 }
 
-// currentNodeIDs 从当前 snapshot 取节点 id 列表。
+func (c *Collector) getOrCreateNodeState(nodeID string) *model.NodeCollectionState {
+	st, ok := c.nodeState[nodeID]
+	if !ok {
+		st = &model.NodeCollectionState{NodeID: nodeID}
+		c.nodeState[nodeID] = st
+	}
+	return st
+}
+
 func (c *Collector) currentNodeIDs() []string {
 	if c.snap == nil {
 		return nil
@@ -415,27 +696,29 @@ func (c *Collector) currentNodeIDs() []string {
 	return ids
 }
 
-// diffActors 对比上一轮，生成状态变迁事件。仅状态变化才记录。
-func (c *Collector) diffActors(cur []model.ActorSnapshot) []model.ActorEvent {
+func (c *Collector) diffActorsForNode(nodeID string, cur []model.ActorSnapshot) []model.ActorEvent {
 	var events []model.ActorEvent
 	ts := model.NowMs()
+
+	prevMap := c.prevActorsByNode[nodeID]
 	newMap := make(map[string]model.ActorSnapshot, len(cur))
 	for _, a := range cur {
 		newMap[a.ActorID] = a
-		if prev, ok := c.prevActors[a.ActorID]; ok {
-			if prev.State != a.State {
-				events = append(events, model.ActorEvent{
-					Ts: ts, ActorID: a.ActorID, ActorClass: a.ActorClass,
-					PrevState: prev.State, NewState: a.State, DeathCause: a.ExitDetail,
-				})
+		if prevMap != nil {
+			if prev, ok := prevMap[a.ActorID]; ok {
+				if prev.State != a.State {
+					events = append(events, model.ActorEvent{
+						Ts: ts, ActorID: a.ActorID, ActorClass: a.ActorClass,
+						PrevState: prev.State, NewState: a.State, DeathCause: a.ExitDetail,
+					})
+				}
 			}
 		}
 	}
-	c.prevActors = newMap
+	c.prevActorsByNode[nodeID] = newMap
 	return events
 }
 
-// diffJobs 对比上一轮，生成状态变迁事件。
 func (c *Collector) diffJobs(cur []model.JobSnapshot) []model.JobEvent {
 	var events []model.JobEvent
 	ts := model.NowMs()
@@ -455,22 +738,18 @@ func (c *Collector) diffJobs(cur []model.JobSnapshot) []model.JobEvent {
 	return events
 }
 
-// ---- snapshot 更新（细粒度锁内更新，避免高频 summary 与低频 detail 互相覆盖丢失）----
-
 func (c *Collector) refreshSnapshotNodes(nodes []model.NodeMetric) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.snap == nil {
 		c.snap = &Snapshot{}
 	}
-	// 按 NodeID 合并：保留 detail 写入的 isHead/state/gpuTotal（detail 更权威），summary 只更新硬件
 	byID := map[string]model.NodeMetric{}
 	for _, n := range c.snap.Nodes {
 		byID[n.NodeID] = n
 	}
 	for _, n := range nodes {
 		if exist, ok := byID[n.NodeID]; ok {
-			// summary 刷新硬件，保留 detail 的权威字段
 			exist.CPU, exist.MemTotal, exist.MemUsed = n.CPU, n.MemTotal, n.MemUsed
 			exist.IsPartial = n.IsPartial
 			if exist.Hostname == "" {
@@ -485,32 +764,28 @@ func (c *Collector) refreshSnapshotNodes(nodes []model.NodeMetric) {
 	for _, n := range byID {
 		out = append(out, n)
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Hostname != b.Hostname {
+			return a.Hostname < b.Hostname
+		}
+		if a.IP != b.IP {
+			return a.IP < b.IP
+		}
+		return a.NodeID < b.NodeID
+	})
 	c.snap.Nodes = out
 }
 
 func (c *Collector) refreshSnapshotNode(n model.NodeMetric) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.snap == nil {
 		c.snap = &Snapshot{}
 	}
 	for i, ex := range c.snap.Nodes {
 		if ex.NodeID == n.NodeID {
-			c.snap.Nodes[i] = n // detail 整体覆盖该节点（含 isHead/state/gpuTotal）
+			c.snap.Nodes[i] = n
 			return
 		}
 	}
 	c.snap.Nodes = append(c.snap.Nodes, n)
-}
-
-func (c *Collector) refreshSnapshotDetail(cm model.ClusterMetric, workers []model.WorkerSnapshot, actors []model.ActorSnapshot, jobs []model.JobSnapshot) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.snap == nil {
-		c.snap = &Snapshot{}
-	}
-	c.snap.Cluster = cm
-	c.snap.Workers = workers
-	c.snap.Actors = actors
-	c.snap.Jobs = jobs
 }

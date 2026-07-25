@@ -3,15 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes, FilterInput, applyFilters } from '@/lib/utils'
 import type { WorkerSnapshot, NodeMetric } from '@/lib/api'
+import type { CollectionHealth } from '@/components/CollectionHealthNotice'
 
 export function WorkersView({
   workers,
   nodes,
   sortBy,
+  health,
 }: {
   workers: WorkerSnapshot[]
   nodes: NodeMetric[]
   sortBy: 'cpu' | 'gpu'
+  health?: CollectionHealth | null
 }) {
   const [filters, setFilters] = useState<Record<string, string>>({})
   const setFilter = (k: string, v: string) => setFilters((p) => ({ ...p, [k]: v }))
@@ -31,6 +34,18 @@ export function WorkersView({
     { key: 'gpu', header: 'GPU', getValue: (w: WorkerSnapshot) => (w.gpuUsed > 0 ? String(w.gpuUsed) : '-'), right: true },
   ]
   const colGetters = Object.fromEntries(COLS.map((c) => [c.key, c.getValue]))
+
+  const staleNodeIDs = useMemo(() => {
+    const s = new Set<string>()
+    if (health?.failedNodes) {
+      for (const fn of health.failedNodes) {
+        if (fn.currentStale) s.add(fn.nodeId)
+      }
+    }
+    return s
+  }, [health])
+
+  const isStale = (w: WorkerSnapshot) => staleNodeIDs.has(w.nodeId)
 
   const sorted = useMemo(
     () =>
@@ -72,16 +87,29 @@ export function WorkersView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((w, i) => (
-                <TableRow key={`${w.nodeId}-${w.pid}-${i}`}>
-                  <TableCell className="font-mono text-xs">{w.processName || 'ray::?'}</TableCell>
-                  <TableCell>{nodeName(w.nodeId)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">{w.pid}</TableCell>
-                  <TableCell className="text-right">{w.cpuPercent.toFixed(1)}</TableCell>
-                  <TableCell className="text-right">{fmtBytes(w.memRss)}</TableCell>
-                  <TableCell className="text-right">{w.gpuUsed > 0 ? w.gpuUsed : '-'}</TableCell>
-                </TableRow>
-              ))}
+              {filtered.map((w, i) => {
+                const stale = isStale(w)
+                return (
+                  <TableRow key={`${w.nodeId}-${w.pid}-${i}`} className={stale ? 'opacity-60' : ''}>
+                    <TableCell className="font-mono text-xs">
+                      {w.processName || 'ray::?'}
+                      {stale && (
+                        <span
+                          className="ml-1.5 rounded bg-orange-100 px-1 py-0.5 text-[10px] text-orange-600"
+                          title="该节点本轮采集失败，当前显示最近一次成功数据"
+                        >
+                          未刷新
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>{nodeName(w.nodeId)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{w.pid}</TableCell>
+                    <TableCell className="text-right">{w.cpuPercent.toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{fmtBytes(w.memRss)}</TableCell>
+                    <TableCell className="text-right">{w.gpuUsed > 0 ? w.gpuUsed : '-'}</TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         )}

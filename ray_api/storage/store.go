@@ -403,3 +403,50 @@ func (s *Store) CountActiveAlerts(clusterID string) (int, error) {
 	err := s.db.QueryRow(q, args...).Scan(&n)
 	return n, err
 }
+
+type CleanupResult struct {
+	NodeMetric     int64
+	WorkerSnapshot int64
+	ActorSnapshot  int64
+	JobSnapshot    int64
+	ClusterMetric  int64
+}
+
+func (s *Store) CleanupBefore(cutoff int64) (CleanupResult, error) {
+	var res CleanupResult
+	tables := []struct {
+		name string
+		dest *int64
+	}{
+		{"node_metric", &res.NodeMetric},
+		{"worker_snapshot", &res.WorkerSnapshot},
+		{"actor_snapshot", &res.ActorSnapshot},
+		{"job_snapshot", &res.JobSnapshot},
+		{"cluster_metric", &res.ClusterMetric},
+	}
+	for _, t := range tables {
+		var total int64
+		for {
+			r, err := s.db.Exec(
+				fmt.Sprintf("DELETE FROM %s WHERE rowid IN (SELECT rowid FROM %s WHERE ts < ? LIMIT 5000)", t.name, t.name),
+				cutoff,
+			)
+			if err != nil {
+				return res, fmt.Errorf("cleanup %s: %w", t.name, err)
+			}
+			n, _ := r.RowsAffected()
+			total += n
+			if n < 5000 {
+				break
+			}
+		}
+		*t.dest = total
+	}
+	if _, err := s.db.Exec("PRAGMA optimize"); err != nil {
+		return res, fmt.Errorf("pragma optimize: %w", err)
+	}
+	if _, err := s.db.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+		return res, fmt.Errorf("wal checkpoint: %w", err)
+	}
+	return res, nil
+}

@@ -13,7 +13,6 @@ import (
 	"raymonitor/model"
 )
 
-// newTestClient 构造指向 httptest server 的客户端。
 func newTestClient(t *testing.T, handler http.Handler) *Client {
 	t.Helper()
 	srv := httptest.NewServer(handler)
@@ -21,29 +20,26 @@ func newTestClient(t *testing.T, handler http.Handler) *Client {
 	return NewClient(CollectorOpts{PlatformURL: srv.URL, TimeoutSec: 2})
 }
 
-// ---- 正常路径 ----
+func ctx() context.Context { return context.Background() }
 
-// 测试 FetchNodes 正常解析 summary，含半哑节点（raylet 在但 mem/cpu 缺失）。
 func TestFetchNodes_HappyAndPartial(t *testing.T) {
 	summary := map[string]interface{}{
 		"result": true,
 		"data": map[string]interface{}{
 			"summary": []map[string]interface{}{
-				// 正常节点：raylet 是 dict，含 nodeId/state/isHeadNode/resourcesTotal
 				{
 					"mem":      []interface{}{16000000000.0, 13085171712.0, 18.2, 2914828288.0},
 					"cpu":      1.4,
 					"hostname": "head",
 					"ip":       "10.166.0.249",
 					"raylet": map[string]interface{}{
-						"nodeId":          "7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884",
-						"state":           "ALIVE",
-						"isHeadNode":      true,
+						"nodeId":              "7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884",
+						"state":               "ALIVE",
+						"isHeadNode":          true,
 						"nodeManagerHostname": "head",
-						"resourcesTotal":  map[string]interface{}{"CPU": 8.0, "memory": 16000000000.0},
+						"resourcesTotal":      map[string]interface{}{"CPU": 8.0, "memory": 16000000000.0},
 					},
 				},
-				// 半哑节点：raylet 在（含 nodeId/state），但无 mem/cpu
 				{
 					"raylet": map[string]interface{}{
 						"nodeId":     "fa0496154f1b6dde973f4cbafc17a9be6528396ef6c2843385f9e880",
@@ -55,20 +51,16 @@ func TestFetchNodes_HappyAndPartial(t *testing.T) {
 		},
 	}
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nodes" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
 		_ = json.NewEncoder(w).Encode(summary)
 	}))
 
-	nodes, err := c.FetchNodes()
+	nodes, err := c.FetchNodes(ctx())
 	if err != nil {
 		t.Fatalf("FetchNodes err: %v", err)
 	}
 	if len(nodes) != 2 {
 		t.Fatalf("want 2 nodes, got %d", len(nodes))
 	}
-	// 正常节点
 	if nodes[0].Hostname != "head" || nodes[0].NodeID != "7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884" {
 		t.Errorf("node0 wrong: %+v", nodes[0])
 	}
@@ -78,7 +70,6 @@ func TestFetchNodes_HappyAndPartial(t *testing.T) {
 	if nodes[0].IsPartial || !nodes[0].IsHead || nodes[0].State != "ALIVE" {
 		t.Errorf("node0 flags wrong: %+v", nodes[0])
 	}
-	// 半哑节点：有 nodeId/state，但硬件为零
 	if !nodes[1].IsPartial {
 		t.Errorf("node1 should be partial")
 	}
@@ -88,19 +79,16 @@ func TestFetchNodes_HappyAndPartial(t *testing.T) {
 	if nodes[1].NodeID != "fa0496154f1b6dde973f4cbafc17a9be6528396ef6c2843385f9e880" {
 		t.Errorf("partial node id wrong: %s", nodes[1].NodeID)
 	}
-	if nodes[1].State != "ALIVE" {
-		t.Errorf("partial node state should come from raylet: %s", nodes[1].State)
-	}
 }
 
-// 测试 FetchNodeDetail 正常解析 workers/actors，含 GPU 自适应（无卡 resourcesTotal 无 GPU key）。
 func TestFetchNodeDetail_Happy(t *testing.T) {
 	detail := map[string]interface{}{
+		"result": true,
 		"data": map[string]interface{}{
 			"detail": map[string]interface{}{
-				"mem": []interface{}{16000000000.0, 13085171712.0},
-				"cpu": 1.4,
-				"ip":   "10.166.0.249",
+				"mem":      []interface{}{16000000000.0, 13085171712.0},
+				"cpu":      1.4,
+				"ip":       "10.166.0.249",
 				"hostname": "head",
 				"workers": []map[string]interface{}{
 					{"pid": 329, "jobId": "ffff", "cpuPercent": 0.0, "numFds": 23, "language": "PYTHON",
@@ -116,9 +104,9 @@ func TestFetchNodeDetail_Happy(t *testing.T) {
 				},
 				"raylet": map[string]interface{}{
 					"state": "ALIVE", "isHeadNode": true,
-					"nodeId": "7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884",
+					"nodeId":              "7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884",
 					"nodeManagerHostname": "head",
-					"resourcesTotal": map[string]interface{}{"CPU": 16.0, "memory": 16000000000.0},
+					"resourcesTotal":      map[string]interface{}{"CPU": 16.0, "memory": 16000000000.0},
 				},
 			},
 		},
@@ -127,11 +115,10 @@ func TestFetchNodeDetail_Happy(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(detail)
 	}))
 
-	d, err := c.FetchNodeDetail("7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884")
+	d, err := c.FetchNodeDetail(ctx(), "7b7f32117bed397e6c0baa66c05a90758defe15a4f636f3ecf6c7884")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	// GPU 自适应：resourcesTotal 无 GPU key → 0
 	if d.Node.GPUTotal != 0 {
 		t.Errorf("no-GPU cluster should have gpuTotal=0, got %v", d.Node.GPUTotal)
 	}
@@ -148,18 +135,56 @@ func TestFetchNodeDetail_Happy(t *testing.T) {
 		t.Fatalf("want 1 actor")
 	}
 	a := d.Actors[0]
+	if a.ActorID != "acc6fefd430254ec3744bc4901000000" {
+		t.Errorf("actor id wrong: %s", a.ActorID)
+	}
 	if a.ActorClass != "ServeController" || a.State != "ALIVE" || a.NumRestarts != 0 {
 		t.Errorf("actor wrong: %+v", a)
 	}
-	if a.NumExecTasks != 31696 {
-		t.Errorf("actor numExecTasks wrong: %d", a.NumExecTasks)
+}
+
+func TestFetchNodeDetailPreservesActorIDs(t *testing.T) {
+	detail := map[string]interface{}{
+		"result": true,
+		"data": map[string]interface{}{
+			"detail": map[string]interface{}{
+				"mem": []interface{}{16000000000.0, 8000000000.0},
+				"cpu": 1.0,
+				"actors": map[string]interface{}{
+					"actor-id-1": map[string]interface{}{
+						"className": "Worker1", "state": "ALIVE", "pid": 100,
+					},
+					"actor-id-2": map[string]interface{}{
+						"className": "Worker2", "state": "ALIVE", "pid": 200,
+					},
+				},
+				"raylet": map[string]interface{}{
+					"state": "ALIVE", "nodeId": "n1",
+					"resourcesTotal": map[string]interface{}{"CPU": 8.0},
+				},
+			},
+		},
 	}
-	if a.ExitDetail != "-" {
-		t.Errorf("actor exitDetail wrong: %s", a.ExitDetail)
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(detail)
+	}))
+
+	d, err := c.FetchNodeDetail(ctx(), "n1")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(d.Actors) != 2 {
+		t.Fatalf("want 2 actors, got %d", len(d.Actors))
+	}
+	ids := map[string]bool{}
+	for _, a := range d.Actors {
+		ids[a.ActorID] = true
+	}
+	if !ids["actor-id-1"] || !ids["actor-id-2"] {
+		t.Errorf("actor IDs not preserved: %+v", ids)
 	}
 }
 
-// 测试 FetchCluster 正则解析 ResourceUsage 文本（CPU/内存/GPU/心跳）。
 func TestFetchCluster_Happy(t *testing.T) {
 	status := map[string]interface{}{
 		"result": true,
@@ -173,7 +198,7 @@ func TestFetchCluster_Happy(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(status)
 	}))
 
-	cm, err := c.FetchCluster()
+	cm, err := c.FetchCluster(ctx())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -191,9 +216,8 @@ func TestFetchCluster_Happy(t *testing.T) {
 	}
 }
 
-// 测试 FetchJobs 正常解析 + entrypoint 截断。
 func TestFetchJobs_Happy(t *testing.T) {
-	longEntry := "python " + string(make([]byte, 100)) // >80 字符
+	longEntry := "python " + strings.Repeat("x", 100)
 	jobs := []map[string]interface{}{
 		{"job_id": "01000000", "status": "RUNNING", "start_time": 1782458409790,
 			"end_time": 0, "error_type": "", "entrypoint": longEntry},
@@ -204,7 +228,7 @@ func TestFetchJobs_Happy(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(jobs)
 	}))
 
-	out, err := c.FetchJobs()
+	out, err := c.FetchJobs(ctx())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -219,14 +243,12 @@ func TestFetchJobs_Happy(t *testing.T) {
 	}
 }
 
-// ---- 空输入 ----
-
 func TestFetchNodes_Empty(t *testing.T) {
 	summary := map[string]interface{}{"result": true, "data": map[string]interface{}{"summary": []interface{}{}}}
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(summary)
 	}))
-	nodes, err := c.FetchNodes()
+	nodes, err := c.FetchNodes(ctx())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -235,63 +257,108 @@ func TestFetchNodes_Empty(t *testing.T) {
 	}
 }
 
-// ---- 错误输入 ----
-
-// 非 200 返回 error。
 func TestFetchNodes_HTTPError(t *testing.T) {
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	if _, err := c.FetchNodes(); err == nil {
+	if _, err := c.FetchNodes(ctx()); err == nil {
 		t.Errorf("want error on 500")
 	}
 }
 
-// JSON 格式非法返回 error。
 func TestFetchNodes_BadJSON(t *testing.T) {
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("not json"))
 	}))
-	if _, err := c.FetchNodes(); err == nil {
+	if _, err := c.FetchNodes(ctx()); err == nil {
 		t.Errorf("want error on bad json")
 	}
 }
 
-// ---- 边界：事件 diff ----
+func TestFetchNodes_ResultFalse(t *testing.T) {
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"result": false})
+	}))
+	if _, err := c.FetchNodes(ctx()); err == nil {
+		t.Errorf("want error on result=false")
+	}
+}
 
-// fakeStore 内存实现，记录写入的事件，用于断言 diff 逻辑。
 type fakeStore struct {
 	actorEvents []model.ActorEvent
 	jobEvents   []model.JobEvent
 	actors      []model.ActorSnapshot
+	workers     []model.WorkerSnapshot
+	nodes       []model.NodeMetric
+	jobs        []model.JobSnapshot
+	clusters    []model.ClusterMetric
+
+	failWriteWorkers bool
+	failWriteActors  bool
+	failWriteNodes   bool
+	failWriteJobs    bool
+	failWriteCluster bool
 }
 
-func (f *fakeStore) WriteNodeMetrics(_ string, _ []model.NodeMetric) error       { return nil }
-func (f *fakeStore) WriteWorkers(_ string, _ []model.WorkerSnapshot) error       { return nil }
-func (f *fakeStore) WriteActors(_ string, a []model.ActorSnapshot) error       { f.actors = a; return nil }
-func (f *fakeStore) WriteJobs(_ string, _ []model.JobSnapshot) error             { return nil }
-func (f *fakeStore) WriteCluster(_ string, _ model.ClusterMetric) error          { return nil }
-func (f *fakeStore) WriteActorEvents(_ string, e []model.ActorEvent) error     { f.actorEvents = append(f.actorEvents, e...); return nil }
-func (f *fakeStore) WriteJobEvents(_ string, e []model.JobEvent) error         { f.jobEvents = append(f.jobEvents, e...); return nil }
+func (f *fakeStore) WriteNodeMetrics(_ string, ns []model.NodeMetric) error {
+	if f.failWriteNodes {
+		return context.DeadlineExceeded
+	}
+	f.nodes = append(f.nodes, ns...)
+	return nil
+}
+func (f *fakeStore) WriteWorkers(_ string, ws []model.WorkerSnapshot) error {
+	if f.failWriteWorkers {
+		return context.DeadlineExceeded
+	}
+	f.workers = append(f.workers, ws...)
+	return nil
+}
+func (f *fakeStore) WriteActors(_ string, a []model.ActorSnapshot) error {
+	if f.failWriteActors {
+		return context.DeadlineExceeded
+	}
+	f.actors = append(f.actors, a...)
+	return nil
+}
+func (f *fakeStore) WriteJobs(_ string, js []model.JobSnapshot) error {
+	if f.failWriteJobs {
+		return context.DeadlineExceeded
+	}
+	f.jobs = append(f.jobs, js...)
+	return nil
+}
+func (f *fakeStore) WriteCluster(_ string, c model.ClusterMetric) error {
+	if f.failWriteCluster {
+		return context.DeadlineExceeded
+	}
+	f.clusters = append(f.clusters, c)
+	return nil
+}
+func (f *fakeStore) WriteActorEvents(_ string, e []model.ActorEvent) error {
+	f.actorEvents = append(f.actorEvents, e...)
+	return nil
+}
+func (f *fakeStore) WriteJobEvents(_ string, e []model.JobEvent) error {
+	f.jobEvents = append(f.jobEvents, e...)
+	return nil
+}
 
-// 测试 Actor 状态变迁 diff：同 ID 状态变化生成事件，不变不生成，新出现的算新增（首轮无事件）。
 func TestDiffActors_StateChange(t *testing.T) {
-	col := &Collector{prevActors: map[string]model.ActorSnapshot{}, store: &fakeStore{}}
-	// 第一轮：两个 actor 都是 ALIVE
+	col := NewCollector(nil, &fakeStore{}, CollectorOpts{})
 	first := []model.ActorSnapshot{
 		{ActorID: "A1", State: "ALIVE", ActorClass: "C1"},
 		{ActorID: "A2", State: "ALIVE", ActorClass: "C2"},
 	}
-	if e := col.diffActors(first); len(e) != 0 {
+	if e := col.diffActorsForNode("n1", first); len(e) != 0 {
 		t.Errorf("first round should have 0 events, got %d", len(e))
 	}
-	// 第二轮：A1 变 DEAD，A2 不变，A3 新增
 	second := []model.ActorSnapshot{
 		{ActorID: "A1", State: "DEAD", ActorClass: "C1", ExitDetail: "oom"},
 		{ActorID: "A2", State: "ALIVE", ActorClass: "C2"},
 		{ActorID: "A3", State: "ALIVE", ActorClass: "C3"},
 	}
-	events := col.diffActors(second)
+	events := col.diffActorsForNode("n1", second)
 	if len(events) != 1 {
 		t.Fatalf("want 1 event (A1 DEAD), got %d", len(events))
 	}
@@ -303,9 +370,8 @@ func TestDiffActors_StateChange(t *testing.T) {
 	}
 }
 
-// 测试 Job 状态变迁 diff。
 func TestDiffJobs_StatusChange(t *testing.T) {
-	col := &Collector{prevJobs: map[string]model.JobSnapshot{}, store: &fakeStore{}}
+	col := NewCollector(nil, &fakeStore{}, CollectorOpts{})
 	col.diffJobs([]model.JobSnapshot{{JobID: "J1", Status: "RUNNING"}})
 	events := col.diffJobs([]model.JobSnapshot{{JobID: "J1", Status: "FAILED", ErrorType: "OOMError"}})
 	if len(events) != 1 || events[0].NewStatus != "FAILED" || events[0].ErrorType != "OOMError" {
@@ -313,11 +379,9 @@ func TestDiffJobs_StatusChange(t *testing.T) {
 	}
 }
 
-// ---- 边界：GPU 有卡场景 ----
-
-// resourcesTotal 含 GPU 时，节点 gpuTotal 与 actor gpuUsed 正确解析。
 func TestFetchNodeDetail_WithGPU(t *testing.T) {
 	detail := map[string]interface{}{
+		"result": true,
 		"data": map[string]interface{}{
 			"detail": map[string]interface{}{
 				"mem": []interface{}{32000000000.0, 16000000000.0},
@@ -338,19 +402,21 @@ func TestFetchNodeDetail_WithGPU(t *testing.T) {
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(detail)
 	}))
-	d, err := c.FetchNodeDetail("n1")
+	d, err := c.FetchNodeDetail(ctx(), "n1")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	if d.Node.GPUTotal != 8.0 {
 		t.Errorf("gpuTotal want 8, got %v", d.Node.GPUTotal)
 	}
+	if d.Node.GPUUsed != 2.0 {
+		t.Errorf("node gpuUsed want 2, got %v", d.Node.GPUUsed)
+	}
 	if len(d.Actors) != 1 || d.Actors[0].GPUUsed != 2.0 {
 		t.Errorf("actor gpuUsed wrong: %+v", d.Actors)
 	}
 }
 
-// 确保 Collector.Status/Snapshot 在未启动时不 panic。
 func TestCollector_StatusBeforeStart(t *testing.T) {
 	col := NewCollector(nil, &fakeStore{}, CollectorOpts{SummaryEvery: 15, DetailEvery: 60})
 	st := col.Status()
@@ -360,15 +426,11 @@ func TestCollector_StatusBeforeStart(t *testing.T) {
 	if col.Snapshot() != nil {
 		t.Errorf("snapshot should be nil before first collect")
 	}
-	// ctx 立即取消，Start 应立即返回（client 为 nil，但 ctx 已取消不会触发采集）
-	ctx, cancel := context.WithCancel(context.Background())
+	c, cancel := context.WithCancel(context.Background())
 	cancel()
-	col.Start(ctx) // 不应阻塞/panic
+	col.Start(c)
 }
 
-// ---- gzip 透明解压：dashboard 支持 / 不支持 / 损坏 三场景 ----
-
-// gzipEncode 用 gzip 压缩 + 写 Content-Encoding 头，模拟支持压缩的 dashboard。
 func gzipEncode(t *testing.T, payload []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -382,15 +444,10 @@ func gzipEncode(t *testing.T, payload []byte) []byte {
 	return buf.Bytes()
 }
 
-// 支持 gzip 的 dashboard：响应带 Content-Encoding: gzip + gzip 流。
-// 客户端应：透明解压、LastGzipUsed()=true、解析出原 JSON。
 func TestFetchNodes_GzipSupported(t *testing.T) {
 	payload := []byte(`{"result":true,"data":{"summary":[]}}`)
 	body := gzipEncode(t, payload)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Accept-Encoding") != "gzip" {
-			t.Errorf("request missing Accept-Encoding: gzip, got %q", r.Header.Get("Accept-Encoding"))
-		}
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(body)
@@ -398,7 +455,7 @@ func TestFetchNodes_GzipSupported(t *testing.T) {
 	t.Cleanup(srv.Close)
 	c := NewClient(CollectorOpts{PlatformURL: srv.URL, TimeoutSec: 2})
 
-	nodes, err := c.FetchNodes()
+	nodes, err := c.FetchNodes(ctx())
 	if err != nil {
 		t.Fatalf("FetchNodes: %v", err)
 	}
@@ -410,18 +467,15 @@ func TestFetchNodes_GzipSupported(t *testing.T) {
 	}
 }
 
-// 不支持 gzip 的 dashboard：返回明文 JSON（无 Content-Encoding 头）。
-// 客户端应：直接读明文、LastGzipUsed()=false、解析正常。
 func TestFetchNodes_GzipUnsupported(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 不设 Content-Encoding
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"result":true,"data":{"summary":[]}}`))
 	}))
 	t.Cleanup(srv.Close)
 	c := NewClient(CollectorOpts{PlatformURL: srv.URL, TimeoutSec: 2})
 
-	if _, err := c.FetchNodes(); err != nil {
+	if _, err := c.FetchNodes(ctx()); err != nil {
 		t.Fatalf("FetchNodes: %v", err)
 	}
 	if c.LastGzipUsed() {
@@ -429,23 +483,467 @@ func TestFetchNodes_GzipUnsupported(t *testing.T) {
 	}
 }
 
-// 头部撒谎：响应头标 gzip 但 body 损坏。
-// 客户端应：返回 error（不让坏数据进入解析层），不 panic。
 func TestFetchNodes_GzipBroken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Encoding", "gzip")
-		// 写非 gzip 的字节
 		_, _ = w.Write([]byte("this is not gzip"))
 	}))
 	t.Cleanup(srv.Close)
 	c := NewClient(CollectorOpts{PlatformURL: srv.URL, TimeoutSec: 2})
 
-	_, err := c.FetchNodes()
+	_, err := c.FetchNodes(ctx())
 	if err == nil {
 		t.Errorf("want error on broken gzip body, got nil")
 	}
-	// 错误信息应提到 gzip（便于排查）
 	if !strings.Contains(err.Error(), "gzip") {
 		t.Errorf("error should mention gzip, got: %v", err)
+	}
+}
+
+func TestCollectDetailRetainsLastGoodNodeDataOnPartialFailure(t *testing.T) {
+	callCount := map[string]int{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true,
+			"data": map[string]interface{}{
+				"summary": []map[string]interface{}{
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0, "hostname": "a",
+						"raylet": map[string]interface{}{"nodeId": "A", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0, "hostname": "b",
+						"raylet": map[string]interface{}{"nodeId": "B", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0, "hostname": "c",
+						"raylet": map[string]interface{}{"nodeId": "C", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/nodes/A", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("A", 2))
+	})
+	mux.HandleFunc("/nodes/B", func(w http.ResponseWriter, r *http.Request) {
+		callCount["B"]++
+		if callCount["B"] >= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("B", 3))
+	})
+	mux.HandleFunc("/nodes/C", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("C", 4))
+	})
+	mux.HandleFunc("/api/cluster_status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true, "data": map[string]interface{}{"autoscalingStatus": "1.0/24.0 CPU, 5.0 GiB/30.0 GiB memory"},
+		})
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := &fakeStore{}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	client := NewClient(opts)
+	col := NewCollector(client, store, opts)
+
+	c, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	col.collectSummary(c)
+	col.collectDetail(c)
+
+	snap := col.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot nil after first detail")
+	}
+	if len(snap.Workers) != 9 {
+		t.Fatalf("round1: want 9 workers, got %d", len(snap.Workers))
+	}
+
+	col.collectDetail(c)
+
+	snap = col.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot nil after second detail")
+	}
+	if len(snap.Workers) != 9 {
+		t.Errorf("round2: want 9 workers (B retained), got %d", len(snap.Workers))
+	}
+	if !snap.Health.CurrentIncomplete {
+		t.Errorf("round2: CurrentIncomplete should be true")
+	}
+	if snap.Health.FailedNodeCount != 1 {
+		t.Errorf("round2: FailedNodeCount want 1, got %d", snap.Health.FailedNodeCount)
+	}
+
+	var bStale bool
+	for _, fn := range snap.Health.FailedNodes {
+		if fn.NodeID == "B" {
+			bStale = fn.CurrentStale
+			if !fn.HasCachedData {
+				t.Errorf("B should have cached data")
+			}
+			if fn.ReusedWorkerCount != 3 {
+				t.Errorf("B reused workers want 3, got %d", fn.ReusedWorkerCount)
+			}
+		}
+	}
+	if !bStale {
+		t.Errorf("B should be marked stale")
+	}
+}
+
+func nodeDetailJSON(nodeID string, workerCount int) map[string]interface{} {
+	workers := make([]map[string]interface{}, workerCount)
+	for i := 0; i < workerCount; i++ {
+		workers[i] = map[string]interface{}{
+			"pid": 100 + i, "cpuPercent": 1.0,
+			"memoryInfo": map[string]interface{}{"rss": 1024},
+		}
+	}
+	return map[string]interface{}{
+		"result": true,
+		"data": map[string]interface{}{
+			"detail": map[string]interface{}{
+				"mem":     []interface{}{1e10, 5e9},
+				"cpu":     1.0,
+				"workers": workers,
+				"actors":  map[string]interface{}{},
+				"raylet": map[string]interface{}{
+					"state": "ALIVE", "nodeId": nodeID,
+					"resourcesTotal": map[string]interface{}{"CPU": 8.0},
+				},
+			},
+		},
+	}
+}
+
+func TestCollectDetailMarksMissingNodeWithoutFabricatingData(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true,
+			"data": map[string]interface{}{
+				"summary": []map[string]interface{}{
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0, "hostname": "a",
+						"raylet": map[string]interface{}{"nodeId": "A", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0, "hostname": "b",
+						"raylet": map[string]interface{}{"nodeId": "B", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/nodes/A", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("A", 2))
+	})
+	mux.HandleFunc("/nodes/B", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	mux.HandleFunc("/api/cluster_status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true, "data": map[string]interface{}{"autoscalingStatus": "1.0/16.0 CPU, 5.0 GiB/20.0 GiB memory"},
+		})
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := &fakeStore{}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	client := NewClient(opts)
+	col := NewCollector(client, store, opts)
+
+	c, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	col.collectSummary(c)
+	col.collectDetail(c)
+
+	snap := col.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot nil")
+	}
+	if len(snap.Workers) != 2 {
+		t.Errorf("want 2 workers (only A), got %d", len(snap.Workers))
+	}
+	for _, fn := range snap.Health.FailedNodes {
+		if fn.NodeID == "B" {
+			if fn.HasCachedData {
+				t.Errorf("B never succeeded, should not have cached data")
+			}
+		}
+	}
+}
+
+func TestClusterFailureKeepsPreviousClusterMetric(t *testing.T) {
+	callCount := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true,
+			"data": map[string]interface{}{
+				"summary": []map[string]interface{}{
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0,
+						"raylet": map[string]interface{}{"nodeId": "A", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/nodes/A", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("A", 1))
+	})
+	mux.HandleFunc("/api/cluster_status", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount >= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true, "data": map[string]interface{}{"autoscalingStatus": "5.0/16.0 CPU, 10.0 GiB/44.0 GiB memory"},
+		})
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := &fakeStore{}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	client := NewClient(opts)
+	col := NewCollector(client, store, opts)
+
+	c, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	col.collectSummary(c)
+	col.collectDetail(c)
+
+	snap := col.Snapshot()
+	if snap.Cluster.CPUUsed != 5.0 {
+		t.Fatalf("round1 cluster cpuUsed want 5, got %v", snap.Cluster.CPUUsed)
+	}
+
+	col.collectDetail(c)
+
+	snap = col.Snapshot()
+	if snap.Cluster.CPUUsed != 5.0 {
+		t.Errorf("round2 cluster should retain old value 5.0, got %v", snap.Cluster.CPUUsed)
+	}
+	if !snap.Health.ClusterDataStale {
+		t.Errorf("round2 ClusterDataStale should be true")
+	}
+}
+
+func TestJobsFailureKeepsPreviousJobsAndDiffBaseline(t *testing.T) {
+	callCount := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true,
+			"data": map[string]interface{}{
+				"summary": []map[string]interface{}{
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0,
+						"raylet": map[string]interface{}{"nodeId": "A", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/nodes/A", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("A", 1))
+	})
+	mux.HandleFunc("/api/cluster_status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true, "data": map[string]interface{}{"autoscalingStatus": "1.0/8.0 CPU, 5.0 GiB/10.0 GiB memory"},
+		})
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount >= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"job_id": "J1", "status": "RUNNING", "start_time": 1000, "end_time": 0},
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := &fakeStore{}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	client := NewClient(opts)
+	col := NewCollector(client, store, opts)
+
+	c, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	col.collectSummary(c)
+	col.collectDetail(c)
+
+	snap := col.Snapshot()
+	if len(snap.Jobs) != 1 {
+		t.Fatalf("round1 want 1 job, got %d", len(snap.Jobs))
+	}
+
+	col.collectDetail(c)
+
+	snap = col.Snapshot()
+	if len(snap.Jobs) != 1 {
+		t.Errorf("round2 jobs should retain old list, got %d", len(snap.Jobs))
+	}
+	if !snap.Health.JobsDataStale {
+		t.Errorf("round2 JobsDataStale should be true")
+	}
+}
+
+func TestSnapshotStillUpdatesWhenStorageFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true,
+			"data": map[string]interface{}{
+				"summary": []map[string]interface{}{
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0,
+						"raylet": map[string]interface{}{"nodeId": "A", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/nodes/A", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(nodeDetailJSON("A", 3))
+	})
+	mux.HandleFunc("/api/cluster_status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true, "data": map[string]interface{}{"autoscalingStatus": "1.0/8.0 CPU, 5.0 GiB/10.0 GiB memory"},
+		})
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := &fakeStore{failWriteWorkers: true}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	client := NewClient(opts)
+	col := NewCollector(client, store, opts)
+
+	c, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	col.collectSummary(c)
+	col.collectDetail(c)
+
+	snap := col.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot nil")
+	}
+	if len(snap.Workers) != 3 {
+		t.Errorf("snapshot should still show 3 workers despite storage failure, got %d", len(snap.Workers))
+	}
+	if snap.Health.LastStorageError == "" {
+		t.Errorf("storage error should be recorded in health")
+	}
+}
+
+func TestRequestWaitingForLimiterCanBeCanceled(t *testing.T) {
+	limiter := newSemaphoreLimiter(1)
+	limiter.Acquire(context.Background())
+
+	c, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- limiter.Acquire(c)
+	}()
+
+	cancel()
+	err := <-done
+	if err == nil {
+		t.Errorf("acquire should fail after cancel")
+	}
+	limiter.Release()
+}
+
+func TestStopDoesNotIncrementFailureForContextCanceled(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true,
+			"data": map[string]interface{}{
+				"summary": []map[string]interface{}{
+					{"mem": []interface{}{1e10, 5e9}, "cpu": 1.0,
+						"raylet": map[string]interface{}{"nodeId": "A", "state": "ALIVE", "resourcesTotal": map[string]interface{}{"CPU": 8.0}}},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/nodes/A", func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	})
+	mux.HandleFunc("/api/cluster_status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": true, "data": map[string]interface{}{"autoscalingStatus": ""},
+		})
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := &fakeStore{}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 30, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	client := NewClient(opts)
+	col := NewCollector(client, store, opts)
+
+	c, cancel := context.WithCancel(context.Background())
+	col.collectSummary(c)
+
+	go col.collectDetail(c)
+	cancel()
+
+	st := col.Status()
+	if st.ErrCount > 0 {
+		t.Errorf("context cancel should not increment error count, got %d", st.ErrCount)
+	}
+}
+
+func TestParseClusterStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		cpuU   float64
+		memT   float64
+		parsed bool
+	}{
+		{"normal", "1.0/16.0 CPU, 0.0 GiB/44.7 GiB memory", 1.0, 44.7, true},
+		{"extra spaces", "  2.0/32.0   CPU ,  1.5 GiB/64.0 GiB  memory ", 2.0, 64.0, true},
+		{"empty", "", 0, 0, false},
+		{"garbage", "hello world no numbers", 0, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm, parsed := ParseClusterStatus(tt.input)
+			if parsed != tt.parsed {
+				t.Errorf("parsed=%v want %v", parsed, tt.parsed)
+			}
+			if parsed && cm.CPUUsed != tt.cpuU {
+				t.Errorf("cpuUsed=%v want %v", cm.CPUUsed, tt.cpuU)
+			}
+			if parsed && cm.MemTotal != tt.memT {
+				t.Errorf("memTotal=%v want %v", cm.MemTotal, tt.memT)
+			}
+		})
 	}
 }

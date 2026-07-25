@@ -6,6 +6,7 @@ export namespace collector {
 	    workers: model.WorkerSnapshot[];
 	    actors: model.ActorSnapshot[];
 	    jobs: model.JobSnapshot[];
+	    health: model.CollectionHealth;
 	
 	    static createFrom(source: any = {}) {
 	        return new Snapshot(source);
@@ -18,6 +19,7 @@ export namespace collector {
 	        this.workers = this.convertValues(source["workers"], model.WorkerSnapshot);
 	        this.actors = this.convertValues(source["actors"], model.ActorSnapshot);
 	        this.jobs = this.convertValues(source["jobs"], model.JobSnapshot);
+	        this.health = this.convertValues(source["health"], model.CollectionHealth);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -90,6 +92,8 @@ export namespace config {
 	    concurrency?: number;
 	    globalConcurrency?: number;
 	    recoverConsecutive?: number;
+	    retentionDays?: number;
+	    cleanupEveryHours?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -107,6 +111,8 @@ export namespace config {
 	        this.concurrency = source["concurrency"];
 	        this.globalConcurrency = source["globalConcurrency"];
 	        this.recoverConsecutive = source["recoverConsecutive"];
+	        this.retentionDays = source["retentionDays"];
+	        this.cleanupEveryHours = source["cleanupEveryHours"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -301,11 +307,105 @@ export namespace model {
 	        this.gzipSupported = source["gzipSupported"];
 	    }
 	}
+	export class NodeCollectionState {
+	    nodeId: string;
+	    nodeName: string;
+	    lastAttemptTs: number;
+	    lastSuccessTs: number;
+	    lastFailureTs: number;
+	    consecutiveFailures: number;
+	    lastError: string;
+	    currentStale: boolean;
+	    hasCachedData: boolean;
+	    reusedWorkerCount: number;
+	    reusedActorCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeCollectionState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodeId = source["nodeId"];
+	        this.nodeName = source["nodeName"];
+	        this.lastAttemptTs = source["lastAttemptTs"];
+	        this.lastSuccessTs = source["lastSuccessTs"];
+	        this.lastFailureTs = source["lastFailureTs"];
+	        this.consecutiveFailures = source["consecutiveFailures"];
+	        this.lastError = source["lastError"];
+	        this.currentStale = source["currentStale"];
+	        this.hasCachedData = source["hasCachedData"];
+	        this.reusedWorkerCount = source["reusedWorkerCount"];
+	        this.reusedActorCount = source["reusedActorCount"];
+	    }
+	}
+	export class CollectionHealth {
+	    lastDetailAttemptTs: number;
+	    lastCompleteDetailSuccessTs: number;
+	    lastIncompleteTs: number;
+	    currentIncomplete: boolean;
+	    totalNodeCount: number;
+	    freshNodeCount: number;
+	    failedNodeCount: number;
+	    staleNodeCount: number;
+	    staleWorkerCount: number;
+	    staleActorCount: number;
+	    clusterDataStale: boolean;
+	    jobsDataStale: boolean;
+	    lastStorageErrorTs: number;
+	    lastStorageError: string;
+	    failedNodes: NodeCollectionState[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CollectionHealth(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.lastDetailAttemptTs = source["lastDetailAttemptTs"];
+	        this.lastCompleteDetailSuccessTs = source["lastCompleteDetailSuccessTs"];
+	        this.lastIncompleteTs = source["lastIncompleteTs"];
+	        this.currentIncomplete = source["currentIncomplete"];
+	        this.totalNodeCount = source["totalNodeCount"];
+	        this.freshNodeCount = source["freshNodeCount"];
+	        this.failedNodeCount = source["failedNodeCount"];
+	        this.staleNodeCount = source["staleNodeCount"];
+	        this.staleWorkerCount = source["staleWorkerCount"];
+	        this.staleActorCount = source["staleActorCount"];
+	        this.clusterDataStale = source["clusterDataStale"];
+	        this.jobsDataStale = source["jobsDataStale"];
+	        this.lastStorageErrorTs = source["lastStorageErrorTs"];
+	        this.lastStorageError = source["lastStorageError"];
+	        this.failedNodes = this.convertValues(source["failedNodes"], NodeCollectionState);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CollectorStatus {
 	    running: boolean;
 	    lastSuccessTs: number;
 	    errCount: number;
 	    lastError: string;
+	    lastErrorTs: number;
+	    lastErrorStage: string;
+	    lastCompleteDetailTs: number;
+	    currentIncomplete: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new CollectorStatus(source);
@@ -317,6 +417,10 @@ export namespace model {
 	        this.lastSuccessTs = source["lastSuccessTs"];
 	        this.errCount = source["errCount"];
 	        this.lastError = source["lastError"];
+	        this.lastErrorTs = source["lastErrorTs"];
+	        this.lastErrorStage = source["lastErrorStage"];
+	        this.lastCompleteDetailTs = source["lastCompleteDetailTs"];
+	        this.currentIncomplete = source["currentIncomplete"];
 	    }
 	}
 	export class GlobalPerf {
@@ -379,6 +483,7 @@ export namespace model {
 	        this.entry = source["entry"];
 	    }
 	}
+	
 	export class NodeMetric {
 	    ts: number;
 	    clusterId: string;
