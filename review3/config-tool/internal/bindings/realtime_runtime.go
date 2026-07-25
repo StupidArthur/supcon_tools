@@ -367,20 +367,40 @@ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime
 func (b *RealtimeRuntimeBinding) StartSingleYAML(configPath string, options realtime.RealtimeStartOptions) (realtime.RealtimeRunSession, error) {
 	opts := options.WithDefaults()
 
-	status := b.system.Status()
-	if status.Running {
-		return realtime.RealtimeRunSession{}, fmt.Errorf("已有实时进程在运行")
+	// todo.md §9.3：检查服务 ready
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("服务客户端未注入")
 	}
-	if status.BatchRunning || status.ActiveBatches > 0 {
-		return realtime.RealtimeRunSession{}, fmt.Errorf("批量任务正在运行，无法启动实时仿真")
+	if _, err := client.CheckHealth(b.ctx); err != nil {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("服务未就绪: %w", err)
 	}
 
+	// todo.md §9.3：检查没有 runtime 运行
+	runtimeState, err := b.getRuntimeStatusViaService()
+	if err != nil {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("查询运行状态失败: %w", err)
+	}
+	if runtimeState == "running" || runtimeState == "starting" {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("已有实时运行在进行中")
+	}
+
+	// todo.md §9.3：单 YML 不执行工程合并编译，直接使用 configPath
 	sessionID, dir, err := b.sessionManager.CreateSessionDir()
 	if err != nil {
 		return realtime.RealtimeRunSession{}, err
 	}
 
-	return b.launch(sessionID, dir, configPath, realtime.RealtimeRunSession{
+	// todo.md §9.3：调用同一个 /api/runtime/start
+	if err := b.startRuntimeViaService(configPath, opts.RuntimeName, opts.CycleTime, opts.OPCUAHost, opts.OPCUAPort); err != nil {
+		b.sessionManager.RemoveSessionDir(dir)
+		return realtime.RealtimeRunSession{}, fmt.Errorf("启动实时运行失败: %w", err)
+	}
+
+	// 创建 session 记录
+	session := realtime.RealtimeRunSession{
 		SessionID:          sessionID,
 		SourceKind:         realtime.RuntimeSourceSingleYAML,
 		SourcePath:         configPath,
@@ -390,10 +410,27 @@ func (b *RealtimeRuntimeBinding) StartSingleYAML(configPath string, options real
 		CycleTime:          opts.CycleTime,
 		OPCUAHost:          opts.OPCUAHost,
 		OPCUAPort:          opts.OPCUAPort,
-		APIHost:            opts.APIHost,
-		APIPort:            opts.APIPort,
-		State:              realtime.StateStarting,
-	}, opts)
+		APIHost:            b.serviceHost,
+		APIPort:            b.servicePort,
+		State:              realtime.StateRunning,
+		StartedAt:          time.Now().Format(time.RFC3339),
+	}
+
+	// 写 session.json
+	rec := sessionRecordFor(session)
+	if err := b.sessionManager.WriteSessionJSON(dir, rec); err != nil {
+		b.stopRuntimeViaService()
+		b.sessionManager.RemoveSessionDir(dir)
+		return realtime.RealtimeRunSession{}, fmt.Errorf("写入 session.json 失败: %w", err)
+	}
+
+	// 设置 current session
+	b.mu.Lock()
+	b.current = &session
+	b.curDir = dir
+	b.mu.Unlock()
+
+	return session, nil
 }
 
 func (b *RealtimeRuntimeBinding) launch(
