@@ -192,11 +192,12 @@ export function RealtimeConfigPage() {
                 </button>
                 <div className="text-xs text-muted-foreground" data-testid="realtime-validation-summary">
                   {(() => {
-                    const total = currentProject.sources.reduce((acc, s) => acc + Math.max(1, s.replicas), 0)
+                    const sources = currentProject.sources || []
+                    const total = sources.reduce((acc, s) => acc + Math.max(1, s.replicas), 0)
                     const passed = duplicates.length === 0
                     return (
                       <>
-                        <span>YAML：{currentProject.sources.length} 个</span>
+                        <span>YAML：{sources.length} 个</span>
                         <span className="mx-2">展开实例：{total} 个</span>
                         <span>{passed ? '校验通过' : '校验失败'}</span>
                       </>

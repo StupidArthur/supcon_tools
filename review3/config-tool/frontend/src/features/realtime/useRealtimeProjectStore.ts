@@ -7,6 +7,26 @@ import type {
   RealtimeRuntime,
 } from './types'
 
+/**
+ * 把 Wails 返回的 OpenedProject（嵌套结构 {project, projectFile, projectDir}）
+ * 扁平化为 ProjectView（{sources, runtime, projectFile, projectDir}）。
+ * 后端 CreateProjectAt / OpenProjectFile 都返回嵌套结构；前端 ProjectView 期望扁平。
+ * 扁平化必须 sources / runtime 都来自内层 project，避免渲染时出现 undefined.sources。
+ */
+function flattenOpenedProject(opened: unknown): ProjectView {
+  const o = opened as { project?: any; projectFile?: string; projectDir?: string }
+  const p = o?.project || {}
+  return {
+    version: p.version,
+    id: p.id,
+    name: p.name,
+    sources: Array.isArray(p.sources) ? p.sources : [],
+    runtime: p.runtime,
+    projectFile: o?.projectFile,
+    projectDir: o?.projectDir,
+  } as ProjectView
+}
+
 interface RealtimeProjectState {
   /** 当前工程（来自 project.yaml，不含绝对路径） */
   currentProject: ProjectView | null
@@ -88,13 +108,14 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
   openRecentProject: async (projectFile: string) => {
     set({ loading: true, error: null, duplicates: [] })
     try {
-      const view = (await realtimeProjectApi.openProjectFile(projectFile)) as unknown as ProjectView
-      const validation = await fetchValidation(view.id)
+      const opened = await realtimeProjectApi.openProjectFile(projectFile)
+      const proj = flattenOpenedProject(opened)
+      const validation = await fetchValidation(proj.id)
       // 记录到最近列表
-      void rememberRecent(view.projectFile || projectFile)
+      void rememberRecent(proj.projectFile || projectFile)
       set({
-        currentProject: view,
-        currentProjectFile: view.projectFile || projectFile,
+        currentProject: proj,
+        currentProjectFile: proj.projectFile || projectFile,
         instances: validation.instances,
         duplicates: validation.duplicates,
         loading: false,
@@ -109,7 +130,8 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
   createProject: async (name: string) => {
     set({ loading: true, error: null, duplicates: [] })
     try {
-      const proj = (await realtimeProjectApi.createProject(name)) as unknown as ProjectView
+      const opened = await realtimeProjectApi.createProject(name)
+      const proj = flattenOpenedProject(opened)
       void rememberRecent(proj.projectFile || '')
       set({
         currentProject: proj,
@@ -127,7 +149,8 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
   createProjectAt: async (name: string, parentDir: string) => {
     set({ loading: true, error: null, duplicates: [] })
     try {
-      const proj = (await realtimeProjectApi.createProjectAt(name, parentDir)) as unknown as ProjectView
+      const opened = await realtimeProjectApi.createProjectAt(name, parentDir)
+      const proj = flattenOpenedProject(opened)
       void rememberRecent(proj.projectFile || '')
       set({
         currentProject: proj,
