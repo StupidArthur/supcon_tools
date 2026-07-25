@@ -56,20 +56,30 @@ try {
 
     # Step 1: Git basic checks
     Invoke-GateStep "Step 1: Git basic checks" {
-        git diff --check 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "git diff --check failed" }
+        # Windows PowerShell 5.1 会把 git 的 CRLF warning 包装为 ErrorRecord。
+        # 在 git 调用区间使用 Continue，并显式检查 native exit code。
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            git diff --check 2>&1
+            $checkExitCode = $LASTEXITCODE
+            if ($checkExitCode -ne 0) { throw "git diff --check failed" }
 
-        git diff --check "$Baseline..HEAD" 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "git diff --check baseline..HEAD failed" }
+            git diff --check "$Baseline..HEAD" 2>&1
+            $checkBaseExitCode = $LASTEXITCODE
+            if ($checkBaseExitCode -ne 0) { throw "git diff --check baseline..HEAD failed" }
 
-        $todoDiff = git diff --name-only "$Baseline..HEAD" -- todo/ 2>&1
-        if ($todoDiff) {
-            throw "todo/ files modified in this branch: $todoDiff"
-        }
+            $todoDiff = git diff --name-only "$Baseline..HEAD" -- todo/ 2>&1
+            if ($todoDiff) {
+                throw "todo/ files modified in this branch: $todoDiff"
+            }
 
-        $todoStaged = git diff --cached --name-only -- todo/ 2>&1
-        if ($todoStaged) {
-            throw "todo/ files staged: $todoStaged"
+            $todoStaged = git diff --cached --name-only -- todo/ 2>&1
+            if ($todoStaged) {
+                throw "todo/ files staged: $todoStaged"
+            }
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
         }
     }
 
@@ -191,8 +201,18 @@ try {
 
         # Step 12: Generated binding stability
         Invoke-GateStep "Step 12: Generated binding stability" {
-            $bindingDiff = git diff --exit-code -- "config-tool/frontend/wailsjs/go" 2>&1
-            if ($LASTEXITCODE -ne 0) {
+            # Windows PowerShell 5.1 会把 git 在 CRLF 行尾文件上的 warning
+            # 包装为 ErrorRecord。同样的本地化 ErrorActionPreference 模式。
+            $previousErrorActionPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = "Continue"
+                $bindingDiff = git diff --exit-code -- "config-tool/frontend/wailsjs/go" 2>&1
+                $bindingDiffExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+
+            if ($bindingDiffExitCode -ne 0) {
                 throw "Generated bindings have uncommitted changes after wails build"
             }
         }
