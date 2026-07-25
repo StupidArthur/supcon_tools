@@ -260,8 +260,13 @@ func (c *Collector) collectSummary(ctx context.Context) {
 	if storeErr = c.store.WriteNodeMetrics(c.opts.ClusterID, nodes); storeErr != nil {
 		logx.L().Warn("summary store failed", "cluster", c.opts.ClusterID, "err", storeErr)
 		c.mu.Lock()
+		c.health.CurrentStorageError = true
 		c.health.LastStorageErrorTs = model.NowMs()
 		c.health.LastStorageError = truncateErr(storeErr, 300)
+		c.mu.Unlock()
+	} else {
+		c.mu.Lock()
+		c.health.CurrentStorageError = false
 		c.mu.Unlock()
 	}
 
@@ -389,6 +394,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 
 		if r.ok {
 			freshNodeSet[r.nodeID] = true
+			prevFailures := st.ConsecutiveFailures
 			st.LastSuccessTs = now
 			st.ConsecutiveFailures = 0
 			st.CurrentStale = false
@@ -402,8 +408,6 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			freshActors = append(freshActors, r.actors...)
 			freshNodes = append(freshNodes, r.node)
 
-			c.refreshSnapshotNode(r.node)
-
 			if err := c.store.WriteNodeMetrics(c.opts.ClusterID, []model.NodeMetric{r.node}); err != nil {
 				storeErrs = append(storeErrs, fmt.Errorf("write node metrics node=%s: %w", r.nodeID, err))
 			}
@@ -411,9 +415,9 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			evts := c.diffActorsForNode(r.nodeID, r.actors)
 			actorEvents = append(actorEvents, evts...)
 
-			if st.ConsecutiveFailures > 0 {
+			if prevFailures > 0 {
 				logx.L().Info("node detail recovered", "cluster", c.opts.ClusterID,
-					"node", r.nodeID, "previousConsecutiveFailures", st.ConsecutiveFailures)
+					"node", r.nodeID, "previousConsecutiveFailures", prevFailures)
 			}
 		} else {
 			if errors.Is(r.err, context.Canceled) {
@@ -424,13 +428,16 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			st.LastFailureTs = now
 			st.LastError = truncateErr(r.err, 300)
 
-			if c.workersByNode[r.nodeID] != nil {
+			_, workersCached := c.workersByNode[r.nodeID]
+			_, actorsCached := c.actorsByNode[r.nodeID]
+			hasCached := (workersCached || actorsCached || st.LastSuccessTs > 0)
+			st.HasCachedData = hasCached
+			if hasCached {
 				st.CurrentStale = true
 				st.ReusedWorkerCount = len(c.workersByNode[r.nodeID])
 				st.ReusedActorCount = len(c.actorsByNode[r.nodeID])
 			} else {
 				st.CurrentStale = false
-				st.HasCachedData = false
 				st.ReusedWorkerCount = 0
 				st.ReusedActorCount = 0
 			}
@@ -563,10 +570,6 @@ func (c *Collector) collectDetail(ctx context.Context) {
 	if len(storeErrs) > 0 {
 		joined := errors.Join(storeErrs...)
 		logx.L().Warn("detail storage errors", "cluster", c.opts.ClusterID, "err", joined)
-		c.mu.Lock()
-		c.health.LastStorageErrorTs = model.NowMs()
-		c.health.LastStorageError = truncateErr(joined, 500)
-		c.mu.Unlock()
 	}
 
 	completeSuccess := !incomplete && storageOK
@@ -584,6 +587,13 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		c.health.LastCompleteDetailSuccessTs = now
 		c.status.LastCompleteDetailTs = now
 		c.status.LastError = ""
+	}
+	if storageOK {
+		c.health.CurrentStorageError = false
+	} else {
+		c.health.CurrentStorageError = true
+		c.health.LastStorageErrorTs = model.NowMs()
+		c.health.LastStorageError = truncateErr(errors.Join(storeErrs...), 500)
 	}
 
 	c.health.TotalNodeCount = len(nodes)
@@ -605,6 +615,19 @@ func (c *Collector) collectDetail(ctx context.Context) {
 
 	if c.snap == nil {
 		c.snap = &Snapshot{}
+	}
+	if len(freshNodes) > 0 {
+		nodeByID := map[string]int{}
+		for i, n := range c.snap.Nodes {
+			nodeByID[n.NodeID] = i
+		}
+		for _, fn := range freshNodes {
+			if idx, ok := nodeByID[fn.NodeID]; ok {
+				c.snap.Nodes[idx] = fn
+			} else {
+				c.snap.Nodes = append(c.snap.Nodes, fn)
+			}
+		}
 	}
 	if clusterFresh {
 		c.snap.Cluster = c.prevCluster
@@ -744,26 +767,36 @@ func (c *Collector) refreshSnapshotNodes(nodes []model.NodeMetric) {
 	if c.snap == nil {
 		c.snap = &Snapshot{}
 	}
-	byID := map[string]model.NodeMetric{}
+
+	oldByID := map[string]model.NodeMetric{}
 	for _, n := range c.snap.Nodes {
-		byID[n.NodeID] = n
+		oldByID[n.NodeID] = n
 	}
+
+	currentSet := map[string]bool{}
+	out := make([]model.NodeMetric, 0, len(nodes))
 	for _, n := range nodes {
-		if exist, ok := byID[n.NodeID]; ok {
-			exist.CPU, exist.MemTotal, exist.MemUsed = n.CPU, n.MemTotal, n.MemUsed
-			exist.IsPartial = n.IsPartial
-			if exist.Hostname == "" {
-				exist.Hostname = n.Hostname
+		currentSet[n.NodeID] = true
+		if old, ok := oldByID[n.NodeID]; ok {
+			n.IsHead = old.IsHead
+			n.GPUTotal = old.GPUTotal
+			n.GPUUsed = old.GPUUsed
+			if n.State == "" {
+				n.State = old.State
 			}
-			byID[n.NodeID] = exist
-		} else {
-			byID[n.NodeID] = n
 		}
-	}
-	out := make([]model.NodeMetric, 0, len(byID))
-	for _, n := range byID {
 		out = append(out, n)
 	}
+
+	for nid := range oldByID {
+		if !currentSet[nid] {
+			delete(c.workersByNode, nid)
+			delete(c.actorsByNode, nid)
+			delete(c.nodeState, nid)
+			delete(c.prevActorsByNode, nid)
+		}
+	}
+
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Hostname != b.Hostname {
@@ -775,17 +808,4 @@ func (c *Collector) refreshSnapshotNodes(nodes []model.NodeMetric) {
 		return a.NodeID < b.NodeID
 	})
 	c.snap.Nodes = out
-}
-
-func (c *Collector) refreshSnapshotNode(n model.NodeMetric) {
-	if c.snap == nil {
-		c.snap = &Snapshot{}
-	}
-	for i, ex := range c.snap.Nodes {
-		if ex.NodeID == n.NodeID {
-			c.snap.Nodes[i] = n
-			return
-		}
-	}
-	c.snap.Nodes = append(c.snap.Nodes, n)
 }

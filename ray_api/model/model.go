@@ -166,8 +166,9 @@ type CollectionHealth struct {
 	ClusterDataStale bool `json:"clusterDataStale"`
 	JobsDataStale    bool `json:"jobsDataStale"`
 
-	LastStorageErrorTs int64  `json:"lastStorageErrorTs"`
-	LastStorageError   string `json:"lastStorageError"`
+	CurrentStorageError bool   `json:"currentStorageError"`
+	LastStorageErrorTs  int64  `json:"lastStorageErrorTs"`
+	LastStorageError    string `json:"lastStorageError"`
 
 	FailedNodes []NodeCollectionState `json:"failedNodes"`
 }
@@ -231,8 +232,9 @@ func NowMs() int64 { return time.Now().UnixMilli() }
 
 // Alert 一条报警。活着到消除（recovered && acknowledged）。
 // 状态由 recovered × acknowledged 两维决定：
-//   (false,false)=报警-未确认  (false,true)=报警-已确认
-//   (true,false)=已恢复-未确认 (true,true)=已消除
+//
+//	(false,false)=报警-未确认  (false,true)=报警-已确认
+//	(true,false)=已恢复-未确认 (true,true)=已消除
 type Alert struct {
 	ID             int64   `json:"id"`
 	ClusterID      string  `json:"clusterId"`

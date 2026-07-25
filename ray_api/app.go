@@ -103,7 +103,7 @@ func (a *App) startCleanupLoop(cfg config.Config) {
 	everyHours := cfg.EffectiveCleanupEveryHours()
 
 	go func() {
-		a.runCleanup(retentionDays)
+		a.runCleanup(cleanupCtx, retentionDays)
 
 		ticker := time.NewTicker(time.Duration(everyHours) * time.Hour)
 		defer ticker.Stop()
@@ -112,20 +112,23 @@ func (a *App) startCleanupLoop(cfg config.Config) {
 			case <-cleanupCtx.Done():
 				return
 			case <-ticker.C:
-				a.runCleanup(retentionDays)
+				a.runCleanup(cleanupCtx, retentionDays)
 			}
 		}
 	}()
 }
 
-func (a *App) runCleanup(retentionDays int) {
+func (a *App) runCleanup(ctx context.Context, retentionDays int) {
 	if a.store == nil {
 		return
 	}
 	cutoff := time.Now().AddDate(0, 0, -retentionDays).UnixMilli()
 	start := time.Now()
-	result, err := a.store.CleanupBefore(cutoff)
+	result, err := a.store.CleanupBefore(ctx, cutoff)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		logx.L().Warn("retention cleanup failed", "err", err, "cutoff", cutoff)
 		return
 	}
@@ -398,6 +401,18 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 		} else {
 			a.manager.SyncClusters(old.Clusters, cfg.Clusters)
 		}
+
+		if old.Thresholds != cfg.Thresholds || old.RecoverConsecutive != cfg.RecoverConsecutive {
+			a.alerts = alert.NewManager(a.store, cfg.RecoverConsecutive)
+			a.manager.SetAlertChecker(a.alerts)
+		}
+	}
+
+	if old.RetentionDays != cfg.RetentionDays || old.CleanupEveryHours != cfg.CleanupEveryHours {
+		if a.cleanupCancel != nil {
+			a.cleanupCancel()
+		}
+		a.startCleanupLoop(cfg)
 	}
 
 	a.mu.Lock()

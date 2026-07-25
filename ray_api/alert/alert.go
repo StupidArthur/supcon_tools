@@ -69,9 +69,7 @@ func (m *Manager) Check(clusterID, clusterName string, th config.Thresholds, nod
 			m.checkMetric(clusterID, clusterName, nodeName, "node", n.NodeID, nodeName, "gpu", th.NodeGPU, gpuPct)
 		}
 
-		if n.CPU > 0 {
-			m.checkMetric(clusterID, clusterName, nodeName, "node", n.NodeID, nodeName, "cpu", th.NodeCPU, n.CPU)
-		}
+		m.checkMetric(clusterID, clusterName, nodeName, "node", n.NodeID, nodeName, "cpu", th.NodeCPU, n.CPU)
 	}
 
 	for _, w := range workers {

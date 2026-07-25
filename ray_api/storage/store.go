@@ -12,6 +12,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -412,7 +413,7 @@ type CleanupResult struct {
 	ClusterMetric  int64
 }
 
-func (s *Store) CleanupBefore(cutoff int64) (CleanupResult, error) {
+func (s *Store) CleanupBefore(ctx context.Context, cutoff int64) (CleanupResult, error) {
 	var res CleanupResult
 	tables := []struct {
 		name string
@@ -427,11 +428,16 @@ func (s *Store) CleanupBefore(cutoff int64) (CleanupResult, error) {
 	for _, t := range tables {
 		var total int64
 		for {
-			r, err := s.db.Exec(
+			if ctx.Err() != nil {
+				*t.dest = total
+				return res, ctx.Err()
+			}
+			r, err := s.db.ExecContext(ctx,
 				fmt.Sprintf("DELETE FROM %s WHERE rowid IN (SELECT rowid FROM %s WHERE ts < ? LIMIT 5000)", t.name, t.name),
 				cutoff,
 			)
 			if err != nil {
+				*t.dest = total
 				return res, fmt.Errorf("cleanup %s: %w", t.name, err)
 			}
 			n, _ := r.RowsAffected()
@@ -442,10 +448,10 @@ func (s *Store) CleanupBefore(cutoff int64) (CleanupResult, error) {
 		}
 		*t.dest = total
 	}
-	if _, err := s.db.Exec("PRAGMA optimize"); err != nil {
+	if _, err := s.db.ExecContext(ctx, "PRAGMA optimize"); err != nil {
 		return res, fmt.Errorf("pragma optimize: %w", err)
 	}
-	if _, err := s.db.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
 		return res, fmt.Errorf("wal checkpoint: %w", err)
 	}
 	return res, nil

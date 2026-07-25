@@ -83,7 +83,14 @@ func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 	c.mu.Lock()
 	c.lastGzip = isGzip
 	c.mu.Unlock()
-	return io.ReadAll(io.LimitReader(reader, maxResponseBytes))
+	data, err := io.ReadAll(io.LimitReader(reader, maxResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxResponseBytes {
+		return nil, fmt.Errorf("%s: response exceeds 64 MiB limit", path)
+	}
+	return data, nil
 }
 
 func sanitizeBody(s string) string {

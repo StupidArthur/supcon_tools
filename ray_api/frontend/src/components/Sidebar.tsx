@@ -84,10 +84,9 @@ export function Sidebar({
   )
 }
 
-// dotFor 根据采集状态返回状态点颜色。
 function dotFor(st?: CollectorStatus): string {
   if (!st) return 'bg-muted-foreground'
   if (!st.running) return 'bg-muted-foreground'
-  if (st.errCount > 0) return 'bg-red-500'
+  if (st.currentIncomplete) return 'bg-orange-500'
   return 'bg-green-500'
 }

@@ -15,6 +15,7 @@ function makeHealth(overrides: Partial<CollectionHealth> = {}): CollectionHealth
     staleActorCount: 0,
     clusterDataStale: false,
     jobsDataStale: false,
+    currentStorageError: false,
     lastStorageErrorTs: 0,
     lastStorageError: '',
     failedNodes: [],
@@ -38,9 +39,14 @@ describe('getCollectionNotice', () => {
     expect(getCollectionNotice(h, Date.now())).toBe('active')
   })
 
-  it('returns storage when storage error exists', () => {
-    const h = makeHealth({ lastStorageError: 'disk full', lastStorageErrorTs: Date.now() })
+  it('returns storage when currentStorageError is true', () => {
+    const h = makeHealth({ currentStorageError: true, lastStorageError: 'disk full', lastStorageErrorTs: Date.now() })
     expect(getCollectionNotice(h, Date.now())).toBe('storage')
+  })
+
+  it('returns null when storage error recovered', () => {
+    const h = makeHealth({ currentStorageError: false, lastStorageError: 'old error', lastStorageErrorTs: Date.now() - 120_000 })
+    expect(getCollectionNotice(h, Date.now())).toBeNull()
   })
 
   it('returns recent within 60s after recovery', () => {
@@ -64,6 +70,7 @@ describe('getCollectionNotice', () => {
   it('active takes priority over storage', () => {
     const h = makeHealth({
       currentIncomplete: true,
+      currentStorageError: true,
       lastStorageError: 'err',
       lastStorageErrorTs: Date.now(),
     })

@@ -352,6 +352,7 @@ export namespace model {
 	    staleActorCount: number;
 	    clusterDataStale: boolean;
 	    jobsDataStale: boolean;
+	    currentStorageError: boolean;
 	    lastStorageErrorTs: number;
 	    lastStorageError: string;
 	    failedNodes: NodeCollectionState[];
@@ -374,6 +375,7 @@ export namespace model {
 	        this.staleActorCount = source["staleActorCount"];
 	        this.clusterDataStale = source["clusterDataStale"];
 	        this.jobsDataStale = source["jobsDataStale"];
+	        this.currentStorageError = source["currentStorageError"];
 	        this.lastStorageErrorTs = source["lastStorageErrorTs"];
 	        this.lastStorageError = source["lastStorageError"];
 	        this.failedNodes = this.convertValues(source["failedNodes"], NodeCollectionState);

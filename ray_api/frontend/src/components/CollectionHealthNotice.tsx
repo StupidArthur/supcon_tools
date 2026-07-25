@@ -27,6 +27,7 @@ export interface CollectionHealth {
   staleActorCount: number
   clusterDataStale: boolean
   jobsDataStale: boolean
+  currentStorageError: boolean
   lastStorageErrorTs: number
   lastStorageError: string
   failedNodes: NodeCollectionState[]
@@ -37,7 +38,7 @@ export type NoticeLevel = 'active' | 'recent' | 'storage' | null
 export function getCollectionNotice(health: CollectionHealth | undefined | null, now: number): NoticeLevel {
   if (!health) return null
   if (health.currentIncomplete) return 'active'
-  if (health.lastStorageError && health.lastStorageErrorTs > 0) return 'storage'
+  if (health.currentStorageError) return 'storage'
   if (health.lastIncompleteTs > 0 && now - health.lastIncompleteTs <= 60_000) return 'recent'
   return null
 }
