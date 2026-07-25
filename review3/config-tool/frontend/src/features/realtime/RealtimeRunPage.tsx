@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { realtimeProjectApi, realtimeRuntimeApi, systemApi } from '../../lib/api'
+import { realtimeProjectApi, realtimeRuntimeApi } from '../../lib/api'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
 import { useGenericSimStore } from '../dsl/useGenericSimStore'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
@@ -9,15 +9,15 @@ import { RuntimeInstanceTable } from './RuntimeInstanceTable'
 import { RuntimeInstanceDetail } from './RuntimeInstanceDetail'
 
 /**
- * 实时运行页：
- * - 运行参数（控制周期 / UA 地址 / UA 端口）来自工程组态持久化的 runtime 默认值，
- *   本页面不再提供输入框，统一在「工程组态」维护。
+ * 实时运行页（todo.md §9）：
+ * - 运行参数（控制周期 / UA 地址 / UA 端口）来自工程组态持久化的 runtime 默认值。
  * - 整页主体交给实例列表 / 实例详情（位号表）。
- * - 顶部仅保留一行状态条 + 启停按钮，方便用户启动 / 停止实时服务。
+ * - 顶部保留状态条 + 启停按钮（启动运行 / 停止运行）。
+ * - 不再请求 / 缓存 DataFactory.exe 路径；服务由 Config Tool 自行管理。
+ * - 不再硬编码 API 端口 8000；服务端口由 Go 端在 /api/realtime/connection 中返回。
  */
 export function RealtimeRunPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
-  const setDfPath = useCanvasStore((s) => s.setDfPath)
   const refreshStatus = useCanvasStore((s) => s.refreshStatus)
 
   const currentProject = useRealtimeProjectStore((s) => s.currentProject)
@@ -47,12 +47,9 @@ export function RealtimeRunPage() {
   }
 
   useEffect(() => {
-    systemApi.getDataFactoryPath().then((p) => {
-      if (p) setDfPath(p)
-    })
     refreshStatus()
     void refreshSession()
-  }, [refreshStatus, setDfPath, refreshSession])
+  }, [refreshStatus, refreshSession])
 
   // generation guard + runtime token bootstrap
   useEffect(() => {
@@ -156,7 +153,7 @@ export function RealtimeRunPage() {
   if (!currentProject) {
     return (
       <div className="flex flex-1 items-center justify-center bg-background p-6 text-sm text-muted-foreground" data-testid="realtime-run-no-project">
-        请先在「工程组态」打开或新建工程，再回到「实时运行」启动服务。
+        请先在「工程组态」打开或新建工程，再回到「实时运行」启动运行。
       </div>
     )
   }
@@ -170,7 +167,7 @@ export function RealtimeRunPage() {
         className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-2 text-xs"
         data-testid="runtime-status-bar"
       >
-        <span className="text-muted-foreground">服务状态</span>
+        <span className="text-muted-foreground">运行状态</span>
         <span className="rounded bg-secondary px-2 py-0.5 text-xs font-medium" data-testid="runtime-status-value">
           {status}
         </span>
@@ -203,7 +200,7 @@ export function RealtimeRunPage() {
               className="rounded-md bg-destructive px-3 py-1 text-xs text-destructive-foreground disabled:opacity-40"
               data-testid="runtime-control-stop"
             >
-              停止
+              停止运行
             </button>
           ) : (
             <button
@@ -213,7 +210,7 @@ export function RealtimeRunPage() {
               className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-40"
               data-testid="runtime-control-start"
             >
-              启动
+              启动运行
             </button>
           )}
         </div>
