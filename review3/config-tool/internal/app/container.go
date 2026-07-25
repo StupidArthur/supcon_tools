@@ -17,9 +17,20 @@ type Container struct {
 	TemplateConfigBinding  *bindings.TemplateConfigBinding
 	RealtimeProjectBinding *bindings.RealtimeProjectBinding
 	RealtimeRuntimeBinding *bindings.RealtimeRuntimeBinding
+
+	// Service 是常驻 DataFactoryService（todo.md §7）。
+	// devMode = true 时使用 python standalone_main.py --service 启动；
+	// 生产时使用 <exe>/DataFactoryService.exe。
+	Service *bindings.DataFactoryServiceManager
 }
 
 func NewContainer() (*Container, error) {
+	return NewContainerWithDevMode(false)
+}
+
+// NewContainerWithDevMode 创建容器；devMode 决定是否走 Python --service。
+// 生产模式 devMode=false；开发调试时 devMode=true。
+func NewContainerWithDevMode(devMode bool) (*Container, error) {
 	metadata, err := config.LoadComponentMetadata()
 	if err != nil {
 		return nil, err
@@ -50,7 +61,7 @@ func NewContainer() (*Container, error) {
 
 	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding, templateBinding, realtimeBinding, runtimeBinding)
 
-	return &Container{
+	c := &Container{
 		Lifecycle:              lifecycle,
 		ComponentBinding:       componentBinding,
 		ConfigBinding:          configBinding,
@@ -58,7 +69,9 @@ func NewContainer() (*Container, error) {
 		TemplateConfigBinding:  templateBinding,
 		RealtimeProjectBinding: realtimeBinding,
 		RealtimeRuntimeBinding: runtimeBinding,
-	}, nil
+	}
+	lifecycle.AttachContainer(c)
+	return c, nil
 }
 
 func resolveRealtimeCompiler() realtime.RealtimeCompiler {
@@ -77,5 +90,29 @@ func (n *noopCompiler) Validate(_ context.Context, _ []realtime.CompilerSourceSp
 
 func (n *noopCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, _ string) (string, error) {
 	return "", fmt.Errorf("DataFactory 未找到，无法编译工程")
+}
+
+// InitService 启动常驻 DataFactoryService（todo.md §7.5）。
+// devMode 控制是否走源码 Python --service（生产模式必须 devMode=false）。
+func (c *Container) InitService(devMode bool) error {
+	if c.Service != nil {
+		return nil
+	}
+	svc, err := bindings.NewDataFactoryServiceManager(devMode)
+	if err != nil {
+		return err
+	}
+	c.Service = svc
+	// 注入服务端口 + Token 给 RealtimeRuntimeBinding 用于 API 连接
+	c.RealtimeRuntimeBinding.SetServiceEndpoint(svc.Host(), svc.Port(), svc.Token())
+	return nil
+}
+
+// ShutdownService 优雅停止 DataFactoryService（todo.md §7.5）。
+func (c *Container) ShutdownService() {
+	if c.Service == nil {
+		return
+	}
+	_ = c.Service.Stop()
 }
 

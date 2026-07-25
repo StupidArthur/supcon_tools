@@ -18,6 +18,7 @@ type CleanupReceiver interface {
 type Lifecycle struct {
 	cancel    context.CancelFunc
 	receivers []ContextReceiver
+	container *Container
 	// cleanups 分两段：priority 先于 normal，保证依赖顺序。
 	priorityCleanups []CleanupReceiver
 	normalCleanups   []CleanupReceiver
@@ -68,8 +69,17 @@ func (l *Lifecycle) Shutdown(ctx context.Context) {
 	for _, c := range l.normalCleanups {
 		c.Cleanup()
 	}
+	if l.container != nil && l.container.Service != nil {
+		log.Println("请求常驻 DataFactoryService 关闭...")
+		_ = l.container.Service.Stop()
+	}
 	if l.cancel != nil {
 		l.cancel()
 	}
 	log.Println("DataFactory 组态工具关闭")
+}
+
+// AttachContainer 让 Lifecycle 在 Shutdown 时也能访问 Container（用于停服务）。
+func (l *Lifecycle) AttachContainer(c *Container) {
+	l.container = c
 }

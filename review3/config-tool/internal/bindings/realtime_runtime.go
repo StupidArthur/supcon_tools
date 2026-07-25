@@ -54,6 +54,29 @@ type RealtimeRuntimeBinding struct {
 	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
 	exitListenerOnce sync.Once
 	removeExitListener func()
+
+	// todo.md §6：常驻服务端口 + Token（由 container.InitService 注入）。
+	// 所有 Force / Quality / Override 等 API 请求走这里。
+	serviceHost  string
+	servicePort  int
+	serviceToken string
+}
+
+// SetServiceEndpoint 注入常驻服务的 host/port/token（todo.md §6 / §7.2）。
+// 调用方（container.InitService）在服务启动后注入。
+func (b *RealtimeRuntimeBinding) SetServiceEndpoint(host string, port int, token string) {
+	b.mu.Lock()
+	b.serviceHost = host
+	b.servicePort = port
+	b.serviceToken = token
+	b.mu.Unlock()
+}
+
+// ServiceEndpoint 返回注入的 host/port/token；未注入时返回 ("127.0.0.1", 0, "")。
+func (b *RealtimeRuntimeBinding) ServiceEndpoint() (string, int, string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.serviceHost, b.servicePort, b.serviceToken
 }
 
 func NewRealtimeRuntimeBinding(
