@@ -1055,27 +1055,96 @@ def api_runtime_stop() -> Dict[str, Any]:
     return {"ok": True, "runtimeState": b.runtime_state}
 
 
-# --------------------------------------------------------------------------- #
-# todo.md §5.3 + §5.4：batch / export 进程内（不创建子进程）                       #
-# --------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------
+# todo.md §11：batch 进程内（不创建子进程）
+# ---------------------------------------------------------------------------
+
+# batch 状态锁（todo.md §11.4）
+_batch_lock = threading.Lock()
+_batch_running = False
+
+
+def _run_batch_in_process(config_path: str, cycles: int, cycle_time: Optional[float] = None) -> Dict[str, Any]:
+    """进程内执行 batch 仿真（todo.md §11.2）。"""
+    from controller.engine import UnifiedEngine
+    from controller.parser import DSLParser
+    from controller.clock import ClockMode
+
+    parser = DSLParser()
+    config = parser.parse_file(config_path)
+    engine = UnifiedEngine.from_program_config(config)
+    engine.clock.config.mode = ClockMode.GENERATOR
+    if cycle_time is not None and cycle_time > 0:
+        engine.clock.config.cycle_time = cycle_time
+
+    engine.clock.start()
+    results = []
+    try:
+        for i in range(cycles):
+            snapshot = engine.step()
+            results.append(snapshot)
+    finally:
+        engine.clock.stop()
+
+    excluded_snapshot_fields = {
+        "cycle_count", "need_sample", "sim_time", "time_str", "exec_ratio",
+        "_consecutive_failures", "_safe_state",
+    }
+    if results:
+        signal_keys = sorted(key for key in results[0].keys() if key not in excluded_snapshot_fields)
+    else:
+        signal_keys = []
+
+    rows = []
+    for snapshot in results:
+        row = {"_sim_time": snapshot.get("sim_time"), "_need_sample": bool(snapshot.get("need_sample", False))}
+        for key in signal_keys:
+            row[key] = snapshot.get(key)
+        rows.append(row)
+
+    display_columns = engine.get_display_variables()
+    all_plot_scales = engine.get_plot_scales()
+    plot_scales = {col: all_plot_scales[col] for col in display_columns if col in all_plot_scales}
+
+    return {"columns": signal_keys, "rows": rows, "displayColumns": display_columns, "plotScales": plot_scales, "cycles": cycles}
+
+
+class BatchRunRequest(BaseModel):
+    configPath: str = Field(..., description="config YAML 绝对路径")
+    cycles: int = Field(..., description="运行周期数")
+    cycleTime: Optional[float] = Field(default=None, description="覆盖周期时间")
+
 
 @app.post("/api/batch/run")
-def api_batch_run() -> Dict[str, Any]:
-    """预留：batch 跑在已 compile 的工程文件 + cycles。
-
-    当前实现先 reject：真实迁移留到下一阶段（todo.md §5.3 要求抽取 --batch 主流程
-    为进程内函数 + 多处并发约束）。这里只标记 runtime 是否就绪。
-    """
+def api_batch_run(req: BatchRunRequest) -> Dict[str, Any]:
+    """进程内 batch 仿真（todo.md §11）。不再返回 501。"""
+    global _batch_running
     b = get_binding()
+
     with b._state_lock:
-        if b.runtime_state == RUNTIME_STATE_RUNNING:
+        if b.runtime_state in (RUNTIME_STATE_RUNNING, RUNTIME_STATE_STARTING, RUNTIME_STATE_STOPPING):
             raise HTTPException(status_code=409, detail="实时运行中，禁止批量任务")
-    if not b.project_file:
-        raise HTTPException(status_code=400, detail="未打开工程，无法批量仿真")
-    raise HTTPException(
-        status_code=501,
-        detail="batch_run 计划在后续阶段实现；当前请通过 Go 端 SystemBinding.RunBatch 调用",
-    )
+
+    with _batch_lock:
+        if _batch_running:
+            raise HTTPException(status_code=409, detail="已有批量任务正在运行")
+        _batch_running = True
+
+    try:
+        if not os.path.isfile(req.configPath):
+            raise HTTPException(status_code=404, detail=f"config 文件不存在: {req.configPath}")
+        if req.cycles <= 0:
+            raise HTTPException(status_code=400, detail="cycles 必须大于 0")
+        result = _run_batch_in_process(req.configPath, req.cycles, req.cycleTime)
+        return {"ok": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("batch run failed")
+        raise HTTPException(status_code=500, detail=f"批量仿真失败: {e}")
+    finally:
+        with _batch_lock:
+            _batch_running = False
 
 
 class ExportConvertRequest(BaseModel):
