@@ -27,8 +27,8 @@ interface CanvasStore {
   cycleTime: number
   loading: boolean
 
-  // 顶层导航：dsl / realtime 为主；旧值保留并在 setView 中重定向
-  view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime'
+  // 顶层导航：dsl / project-config / realtime-run 三视图；旧值保留并在 setView 中重定向
+  view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime' | 'project-config' | 'realtime-run'
   dfPath: string
   configs: string[]
   dfStatus: { running: boolean; pid: number; configPath: string; mode: string; cycleTime: number; port: number; apiHost?: string; apiPort?: number; runtimeName?: string; apiReady?: boolean; batchRunning?: boolean; activeBatches?: number }
@@ -45,7 +45,7 @@ interface CanvasStore {
   loadCanvasState: (state: config.CanvasState) => void
   getCanvasState: () => config.CanvasState
 
-  setView: (view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime') => void
+  setView: (view: 'config' | 'system' | 'simulation' | 'template' | 'dsl' | 'realtime' | 'project-config' | 'realtime-run') => void
   setDfPath: (path: string) => void
   setConfigs: (configs: string[]) => void
   setDfStatus: (status: any) => void
@@ -239,11 +239,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   setView: (view) => {
     // Legacy redirects → primary surfaces (no blank pages).
-    if (view === 'system') {
-      set({ view: 'realtime' })
+    if (view === 'system' || view === 'realtime') {
+      set({ view: 'realtime-run' })
       return
     }
-    if (view === 'template' || view === 'simulation' || view === 'config') {
+    if (view === 'config') {
+      set({ view: 'project-config' })
+      return
+    }
+    if (view === 'template' || view === 'simulation') {
       const hint = legacyRedirect(view)
       useDslProjectStore.getState().openWorkspace({
         editorTab: hint.editorTab,

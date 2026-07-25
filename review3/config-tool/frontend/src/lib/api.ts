@@ -87,7 +87,6 @@ export const systemApi = {
 
 export const realtimeProjectApi = {
   listProjects: () => RealtimeProjectBinding.ListProjects(),
-  createProject: (name: string) => RealtimeProjectBinding.CreateProject(name),
   openProject: (id: string) => RealtimeProjectBinding.OpenProject(id),
   deleteProject: (id: string) => RealtimeProjectBinding.DeleteProject(id),
   renameProject: (id: string, newName: string) => RealtimeProjectBinding.RenameProject(id, newName),
@@ -115,6 +114,30 @@ export const realtimeProjectApi = {
     RealtimeProjectBinding.ClearAllForces(apiHost, apiPort),
   getForces: (apiHost: string, apiPort: number) =>
     RealtimeProjectBinding.GetForces(apiHost, apiPort),
+  // 新工程存储路径
+  chooseProjectDirectory: () => RealtimeProjectBinding.ChooseProjectDirectory(),
+  chooseProjectFile: () => RealtimeProjectBinding.ChooseProjectFile(),
+  chooseSourceYAML: () => RealtimeProjectBinding.ChooseSourceYAML(),
+  createProjectAt: (name: string, parentDir: string) =>
+    RealtimeProjectBinding.CreateProjectAt(name, parentDir),
+  openProjectFile: (file: string) => RealtimeProjectBinding.OpenProjectFile(file),
+  addSourceAt: (projectId: string, projectFile: string, yamlPath: string) =>
+    RealtimeProjectBinding.AddSourceAt(projectId, projectFile, yamlPath),
+  removeSourceAt: (projectId: string, projectFile: string, sourceId: string) =>
+    RealtimeProjectBinding.RemoveSourceAt(projectId, projectFile, sourceId),
+  updateReplicasAt: (projectId: string, projectFile: string, sourceId: string, replicas: number) =>
+    RealtimeProjectBinding.UpdateReplicasAt(projectId, projectFile, sourceId, replicas),
+  updateRuntime: (projectId: string, projectFile: string, rt: any) =>
+    RealtimeProjectBinding.UpdateRuntime(projectId, projectFile, rt),
+  // 运行时操作
+  setQuality: (apiHost: string, apiPort: number, tag: string, quality: string) =>
+    RealtimeProjectBinding.SetQuality(apiHost, apiPort, tag, quality),
+  clearQuality: (apiHost: string, apiPort: number, tag: string) =>
+    RealtimeProjectBinding.ClearQuality(apiHost, apiPort, tag),
+  getQualities: (apiHost: string, apiPort: number) =>
+    RealtimeProjectBinding.GetQualities(apiHost, apiPort),
+  setRuntimeValue: (apiHost: string, apiPort: number, instanceName: string, tag: string, value: number) =>
+    RealtimeProjectBinding.SetRuntimeValue(apiHost, apiPort, instanceName, tag, value),
 }
 
 export const realtimeRuntimeApi = {

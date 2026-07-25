@@ -99,6 +99,38 @@ func (s *ProjectStorage) SaveProject(p Project) error {
 	return atomicWriteYAML(s.projectFile(p.ID), p)
 }
 
+// LoadProjectFile 读取指定 project.yaml 路径并解析 Project。
+// 文件不存在或解析失败返回 error。
+func LoadProjectFile(file string) (Project, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return Project{}, fmt.Errorf("读取工程文件失败: %w", err)
+	}
+	var p Project
+	if err := yaml.Unmarshal(data, &p); err != nil {
+		return Project{}, fmt.Errorf("解析 project.yaml 失败: %w", err)
+	}
+	if !isValidID(p.ID) {
+		return Project{}, fmt.Errorf("非法工程 ID: %q", p.ID)
+	}
+	return p, nil
+}
+
+// SaveProjectToFile 把 Project 写入指定绝对路径，使用现有 atomicWriteYAML。
+// 不创建 sources 目录（已存在的工程应已具备 sources/）。
+func SaveProjectToFile(file string, p Project) error {
+	if !isValidID(p.ID) {
+		return fmt.Errorf("非法工程 ID: %q", p.ID)
+	}
+	if filepath.Dir(file) == "" {
+		return fmt.Errorf("工程文件路径无效: %q", file)
+	}
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		return err
+	}
+	return atomicWriteYAML(file, p)
+}
+
 func (s *ProjectStorage) DeleteProject(id string) error {
 	if !isValidID(id) {
 		return fmt.Errorf("非法工程 ID: %q", id)

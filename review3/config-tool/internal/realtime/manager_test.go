@@ -306,6 +306,120 @@ func TestListProjects(t *testing.T) {
 	}
 }
 
+func TestCreateProjectAtCreatesDirectory(t *testing.T) {
+	fc := &fakeCompiler{result: validResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	proj, err := m.CreateProjectAt(ctx, "测试工程", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proj.Project.ID == "" {
+		t.Fatal("expected non-empty project ID")
+	}
+	if proj.ProjectFile == "" {
+		t.Fatal("expected non-empty project file")
+	}
+	if _, err := os.Stat(proj.ProjectFile); err != nil {
+		t.Fatalf("project file should exist: %v", err)
+	}
+}
+
+func TestCreateProjectAtRejectsExisting(t *testing.T) {
+	fc := &fakeCompiler{result: validResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	// 第一次创建
+	if _, err := m.CreateProjectAt(ctx, "alpha", parent); err != nil {
+		t.Fatal(err)
+	}
+	// 第二次同名目录存在 → 拒绝
+	if _, err := m.CreateProjectAt(ctx, "alpha", parent); err == nil {
+		t.Fatal("expected error for existing non-empty project dir")
+	}
+}
+
+func TestOpenProjectFileRoundTrip(t *testing.T) {
+	fc := &fakeCompiler{result: validResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	proj, err := m.CreateProjectAt(ctx, "beta", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yamlPath := writeYAML(t, t.TempDir(), "tank.yaml", tankYAML)
+	if _, err := m.AddSourceAt(ctx, proj.Project.ID, proj.ProjectFile, yamlPath); err != nil {
+		t.Fatal(err)
+	}
+	// 重新打开
+	opened, err := m.OpenProjectFile(ctx, proj.ProjectFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.Project.ID != proj.Project.ID {
+		t.Fatalf("expected ID %s, got %s", proj.Project.ID, opened.Project.ID)
+	}
+	if len(opened.Project.Sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(opened.Project.Sources))
+	}
+}
+
+func TestOpenProjectFileRejectsOutOfTreeSource(t *testing.T) {
+	fc := &fakeCompiler{result: validResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	proj, err := m.CreateProjectAt(ctx, "gamma", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 手工修改 project.yaml 让 source 路径逃出工程目录
+	bad := Project{
+		Version: 1,
+		ID:      proj.Project.ID,
+		Name:    proj.Project.Name,
+		Sources: []Source{
+			{ID: "x", Name: "x.yaml", File: "../outside.yaml", Replicas: 1},
+		},
+	}
+	if err := SaveProjectToFile(proj.ProjectFile, bad); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.OpenProjectFile(ctx, proj.ProjectFile); err == nil {
+		t.Fatal("expected error for source path outside project dir")
+	}
+}
+
+func TestAddSourceAtDuplicateNoResidue(t *testing.T) {
+	fc := &fakeCompiler{result: duplicateResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	proj, err := m.CreateProjectAt(ctx, "dup", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yamlPath := writeYAML(t, t.TempDir(), "tank.yaml", tankYAML)
+	view, err := m.AddSourceAt(ctx, proj.Project.ID, proj.ProjectFile, yamlPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if view.Applied {
+		t.Fatal("expected Applied=false on duplicate")
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(proj.ProjectFile), "sources")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestOpenCorruptedProjectYAML(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "bad-id")

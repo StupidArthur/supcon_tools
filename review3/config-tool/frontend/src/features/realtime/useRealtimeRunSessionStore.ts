@@ -12,6 +12,7 @@ export interface RealtimeRunSession {
   configHash: string
   runtimeName: string
   cycleTime: number
+  opcUaHost: string
   opcUaPort: number
   apiHost: string
   apiPort: number
@@ -21,6 +22,7 @@ export interface RealtimeRunSession {
 
 export interface RealtimeStartOptions {
   cycleTime: number
+  opcUaHost: string
   opcUaPort: number
   apiHost: string
   apiPort: number

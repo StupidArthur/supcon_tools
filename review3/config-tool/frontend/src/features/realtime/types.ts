@@ -5,11 +5,30 @@ export interface RealtimeSource {
   replicas: number
 }
 
+export interface RealtimeRuntime {
+  cycleTime: number
+  opcUaHost: string
+  opcUaPort: number
+}
+
 export interface RealtimeProject {
   version: number
   id: string
   name: string
   sources: RealtimeSource[]
+  runtime?: RealtimeRuntime
+}
+
+// ProjectView 是前端使用的"打开后的工程快照"类型。
+// 它不区分 Project / OpenedProject；Wails 生成的 OpenedProject 类型通过 as unknown as ProjectView 转换。
+export type ProjectView = {
+  version: number
+  id: string
+  name: string
+  sources: RealtimeSource[]
+  runtime?: RealtimeRuntime
+  projectFile?: string
+  projectDir?: string
 }
 
 export interface ProjectSummary {

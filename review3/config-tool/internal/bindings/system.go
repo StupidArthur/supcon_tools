@@ -31,6 +31,7 @@ type StartParams struct {
 	Mode        string  `json:"mode"`
 	CycleTime   float64 `json:"cycleTime"`
 	Port        int     `json:"port"`        // OPC UA port
+	OPCHost     string  `json:"opcHost"`     // OPC UA 监听地址（透传 --opcua-host）
 	APIPort     int     `json:"apiPort"`     // HTTP API port
 	APIHost     string  `json:"apiHost"`     // HTTP API host
 	RuntimeName string  `json:"runtimeName"` // 运行实例名（通过 --name 传递）
@@ -338,6 +339,10 @@ func BuildArgs(params StartParams) []string {
 	// OPC UA port：standalone_main.py 不支持关闭 OPC UA，始终传递 port
 	if params.Port > 0 {
 		args = append(args, "--port", fmt.Sprintf("%d", params.Port))
+	}
+	// OPC UA host：透传 --opcua-host（设计文档 §6.3）。默认 "0.0.0.0"。
+	if params.OPCHost != "" {
+		args = append(args, "--opcua-host", params.OPCHost)
 	}
 
 	// API 参数

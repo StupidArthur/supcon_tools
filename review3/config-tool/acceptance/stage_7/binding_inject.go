@@ -90,7 +90,7 @@ func wireFakeDataFactory(t *testing.T, b *bindings.SystemBinding, workDir string
 		return cmd
 	}
 	setUnexported(t, b, "commandFactory", factory)
-	ready := func(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
+	ready := func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
 		return true, "acceptance_runtime", nil
 	}
 	setUnexported(t, b, "readinessChecker", ready)

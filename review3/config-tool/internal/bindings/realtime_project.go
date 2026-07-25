@@ -34,8 +34,28 @@ func (b *RealtimeProjectBinding) ListProjects() ([]realtime.ProjectSummary, erro
 	return b.manager.ListProjects(b.ctx)
 }
 
-func (b *RealtimeProjectBinding) CreateProject(name string) (realtime.Project, error) {
-	return b.manager.CreateProject(b.ctx, name)
+func (b *RealtimeProjectBinding) CreateProjectAt(name, parentDir string) (realtime.OpenedProject, error) {
+	return b.manager.CreateProjectAt(b.ctx, name, parentDir)
+}
+
+func (b *RealtimeProjectBinding) OpenProjectFile(projectFile string) (realtime.OpenedProject, error) {
+	return b.manager.OpenProjectFile(b.ctx, projectFile)
+}
+
+func (b *RealtimeProjectBinding) AddSourceAt(projectID, projectFile, yamlPath string) (realtime.OpenedProjectView, error) {
+	return b.manager.AddSourceAt(b.ctx, projectID, projectFile, yamlPath)
+}
+
+func (b *RealtimeProjectBinding) RemoveSourceAt(projectID, projectFile, sourceID string) (realtime.OpenedProjectView, error) {
+	return b.manager.RemoveSourceAt(b.ctx, projectID, projectFile, sourceID)
+}
+
+func (b *RealtimeProjectBinding) UpdateReplicasAt(projectID, projectFile, sourceID string, replicas int) (realtime.OpenedProjectView, error) {
+	return b.manager.UpdateReplicasAt(b.ctx, projectID, projectFile, sourceID, replicas)
+}
+
+func (b *RealtimeProjectBinding) UpdateRuntime(projectID, projectFile string, rt realtime.Runtime) (realtime.OpenedProject, error) {
+	return b.manager.UpdateRuntimeAt(b.ctx, projectID, projectFile, rt)
 }
 
 func (b *RealtimeProjectBinding) OpenProject(id string) (realtime.Project, error) {
@@ -284,4 +304,95 @@ func ResolveRealtimeProjectsDir() (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+// ChooseProjectDirectory 打开目录选择器，让用户选择工程父目录。
+func (b *RealtimeProjectBinding) ChooseProjectDirectory() (string, error) {
+	if b.ctx == nil {
+		return "", fmt.Errorf("wails context 未注入")
+	}
+	dir, err := runtime.OpenDirectoryDialog(b.ctx, runtime.OpenDialogOptions{
+		Title: "选择工程父目录",
+	})
+	if err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// ChooseProjectFile 打开文件选择器，让用户选择 project.yaml。
+func (b *RealtimeProjectBinding) ChooseProjectFile() (string, error) {
+	if b.ctx == nil {
+		return "", fmt.Errorf("wails context 未注入")
+	}
+	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
+		Title: "选择 project.yaml",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "工程文件", Pattern: "project.yaml;*.yaml"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// ChooseSourceYAML 选择待添加的 YAML 文件。
+func (b *RealtimeProjectBinding) ChooseSourceYAML() (string, error) {
+	if b.ctx == nil {
+		return "", fmt.Errorf("wails context 未注入")
+	}
+	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
+		Title: "选择 YAML 文件",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "YAML 文件", Pattern: "*.yaml;*.yml"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// SetQuality 写入 OPC UA 质量码覆盖。
+func (b *RealtimeProjectBinding) SetQuality(apiHost string, apiPort int, tag, quality string) error {
+	reqBody := map[string]any{"tag": tag, "quality": quality}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+	resp, err := httpPostJSON(forceHTTPClient, b.forceURL(apiHost, apiPort, "/api/quality"), data)
+	if err != nil {
+		return err
+	}
+	return decodeForceResponse(resp, nil)
+}
+
+// ClearQuality 清除 OPC UA 质量码覆盖。
+func (b *RealtimeProjectBinding) ClearQuality(apiHost string, apiPort int, tag string) error {
+	req, _ := http.NewRequest("DELETE", b.forceURL(apiHost, apiPort, "/api/quality/"+tag), nil)
+	resp, err := forceHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return decodeForceResponse(resp, nil)
+}
+
+// GetQualities 查询当前所有质量码覆盖状态。
+func (b *RealtimeProjectBinding) GetQualities(apiHost string, apiPort int) (map[string]any, error) {
+	return httpGetJSON(forceHTTPClient, b.forceURL(apiHost, apiPort, "/api/quality"))
+}
+
+// SetRuntimeValue 包装现有 /api/instances/{name}/override，把 value 写入 Engine 运行变量。
+func (b *RealtimeProjectBinding) SetRuntimeValue(apiHost string, apiPort int, instanceName, tag string, value float64) error {
+	reqBody := map[string]any{"tag": tag, "value": value}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+	resp, err := httpPostJSON(forceHTTPClient, b.forceURL(apiHost, apiPort, "/api/instances/"+instanceName+"/override"), data)
+	if err != nil {
+		return err
+	}
+	return decodeForceResponse(resp, nil)
 }

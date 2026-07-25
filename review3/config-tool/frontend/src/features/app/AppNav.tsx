@@ -1,5 +1,5 @@
 /**
- * Top navigation: DataFactory | DSL 工程 | 实时运行与 UA
+ * Top navigation: DataFactory | 组态调试 | 工程组态 | 实时运行
  */
 import { useCanvasStore } from '../../store/useCanvasStore'
 import { resolvePrimaryView, type AppView } from '../app/navigation'
@@ -11,19 +11,9 @@ export function AppNav() {
   const primary = resolvePrimaryView(view)
   const openHome = useDslProjectStore((s) => s.openHome)
 
-  const goDsl = () => {
-    setView('dsl')
-  }
-
-  const goRealtime = () => {
-    // Warn if leaving DSL with unsaved edits when navigating to realtime.
-    const dirty =
-      useDslProjectStore.getState().yamlDirty ||
-      // template dirty is checked inside RealtimeUaPage; soft navigate here.
-      false
-    void dirty
-    setView('realtime')
-  }
+  const goDsl = () => setView('dsl')
+  const goProjectConfig = () => setView('project-config')
+  const goRealtime = () => setView('realtime-run')
 
   const goBrandHome = () => {
     openHome()
@@ -43,7 +33,7 @@ export function AppNav() {
       >
         DataFactory
       </button>
-      <nav className="flex items-center gap-1">
+      <nav className="flex items-center gap-1" data-testid="app-nav-tabs">
         <button
           type="button"
           onClick={goDsl}
@@ -54,19 +44,31 @@ export function AppNav() {
           }`}
           data-testid="nav-dsl"
         >
-          DSL 工程
+          组态调试
+        </button>
+        <button
+          type="button"
+          onClick={goProjectConfig}
+          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            primary === 'project-config'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-secondary'
+          }`}
+          data-testid="nav-project-config"
+        >
+          工程组态
         </button>
         <button
           type="button"
           onClick={goRealtime}
           className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-            primary === 'realtime'
+            primary === 'realtime-run'
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:bg-secondary'
           }`}
           data-testid="nav-realtime"
         >
-          实时运行与 UA
+          实时运行
         </button>
       </nav>
     </header>

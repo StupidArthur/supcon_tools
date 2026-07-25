@@ -1,21 +1,45 @@
 import { useState } from 'react'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
+import { realtimeProjectApi } from '../../lib/api'
+import type { ProjectView } from './types'
 
 interface Props {
   onClose: () => void
+  onCreated?: (proj: ProjectView) => void
 }
 
-export function CreateRealtimeProjectDialog({ onClose }: Props) {
-  const createProject = useRealtimeProjectStore((s) => s.createProject)
+export function CreateRealtimeProjectDialog({ onClose, onCreated }: Props) {
+  const createProjectAt = useRealtimeProjectStore((s) => s.createProjectAt)
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async () => {
-    if (!name.trim()) return
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setError('工程名称不能为空')
+      return
+    }
     setSubmitting(true)
-    await createProject(name.trim())
-    setSubmitting(false)
-    onClose()
+    setError(null)
+    try {
+      const parentDir = await realtimeProjectApi.chooseProjectDirectory()
+      if (!parentDir) {
+        setSubmitting(false)
+        return
+      }
+      await createProjectAt(trimmed, parentDir)
+      const proj = useRealtimeProjectStore.getState().currentProject
+      setSubmitting(false)
+      if (proj) {
+        onCreated?.(proj)
+      } else {
+        onClose()
+      }
+    } catch (e: any) {
+      setSubmitting(false)
+      setError(String(e))
+    }
   }
 
   return (
@@ -32,11 +56,17 @@ export function CreateRealtimeProjectDialog({ onClose }: Props) {
           className="mt-3 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
           data-testid="create-project-name"
         />
+        {error ? (
+          <div className="mt-2 text-xs text-destructive" data-testid="create-project-error">
+            {error}
+          </div>
+        ) : null}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             className="rounded-md border border-border px-3 py-1 text-xs hover:bg-secondary"
+            data-testid="create-project-cancel"
           >
             取消
           </button>
@@ -47,7 +77,7 @@ export function CreateRealtimeProjectDialog({ onClose }: Props) {
             className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-40"
             data-testid="create-project-confirm"
           >
-            创建
+            下一步
           </button>
         </div>
       </div>

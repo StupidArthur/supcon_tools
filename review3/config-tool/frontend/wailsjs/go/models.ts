@@ -123,6 +123,7 @@ export namespace bindings {
 	    mode: string;
 	    cycleTime: number;
 	    port: number;
+	    opcHost: string;
 	    apiPort: number;
 	    apiHost: string;
 	    runtimeName: string;
@@ -138,6 +139,7 @@ export namespace bindings {
 	        this.mode = source["mode"];
 	        this.cycleTime = source["cycleTime"];
 	        this.port = source["port"];
+	        this.opcHost = source["opcHost"];
 	        this.apiPort = source["apiPort"];
 	        this.apiHost = source["apiHost"];
 	        this.runtimeName = source["runtimeName"];
@@ -1066,6 +1068,22 @@ export namespace realtime {
 	    }
 	}
 	
+	export class Runtime {
+	    cycleTime: number;
+	    opcUaHost: string;
+	    opcUaPort: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Runtime(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cycleTime = source["cycleTime"];
+	        this.opcUaHost = source["opcUaHost"];
+	        this.opcUaPort = source["opcUaPort"];
+	    }
+	}
 	export class Source {
 	    id: string;
 	    name: string;
@@ -1089,6 +1107,7 @@ export namespace realtime {
 	    id: string;
 	    name: string;
 	    sources: Source[];
+	    runtime?: Runtime;
 	
 	    static createFrom(source: any = {}) {
 	        return new Project(source);
@@ -1100,6 +1119,7 @@ export namespace realtime {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.sources = this.convertValues(source["sources"], Source);
+	        this.runtime = this.convertValues(source["runtime"], Runtime);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1120,21 +1140,39 @@ export namespace realtime {
 		    return a;
 		}
 	}
-	export class ProjectSummary {
-	    id: string;
-	    name: string;
-	    sourceCount: number;
+	export class OpenedProject {
+	    project: Project;
+	    projectFile: string;
+	    projectDir: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new ProjectSummary(source);
+	        return new OpenedProject(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.sourceCount = source["sourceCount"];
+	        this.project = this.convertValues(source["project"], Project);
+	        this.projectFile = source["projectFile"];
+	        this.projectDir = source["projectDir"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ValidationResult {
 	    valid: boolean;
@@ -1169,6 +1207,57 @@ export namespace realtime {
 		    }
 		    return a;
 		}
+	}
+	export class OpenedProjectView {
+	    applied: boolean;
+	    project: OpenedProject;
+	    validation: ValidationResult;
+	
+	    static createFrom(source: any = {}) {
+	        return new OpenedProjectView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.applied = source["applied"];
+	        this.project = this.convertValues(source["project"], OpenedProject);
+	        this.validation = this.convertValues(source["validation"], ValidationResult);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class ProjectSummary {
+	    id: string;
+	    name: string;
+	    sourceCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProjectSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.sourceCount = source["sourceCount"];
+	    }
 	}
 	export class ProjectView {
 	    applied: boolean;
@@ -1215,6 +1304,7 @@ export namespace realtime {
 	    configHash: string;
 	    runtimeName: string;
 	    cycleTime: number;
+	    opcUaHost: string;
 	    opcUaPort: number;
 	    apiHost: string;
 	    apiPort: number;
@@ -1237,6 +1327,7 @@ export namespace realtime {
 	        this.configHash = source["configHash"];
 	        this.runtimeName = source["runtimeName"];
 	        this.cycleTime = source["cycleTime"];
+	        this.opcUaHost = source["opcUaHost"];
 	        this.opcUaPort = source["opcUaPort"];
 	        this.apiHost = source["apiHost"];
 	        this.apiPort = source["apiPort"];
@@ -1246,6 +1337,7 @@ export namespace realtime {
 	}
 	export class RealtimeStartOptions {
 	    cycleTime: number;
+	    opcUaHost: string;
 	    opcUaPort: number;
 	    apiHost: string;
 	    apiPort: number;
@@ -1260,6 +1352,7 @@ export namespace realtime {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.cycleTime = source["cycleTime"];
+	        this.opcUaHost = source["opcUaHost"];
 	        this.opcUaPort = source["opcUaPort"];
 	        this.apiHost = source["apiHost"];
 	        this.apiPort = source["apiPort"];
@@ -1268,6 +1361,7 @@ export namespace realtime {
 	        this.archiveTags = source["archiveTags"];
 	    }
 	}
+	
 	
 
 }

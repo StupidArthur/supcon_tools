@@ -192,6 +192,39 @@ func TestBuildArgs_PortAlwaysIncluded(t *testing.T) {
 	}
 }
 
+func TestBuildArgs_OPCHostIncluded(t *testing.T) {
+	// OPCHost 非空时透传 --opcua-host
+	params := StartParams{
+		ConfigPath: "test.yaml",
+		Port:       18951,
+		OPCHost:    "0.0.0.0",
+	}
+	args := BuildArgs(params)
+	hasOpcHost := false
+	for i, arg := range args {
+		if arg == "--opcua-host" && i+1 < len(args) && args[i+1] == "0.0.0.0" {
+			hasOpcHost = true
+		}
+	}
+	if !hasOpcHost {
+		t.Fatalf("expected --opcua-host 0.0.0.0 in args, got: %v", args)
+	}
+}
+
+func TestBuildArgs_OPCHostEmptyOmitted(t *testing.T) {
+	// OPCHost 为空时不传递 --opcua-host
+	params := StartParams{
+		ConfigPath: "test.yaml",
+		Port:       18951,
+	}
+	args := BuildArgs(params)
+	for _, arg := range args {
+		if arg == "--opcua-host" {
+			t.Fatalf("did not expect --opcua-host, got args: %v", args)
+		}
+	}
+}
+
 func TestStart_ReadySuccess(t *testing.T) {
 	b := NewSystemBinding()
 	tmpDir := t.TempDir()

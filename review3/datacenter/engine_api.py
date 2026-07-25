@@ -195,6 +195,7 @@ class EngineBinding:
     _batch_lock: threading.Lock = field(default_factory=threading.Lock)
     _batches: Dict[str, WriteBatchRecord] = field(default_factory=dict)
     force_manager: Any = None
+    quality_manager: Any = None
     alarm_manager: Any = None
     archiver: Any = None
 
@@ -698,6 +699,58 @@ def api_force_list() -> Dict[str, Any]:
         return {"ok": True, "forces": {}, "tags": []}
     tags = sorted(b.force_manager.snapshot_valid_tags())
     return {"ok": True, "forces": b.force_manager.snapshot(), "tags": tags}
+
+
+# --------------------------------------------------------------------------- #
+# 质量码覆盖                                                                   #
+# --------------------------------------------------------------------------- #
+
+class QualitySetRequest(BaseModel):
+    tag: str
+    quality: str
+
+
+def _refresh_quality_valid_tags(b: "EngineBinding") -> None:
+    """质量码合法集合与 force 一致：来自 shared_data 数值键。"""
+    if b.quality_manager is None:
+        return
+    tags = {k for k, v in b.shared_data.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    b.quality_manager.set_valid_tags(tags)
+
+
+@app.post("/api/quality")
+def api_quality_set(req: QualitySetRequest) -> Dict[str, Any]:
+    """写入 / 清除 OPC UA 质量码覆盖。quality == 'Good' 表示清除。"""
+    from datacenter.quality_manager import QualityError
+    b = get_binding()
+    if b.quality_manager is None:
+        raise HTTPException(status_code=503, detail="质量码层未启用")
+    _refresh_quality_valid_tags(b)
+    try:
+        applied = b.quality_manager.set_quality(req.tag, req.quality)
+    except QualityError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "tag": req.tag, "quality": applied}
+
+
+@app.delete("/api/quality/{tag}")
+def api_quality_clear(tag: str) -> Dict[str, Any]:
+    b = get_binding()
+    if b.quality_manager is None:
+        raise HTTPException(status_code=503, detail="质量码层未启用")
+    b.quality_manager.clear_quality(tag)
+    return {"ok": True, "tag": tag}
+
+
+@app.get("/api/quality")
+def api_quality_list() -> Dict[str, Any]:
+    b = get_binding()
+    _refresh_quality_valid_tags(b)
+    if b.quality_manager is None:
+        return {"ok": True, "qualities": {}, "tags": []}
+    tags = sorted(b.quality_manager.snapshot_valid_tags())
+    return {"ok": True, "qualities": b.quality_manager.snapshot(), "tags": tags}
 
 
 # --------------------------------------------------------------------------- #

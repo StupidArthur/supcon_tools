@@ -29,6 +29,17 @@ logger.propagate = False
 logging.getLogger("asyncua").setLevel(logging.ERROR)
 
 
+# 质量码名称 → OPC UA StatusCode 数值（来自 OPC UA Part 4 / StatusCodes）
+_QUALITY_STATUS_CODE_MAP = {
+    "Good": 0x00000000,
+    "Uncertain": 0x40000000,
+    "Bad": 0x80000000,
+}
+
+
+_QUALITY_ALIASES = {"good", "uncertain", "bad"}
+
+
 @dataclass
 class OPCUAServerConfig:
     """
@@ -61,6 +72,7 @@ class StandaloneOpcuaServer:
         shared_data: Dict[str, float],
         cmd_queue: queue.Queue,
         force_manager=None,
+        quality_manager=None,
     ) -> None:
         """
         初始化 OPCUA Server
@@ -70,11 +82,13 @@ class StandaloneOpcuaServer:
             shared_data: 共享内存数据字典（引擎计算完每个周期后更新）
             cmd_queue: 命令队列（用于向引擎发送写值命令）
             force_manager: 输出强制管理器（可选），每轮在锁内读取强制快照
+            quality_manager: 质量码覆盖管理器（可选），每轮在锁内读取质量码快照
         """
         self.config = config
         self._shared_data = shared_data
         self._cmd_queue = cmd_queue
         self._force_manager = force_manager
+        self._quality_manager = quality_manager
 
         # OPCUA Server
         self.server: Optional[Server] = None
@@ -202,10 +216,24 @@ class StandaloneOpcuaServer:
 
         self.server.set_attribute_value_setter(node_id, _setter, ua.AttributeIds.Value)
 
+    async def _write_value_with_quality(self, node, variant: ua.Variant, quality_name):
+        """写值；当 quality_name 为 None 或未知时使用 Good。"""
+        dv = ua.DataValue(variant)
+        if quality_name is None:
+            dv.StatusCode = ua.StatusCode(ua.uatypes.StatusCodes.Good)
+        else:
+            code = _QUALITY_STATUS_CODE_MAP.get(quality_name)
+            if code is None:
+                code = ua.uatypes.StatusCodes.Good
+            dv.StatusCode = ua.StatusCode(code)
+        return await node.write_value(dv)
+
     async def _update_nodes(self, params: Dict[str, float]) -> None:
         """更新 OPCUA 节点值"""
         self._is_updating = True
         try:
+            # 在锁内一次性读取质量码快照（不阻塞引擎线程）
+            qualities = self._quality_manager.snapshot() if self._quality_manager is not None else {}
             update_tasks = []
             for param_name, param_value in params.items():
                 node = self.node_map.get(param_name)
@@ -220,8 +248,10 @@ class StandaloneOpcuaServer:
                         continue
 
                     variant_type = self.node_type_map.get(param_name, ua.VariantType.Double)
+                    variant = ua.Variant(float(param_value), variant_type)
+                    # 写入数值；如该 tag 有 quality override，则同时覆盖 status_code
                     update_tasks.append(
-                        node.write_value(ua.Variant(float(param_value), variant_type))
+                        self._write_value_with_quality(node, variant, qualities.get(param_name))
                     )
 
             if update_tasks:

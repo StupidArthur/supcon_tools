@@ -6,15 +6,25 @@ import {context} from '../models';
 
 export function AddSource(arg1:string):Promise<realtime.ProjectView>;
 
+export function AddSourceAt(arg1:string,arg2:string,arg3:string):Promise<realtime.OpenedProjectView>;
+
+export function ChooseProjectDirectory():Promise<string>;
+
+export function ChooseProjectFile():Promise<string>;
+
+export function ChooseSourceYAML():Promise<string>;
+
 export function ClearAllForces(arg1:string,arg2:number):Promise<void>;
 
 export function ClearForce(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function ClearQuality(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function CompileProject(arg1:string,arg2:string):Promise<string>;
 
 export function CreateAlarmRule(arg1:string,arg2:realtime.AlarmRule):Promise<Array<realtime.AlarmRule>>;
 
-export function CreateProject(arg1:string):Promise<realtime.Project>;
+export function CreateProjectAt(arg1:string,arg2:string):Promise<realtime.OpenedProject>;
 
 export function DeleteAlarmRule(arg1:string,arg2:string):Promise<Array<realtime.AlarmRule>>;
 
@@ -24,13 +34,19 @@ export function GetDashboard(arg1:string):Promise<realtime.Dashboard>;
 
 export function GetForces(arg1:string,arg2:number):Promise<bindings.ForceState>;
 
+export function GetQualities(arg1:string,arg2:number):Promise<Record<string, any>>;
+
 export function ListAlarmRules(arg1:string):Promise<Array<realtime.AlarmRule>>;
 
 export function ListProjects():Promise<Array<realtime.ProjectSummary>>;
 
 export function OpenProject(arg1:string):Promise<realtime.Project>;
 
+export function OpenProjectFile(arg1:string):Promise<realtime.OpenedProject>;
+
 export function RemoveSource(arg1:string,arg2:string):Promise<realtime.ProjectView>;
+
+export function RemoveSourceAt(arg1:string,arg2:string,arg3:string):Promise<realtime.OpenedProjectView>;
 
 export function RenameProject(arg1:string,arg2:string):Promise<realtime.Project>;
 
@@ -40,9 +56,17 @@ export function SetContext(arg1:context.Context):Promise<void>;
 
 export function SetForce(arg1:string,arg2:number,arg3:string,arg4:string,arg5:any,arg6:any):Promise<void>;
 
+export function SetQuality(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
+
+export function SetRuntimeValue(arg1:string,arg2:number,arg3:string,arg4:string,arg5:number):Promise<void>;
+
 export function UpdateAlarmRule(arg1:string,arg2:realtime.AlarmRule):Promise<Array<realtime.AlarmRule>>;
 
 export function UpdateReplicas(arg1:string,arg2:string,arg3:number):Promise<realtime.ProjectView>;
+
+export function UpdateReplicasAt(arg1:string,arg2:string,arg3:string,arg4:number):Promise<realtime.OpenedProjectView>;
+
+export function UpdateRuntime(arg1:string,arg2:string,arg3:realtime.Runtime):Promise<realtime.OpenedProject>;
 
 export function ValidateAlarmRules(arg1:string):Promise<void>;
 

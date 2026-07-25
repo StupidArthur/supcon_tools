@@ -1,55 +1,50 @@
-import { useEffect, useRef, useState } from 'react'
-import { realtimeRuntimeApi, systemApi } from '../../lib/api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { realtimeProjectApi, realtimeRuntimeApi, systemApi } from '../../lib/api'
 import { backendBatchBusy, useCanvasStore } from '../../store/useCanvasStore'
-import { useDslProjectStore } from '../dsl/useDslProjectStore'
 import { useGenericSimStore } from '../dsl/useGenericSimStore'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
 import { useRealtimeProjectStore } from './useRealtimeProjectStore'
 import { useRealtimeRunSessionStore } from './useRealtimeRunSessionStore'
-import { RuntimeTagTable } from './RuntimeTagTable'
-import { GenericTrendPanel } from '../runtime/GenericTrendPanel'
-import { AlarmPanel } from './AlarmPanel'
-import { RunHistoryPanel } from './RunHistoryPanel'
+import { RuntimeInstanceTable } from './RuntimeInstanceTable'
+import { RuntimeInstanceDetail } from './RuntimeInstanceDetail'
 
 export function RealtimeRunPage() {
   const dfStatus = useCanvasStore((s) => s.dfStatus)
-  const dfLogs = useCanvasStore((s) => s.dfLogs)
-  const refreshStatus = useCanvasStore((s) => s.refreshStatus)
   const setDfPath = useCanvasStore((s) => s.setDfPath)
-
-  const filePath = useDslProjectStore((s) => s.filePath)
-  const projectName = useDslProjectStore((s) => s.projectName)
-  const yamlDirty = useDslProjectStore((s) => s.yamlDirty)
-  const openWorkspace = useDslProjectStore((s) => s.openWorkspace)
-  const pushRecent = useDslProjectStore((s) => s.pushRecent)
-  const setYamlText = useDslProjectStore((s) => s.setYamlText)
+  const refreshStatus = useCanvasStore((s) => s.refreshStatus)
 
   const currentProject = useRealtimeProjectStore((s) => s.currentProject)
+  const currentProjectFile = useRealtimeProjectStore((s) => s.currentProjectFile)
+  const instances = useRealtimeProjectStore((s) => s.instances)
 
   const session = useRealtimeRunSessionStore((s) => s.session)
   const sessionLoading = useRealtimeRunSessionStore((s) => s.loading)
   const sessionError = useRealtimeRunSessionStore((s) => s.error)
   const refreshSession = useRealtimeRunSessionStore((s) => s.refresh)
   const startProject = useRealtimeRunSessionStore((s) => s.startProject)
-  const startSingleYaml = useRealtimeRunSessionStore((s) => s.startSingleYaml)
   const stopSession = useRealtimeRunSessionStore((s) => s.stop)
+  const clearSessionError = useRealtimeRunSessionStore((s) => s.clearError)
 
   const offlineRunning = useGenericSimStore((s) => s.status === 'running')
   const globalBatchRunning = useGenericSimStore((s) => s.globalBatchRunning)
 
+  // 初始默认值（来自工程 runtime 持久化）
   const [cycleTime, setCycleTime] = useState(0.5)
-  const [port, setPort] = useState(18951)
-  const [apiHost, setApiHost] = useState('127.0.0.1')
-  const [apiPort, setApiPort] = useState(8000)
-  const [showAdvancedPorts, setShowAdvancedPorts] = useState(false)
+  const [opcUaHost, setOpcUaHost] = useState('0.0.0.0')
+  const [opcUaPort, setOpcUaPort] = useState(18951)
   const [error, setError] = useState('')
-  const [currentRevision, setCurrentRevision] = useState<string | null>(null)
-  const logEndRef = useRef<HTMLDivElement>(null)
+  const [selectedInstance, setSelectedInstance] = useState<string | null>(null)
+  const initOnce = useRef(false)
 
-  const isDirty = yamlDirty
-  const batchBusy = globalBatchRunning || backendBatchBusy(dfStatus)
-  const canStart =
-    Boolean(filePath) && !isDirty && !offlineRunning && !batchBusy && !dfStatus.running
+  // 当工程打开 / runtime 变化时，加载持久化默认值
+  useEffect(() => {
+    if (initOnce.current) return
+    if (currentProject?.runtime) {
+      setCycleTime(currentProject.runtime.cycleTime || 0.5)
+      setOpcUaHost(currentProject.runtime.opcUaHost || '0.0.0.0')
+      setOpcUaPort(currentProject.runtime.opcUaPort || 18951)
+    }
+  }, [currentProject?.id, currentProject?.runtime])
 
   useEffect(() => {
     systemApi.getDataFactoryPath().then((p) => {
@@ -59,44 +54,19 @@ export function RealtimeRunPage() {
     void refreshSession()
   }, [refreshStatus, setDfPath, refreshSession])
 
-  useEffect(() => {
-    if (!currentProject) {
-      setCurrentRevision(null)
-      return
-    }
-    realtimeRuntimeApi
-      .getProjectRevision(currentProject.id)
-      .then((r) => setCurrentRevision(r))
-      .catch(() => setCurrentRevision(null))
-  }, [currentProject])
-
-  useEffect(() => {
-    if (!batchBusy) return
-    const id = setInterval(() => refreshStatus(), 1000)
-    return () => clearInterval(id)
-  }, [batchBusy, refreshStatus])
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [dfLogs])
-
-  // generation guard：每次 effect 用单调递增的代数 myGen；任何 await 之后
-  // 必须先检查当前代数 / dfStatus / session 仍一致，否则放弃本次 effect 副作用。
-  // 关键：catch 分支也必须检查，否则 await 期间 session 已停的失败请求会
-  // 写入一个过期的 "无法获取 token" 错误。
+  // generation guard + runtime token bootstrap
   useEffect(() => {
     const rtStore = useRuntimeStore.getState()
     const myGen = ++useRealtimeRunSessionStore.getState().bootstrapGen
     const mySessionId = session?.sessionId ?? null
-    if (dfStatus.running && dfStatus.apiReady) {
-      const host = session?.apiHost || apiHost
-      const port = session?.apiPort || apiPort
+    if (dfStatus.running && dfStatus.apiReady && session?.sourceKind === 'project') {
+      const host = session.apiHost
+      const port = session.apiPort
       void (async () => {
         let info
         try {
           info = await realtimeRuntimeApi.getConnectionInfo()
         } catch (e) {
-          // 异步窗口检查：dfStatus / session / generation 不一致时放弃。
           if (
             useRealtimeRunSessionStore.getState().bootstrapGen !== myGen ||
             (mySessionId !== null &&
@@ -130,31 +100,20 @@ export function RealtimeRunPage() {
     } else if (!dfStatus.running) {
       rtStore.disconnect()
     }
-    // 卸载或 dfStatus 变化 → 递增代数让正在进行的 await 失败路径
     return () => {
       useRealtimeRunSessionStore.setState((s) => ({ bootstrapGen: s.bootstrapGen + 1 }))
     }
-  }, [dfStatus.running, dfStatus.apiReady, apiHost, apiPort, session])
+  }, [dfStatus.running, dfStatus.apiReady, session?.sessionId, session?.sourceKind])
 
-  const openDsl = async () => {
-    const path = await systemApi.openYAMLFile()
-    if (!path) return
-    try {
-      const text = await systemApi.readTextFile(path)
-      openWorkspace({
-        filePath: path,
-        projectKind: 'generic',
-        projectName: path.replace(/^.*[\\/]/, ''),
-        editorTab: 'yaml',
-        simTab: 'run',
-      })
-      setYamlText(text, false)
-      pushRecent(path)
-      setError('')
-    } catch (err) {
-      setError('打开失败: ' + String(err))
-    }
-  }
+  const status = useMemo(() => {
+    if (sessionError || error) return '运行异常'
+    if (!dfStatus.running && !session) return '未运行'
+    if (dfStatus.running && session?.state === 'running') return '运行中'
+    if (session?.state === 'starting') return '启动中'
+    if (session?.state === 'stopping') return '停止中'
+    if (session?.state === 'stop-failed') return '运行异常'
+    return '运行异常'
+  }, [dfStatus.running, session?.state, session, sessionError, error])
 
   const handleStart = async () => {
     setError('')
@@ -163,214 +122,99 @@ export function RealtimeRunPage() {
       setError('离线批量任务正在运行，禁止启动实时运行')
       return
     }
-    if (!filePath) {
-      setError('请先打开已保存的 DSL 文件')
+    if (!currentProject || !currentProjectFile) {
+      setError('请先打开一个实时工程')
       return
     }
-    if (isDirty) {
-      setError('实时运行使用已保存的 DSL，请先保存。')
+    if (instances.length === 0) {
+      setError('工程没有可运行的实例')
       return
     }
-    const p = await systemApi.getDataFactoryPath()
-    if (p) setDfPath(p)
-    const ok = await startSingleYaml(filePath, {
+    const ok = await startProject(currentProject.id, {
       cycleTime,
-      opcUaPort: port,
-      apiHost,
-      apiPort,
-      runtimeName: 'default',
+      opcUaHost,
+      opcUaPort,
+      apiHost: '127.0.0.1',
+      apiPort: 8000,
+      runtimeName: currentProject.name,
     })
-    if (ok) refreshStatus()
+    if (ok) {
+      refreshStatus()
+      initOnce.current = true
+    }
   }
 
   const handleStop = async () => {
     setError('')
     await stopSession()
     refreshStatus()
+    clearSessionError()
   }
 
-  const handleStartProject = async () => {
-    if (!currentProject) return
-    setError('')
-    const latestDf = useCanvasStore.getState().dfStatus
-    if (offlineRunning || globalBatchRunning || backendBatchBusy(latestDf)) {
-      setError('离线批量任务正在运行，禁止启动实时运行')
-      return
-    }
-    const p = await systemApi.getDataFactoryPath()
-    if (p) setDfPath(p)
-    const ok = await startProject(currentProject.id, {
-      cycleTime,
-      opcUaPort: port,
-      apiHost,
-      apiPort,
-      runtimeName: currentProject.name,
-    })
-    if (ok) refreshStatus()
+  // 未打开工程 → 占位提示
+  if (!currentProject) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-background p-6 text-sm text-muted-foreground" data-testid="realtime-run-no-project">
+        请先在「工程组态」打开或新建工程，再回到「实时运行」启动服务。
+      </div>
+    )
   }
+
+  const isRunning = Boolean(dfStatus.running && session)
+  const inputsDisabled = isRunning
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-6" data-testid="realtime-run-page">
-      <div className="mx-auto max-w-2xl space-y-5">
-        <div>
-          <h2 className="text-lg font-medium">实时运行</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            基于实时工程或已保存 DSL 启动实时实例并提供 OPC UA Server。与 DSL 离线仿真互斥。
-          </p>
+    <div className="flex flex-1 overflow-hidden bg-background" data-testid="realtime-run-page">
+      {/* 左侧运行控制 */}
+      <aside className="flex w-72 shrink-0 flex-col gap-3 border-r border-border p-4" data-testid="runtime-control-panel">
+        <h3 className="text-sm font-medium">运行控制</h3>
+        <label className="space-y-1 text-xs">
+          <span className="text-muted-foreground">控制周期 (秒)</span>
+          <input
+            type="number"
+            min={0.01}
+            step={0.1}
+            value={cycleTime}
+            disabled={inputsDisabled}
+            onChange={(e) => setCycleTime(Number(e.target.value))}
+            className="block w-full rounded-md border border-border bg-card px-3 py-1.5 disabled:opacity-50"
+            data-testid="runtime-control-cycle"
+          />
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="text-muted-foreground">UA 地址</span>
+          <input
+            value={opcUaHost}
+            disabled={inputsDisabled}
+            onChange={(e) => setOpcUaHost(e.target.value)}
+            className="block w-full rounded-md border border-border bg-card px-3 py-1.5 disabled:opacity-50"
+            data-testid="runtime-control-opc-host"
+          />
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="text-muted-foreground">UA 端口</span>
+          <input
+            type="number"
+            value={opcUaPort}
+            disabled={inputsDisabled}
+            onChange={(e) => setOpcUaPort(Number(e.target.value))}
+            className="block w-full rounded-md border border-border bg-card px-3 py-1.5 disabled:opacity-50"
+            data-testid="runtime-control-opc-port"
+          />
+        </label>
+        <div className="rounded-md border border-border bg-card px-3 py-2 text-xs" data-testid="runtime-control-status">
+          <div className="text-muted-foreground">服务状态</div>
+          <div className="mt-1 text-sm font-medium">{status}</div>
+          {dfStatus.running ? <div className="text-xs text-muted-foreground">PID: {dfStatus.pid}</div> : null}
         </div>
-
-        {session ? (
-          <section className="space-y-1 rounded-md border border-green-300 bg-green-50 p-3" data-testid="realtime-session-card">
-            <div className="text-xs font-medium">
-              正在运行：{session.sourceKind === 'project' ? session.projectName : session.sourcePath}
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-              <span>来源：{session.sourceKind === 'project' ? '实时工程' : '单 YAML'}</span>
-              <span>运行版本：{session.runtimeRevision || '—'}</span>
-              <span>配置哈希：{session.configHash ? session.configHash.slice(0, 8) : '—'}</span>
-              <span>启动时间：{session.startedAt || '—'}</span>
-              <span>周期：{session.cycleTime} 秒</span>
-              <span>OPC UA：{session.opcUaPort}</span>
-              <span>REST/WS：{session.apiHost}:{session.apiPort}</span>
-            </div>
-          </section>
-        ) : null}
-
-        {session && session.sourceKind === 'project' && currentProject &&
-          currentProject.id === session.projectId &&
-          currentRevision && currentRevision !== session.runtimeRevision ? (
-          <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="realtime-config-changed">
-            当前工程组态已修改。正在运行的仍是启动时版本，停止并重新启动后生效。
-          </div>
-        ) : null}
-
-        {currentProject ? (
-          <section className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3" data-testid="realtime-project-run">
-            <div className="text-xs font-medium">实时工程</div>
-            <div className="text-xs">
-              {currentProject.name}
-              <span className="ml-2 text-muted-foreground">
-                {currentProject.sources.length} 个 YAML
-              </span>
-            </div>
-            {!dfStatus.running ? (
-              <button
-                type="button"
-                onClick={() => void handleStartProject()}
-                disabled={offlineRunning || batchBusy}
-                className="rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-40"
-                data-testid="realtime-start-project"
-              >
-                启动工程
-              </button>
-            ) : null}
-          </section>
-        ) : null}
-
-        <section className="space-y-2 rounded-md border border-border bg-card p-3">
-          <div className="text-xs font-medium">单 YAML 运行（旧入口）</div>
-          {filePath ? (
-            <div className="truncate text-xs" title={filePath} data-testid="realtime-dsl-path">
-              {projectName || filePath}
-              <div className="text-muted-foreground">{filePath}</div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void openDsl()}
-              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary"
-              data-testid="realtime-open-dsl"
-            >
-              打开 DSL 文件
-            </button>
-          )}
-          {filePath ? (
-            <button
-              type="button"
-              onClick={() => void openDsl()}
-              className="text-xs text-muted-foreground underline"
-            >
-              更换文件
-            </button>
-          ) : null}
-          {!filePath ? (
-            <div className="text-xs text-muted-foreground">没有已保存文件，无法启动实时运行。</div>
-          ) : null}
-          {isDirty ? (
-            <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900" data-testid="realtime-unsaved-warn">
-              实时运行使用已保存的 DSL，请先保存。
-            </div>
-          ) : null}
-          {offlineRunning || batchBusy ? (
-            <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-              离线批量任务正在运行，禁止启动实时运行。
-            </div>
-          ) : null}
-        </section>
-
-        <section className="flex flex-wrap gap-4">
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">控制周期 (秒)</span>
-            <input
-              type="number"
-              value={cycleTime}
-              step={0.1}
-              min={0.01}
-              onChange={(e) => setCycleTime(Number(e.target.value))}
-              className="block w-28 rounded-md border border-border bg-card px-3 py-1.5"
-              data-testid="realtime-cycle-time"
-            />
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">OPC UA 端口</span>
-            <input
-              type="number"
-              value={port}
-              onChange={(e) => setPort(Number(e.target.value))}
-              className="block w-28 rounded-md border border-border bg-card px-3 py-1.5"
-              data-testid="realtime-ua-port"
-            />
-          </label>
-        </section>
-
-        <div>
-          <button
-            type="button"
-            className="text-xs text-muted-foreground underline"
-            onClick={() => setShowAdvancedPorts((v) => !v)}
-          >
-            {showAdvancedPorts ? '收起高级端口配置' : '高级端口配置'}
-          </button>
-          {showAdvancedPorts ? (
-            <div className="mt-2 flex gap-4">
-              <label className="space-y-1 text-xs">
-                <span className="text-muted-foreground">REST Host</span>
-                <input
-                  value={apiHost}
-                  onChange={(e) => setApiHost(e.target.value)}
-                  className="block w-36 rounded-md border border-border bg-card px-3 py-1.5"
-                />
-              </label>
-              <label className="space-y-1 text-xs">
-                <span className="text-muted-foreground">REST/WS 端口</span>
-                <input
-                  type="number"
-                  value={apiPort}
-                  onChange={(e) => setApiPort(Number(e.target.value))}
-                  className="block w-28 rounded-md border border-border bg-card px-3 py-1.5"
-                />
-              </label>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-4">
-          {dfStatus.running ? (
+        <div className="mt-auto flex flex-col gap-2">
+          {isRunning ? (
             <button
               type="button"
               onClick={() => void handleStop()}
-              className="rounded-md bg-destructive px-4 py-1.5 text-xs text-destructive-foreground"
-              data-testid="realtime-stop"
+              disabled={sessionLoading}
+              className="rounded-md bg-destructive px-4 py-2 text-sm text-destructive-foreground disabled:opacity-40"
+              data-testid="runtime-control-stop"
             >
               停止
             </button>
@@ -378,62 +222,36 @@ export function RealtimeRunPage() {
             <button
               type="button"
               onClick={() => void handleStart()}
-              disabled={!canStart}
-              className="rounded-md bg-primary px-4 py-1.5 text-xs text-primary-foreground disabled:opacity-40"
-              data-testid="realtime-start"
+              disabled={sessionLoading || offlineRunning || globalBatchRunning}
+              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-40"
+              data-testid="runtime-control-start"
             >
-              启动实时运行
+              启动
             </button>
           )}
-          <div className="text-xs" data-testid="realtime-status">
-            {dfStatus.running ? `运行中 (PID: ${dfStatus.pid})` : '已停止'}
-            {dfStatus.running && dfStatus.port ? ` · UA :${dfStatus.port}` : ''}
-          </div>
+          {error || sessionError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-xs text-destructive" data-testid="runtime-control-error">
+              {error || sessionError}
+            </div>
+          ) : null}
         </div>
+      </aside>
 
-        {(error || sessionError) ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-            {error || sessionError}
-          </div>
-        ) : null}
-
-        {sessionLoading ? (
-          <div className="text-xs text-muted-foreground">处理中...</div>
-        ) : null}
-
-        <RuntimeTagTable />
-
-        <GenericTrendPanel projectId={currentProject?.id} />
-
-        <AlarmPanel />
-
-        <RunHistoryPanel />
-
-        <section className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-muted-foreground">日志输出</label>
-            <button
-              type="button"
-              onClick={() => useCanvasStore.getState().clearDfLogs()}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              清空
-            </button>
-          </div>
-          <div className="h-64 overflow-y-auto rounded-md border border-border bg-card p-3 font-mono text-xs">
-            {dfLogs.length === 0 ? (
-              <div className="text-muted-foreground">暂无日志</div>
-            ) : (
-              dfLogs.map((log, i) => (
-                <div key={i} className="whitespace-pre-wrap break-all">
-                  {log}
-                </div>
-              ))
-            )}
-            <div ref={logEndRef} />
-          </div>
-        </section>
-      </div>
+      {/* 右侧：实例列表 / 实例详情 */}
+      <main className="flex min-w-0 flex-1 flex-col p-4" data-testid="runtime-instance-area">
+        {selectedInstance ? (
+          <RuntimeInstanceDetail
+            instanceName={selectedInstance}
+            onBack={() => setSelectedInstance(null)}
+          />
+        ) : (
+          <RuntimeInstanceTable
+            instances={instances}
+            sources={currentProject.sources}
+            onSelect={(name) => setSelectedInstance(name)}
+          />
+        )}
+      </main>
     </div>
   )
 }

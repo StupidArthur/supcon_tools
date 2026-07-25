@@ -1,10 +1,7 @@
 package realtime
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,6 +42,7 @@ type RealtimeRunSession struct {
 	ConfigHash         string            `json:"configHash"`
 	RuntimeName        string            `json:"runtimeName"`
 	CycleTime          float64           `json:"cycleTime"`
+	OPCUAHost          string            `json:"opcUaHost"`
 	OPCUAPort          int               `json:"opcUaPort"`
 	APIHost            string            `json:"apiHost"`
 	APIPort            int               `json:"apiPort"`
@@ -54,6 +52,7 @@ type RealtimeRunSession struct {
 
 type RealtimeStartOptions struct {
 	CycleTime      float64  `json:"cycleTime"`
+	OPCUAHost      string   `json:"opcUaHost"`
 	OPCUAPort      int      `json:"opcUaPort"`
 	APIHost        string   `json:"apiHost"`
 	APIPort        int      `json:"apiPort"`
@@ -69,6 +68,9 @@ func (o RealtimeStartOptions) WithDefaults() RealtimeStartOptions {
 	if o.OPCUAPort <= 0 {
 		o.OPCUAPort = 18951
 	}
+	if o.OPCUAHost == "" {
+		o.OPCUAHost = "0.0.0.0"
+	}
 	if o.APIHost == "" {
 		o.APIHost = "127.0.0.1"
 	}
@@ -83,39 +85,16 @@ func (o RealtimeStartOptions) WithDefaults() RealtimeStartOptions {
 
 // RuntimeRevision computes the project runtime revision hash.
 //
+// RuntimeRevision 计算工程运行期修订哈希。
+//
 // Includes: project ID, source order, each source ID, replicas, each source
 // file byte hash, and alarms.yaml when present (phase 7).
 // Excludes: display name, dashboard, user preferences.
 // Encoding is deterministic and does not depend on map order or file mtime.
-func (m *Manager) RuntimeRevision(projectID string) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.runtimeRevisionLocked(projectID)
-}
-
+//
+// 实现位于 manager.go（重写为支持 locations map + 兼容旧 storage 路径）。
 func (m *Manager) runtimeRevisionLocked(projectID string) (string, error) {
-	p, err := m.storage.LoadProject(projectID)
-	if err != nil {
-		return "", err
-	}
-	h := sha256.New()
-	fmt.Fprintf(h, "project:%s\n", p.ID)
-	for _, s := range p.Sources {
-		fmt.Fprintf(h, "source:%s|replicas:%d\n", s.ID, s.Replicas)
-		data, err := os.ReadFile(m.storage.SourceAbsPath(projectID, s.ID))
-		if err != nil {
-			return "", fmt.Errorf("read source file failed %s: %w", s.ID, err)
-		}
-		fh := sha256.Sum256(data)
-		fmt.Fprintf(h, "filehash:%s\n", hex.EncodeToString(fh[:]))
-	}
-	if alarmsPath, ok := m.storage.AlarmsPath(projectID); ok {
-		if data, err := os.ReadFile(alarmsPath); err == nil {
-			ah := sha256.Sum256(data)
-			fmt.Fprintf(h, "alarms:%s\n", hex.EncodeToString(ah[:]))
-		}
-	}
-	return hex.EncodeToString(h.Sum(nil))[:12], nil
+	return m.RuntimeRevision(projectID)
 }
 
 // SessionRecord is the persisted session.json content.
