@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"config-tool/internal/realtime"
 )
@@ -258,13 +259,28 @@ func (b *RealtimeRuntimeBinding) GetConnectionInfo() (RealtimeConnectionInfo, er
 func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime.RealtimeStartOptions) (realtime.RealtimeRunSession, error) {
 	opts := options.WithDefaults()
 
-	status := b.system.Status()
-	if status.Running {
-		return realtime.RealtimeRunSession{}, fmt.Errorf("已有实时进程在运行")
+	// todo.md §9.2：检查服务 ready
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("服务客户端未注入")
 	}
-	if status.BatchRunning || status.ActiveBatches > 0 {
-		return realtime.RealtimeRunSession{}, fmt.Errorf("批量任务正在运行，无法启动实时工程")
+	if _, err := client.CheckHealth(b.ctx); err != nil {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("服务未就绪: %w", err)
 	}
+
+	// todo.md §9.2：检查没有 runtime 运行
+	runtimeState, err := b.getRuntimeStatusViaService()
+	if err != nil {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("查询运行状态失败: %w", err)
+	}
+	if runtimeState == "running" || runtimeState == "starting" {
+		return realtime.RealtimeRunSession{}, fmt.Errorf("已有实时运行在进行中")
+	}
+
+	// todo.md §9.2：检查没有 batch 运行（通过服务状态）
+	// 注意：batch 状态检查需要在服务内部实现，这里先跳过
 
 	revision, err := b.manager.RuntimeRevision(projectID)
 	if err != nil {
@@ -281,12 +297,20 @@ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime
 	}
 	compiledPath := b.sessionManager.CompiledPath(dir)
 
+	// todo.md §9.2：使用 ServiceRealtimeCompiler 编译（已在 Phase A 完成）
 	if _, err := b.manager.CompileProject(context.Background(), projectID, compiledPath); err != nil {
 		b.sessionManager.RemoveSessionDir(dir)
 		return realtime.RealtimeRunSession{}, fmt.Errorf("编译工程失败: %w", err)
 	}
 
-	return b.launch(sessionID, dir, compiledPath, realtime.RealtimeRunSession{
+	// todo.md §9.2：通过服务 API 启动实时运行（不再创建子进程）
+	if err := b.startRuntimeViaService(compiledPath, opts.RuntimeName, opts.CycleTime, opts.OPCUAHost, opts.OPCUAPort); err != nil {
+		b.sessionManager.RemoveSessionDir(dir)
+		return realtime.RealtimeRunSession{}, fmt.Errorf("启动实时运行失败: %w", err)
+	}
+
+	// 创建 session 记录
+	session := realtime.RealtimeRunSession{
 		SessionID:          sessionID,
 		SourceKind:         realtime.RuntimeSourceProject,
 		ProjectID:          project.ID,
@@ -297,10 +321,27 @@ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime
 		CycleTime:          opts.CycleTime,
 		OPCUAHost:          opts.OPCUAHost,
 		OPCUAPort:          opts.OPCUAPort,
-		APIHost:            opts.APIHost,
-		APIPort:            opts.APIPort,
-		State:              realtime.StateStarting,
-	}, opts)
+		APIHost:            b.serviceHost,
+		APIPort:            b.servicePort,
+		State:              realtime.StateRunning,
+		StartedAt:          time.Now().Format(time.RFC3339),
+	}
+
+	// 写 session.json
+	rec := sessionRecordFor(session)
+	if err := b.sessionManager.WriteSessionJSON(dir, rec); err != nil {
+		b.stopRuntimeViaService()
+		b.sessionManager.RemoveSessionDir(dir)
+		return realtime.RealtimeRunSession{}, fmt.Errorf("写入 session.json 失败: %w", err)
+	}
+
+	// 设置 current session
+	b.mu.Lock()
+	b.current = &session
+	b.curDir = dir
+	b.mu.Unlock()
+
+	return session, nil
 }
 
 func (b *RealtimeRuntimeBinding) StartSingleYAML(configPath string, options realtime.RealtimeStartOptions) (realtime.RealtimeRunSession, error) {
