@@ -24,8 +24,9 @@ export interface RealtimeStartOptions {
   cycleTime: number
   opcUaHost: string
   opcUaPort: number
-  apiHost: string
-  apiPort: number
+  // todo.md §13.1：apiHost/apiPort 由 Go 后端管理，前端可选
+  apiHost?: string
+  apiPort?: number
   runtimeName: string
 }
 

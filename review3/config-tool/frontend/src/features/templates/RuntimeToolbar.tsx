@@ -115,8 +115,7 @@ export function RuntimeToolbar() {
         mode: 'REALTIME',
         cycleTime: currentCycleTime || 0.5,
         port: 18951,
-        apiHost: '127.0.0.1',
-        apiPort: 8000,
+        // todo.md §13.1：apiHost/apiPort 由 Go 后端管理
         runtimeName: 'second_order_tank',
         enableOpcUa: true,
       })

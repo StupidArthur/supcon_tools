@@ -651,8 +651,7 @@ describe('RuntimeToolbar', () => {
         expect(systemApi.start).toHaveBeenCalledWith(
           expect.objectContaining({
             port: 18951,
-            apiHost: '127.0.0.1',
-            apiPort: 8000,
+            // todo.md §13.1：apiHost/apiPort 由 Go 后端管理，前端不传
             enableOpcUa: true,
           })
         )
