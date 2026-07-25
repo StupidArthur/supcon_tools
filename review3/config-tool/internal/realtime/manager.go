@@ -193,7 +193,12 @@ func (m *Manager) CreateProject(_ context.Context, name string) (Project, error)
 
 func (m *Manager) OpenProject(_ context.Context, id string) (Project, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	if pf, ok := m.locations[id]; ok {
+		m.mu.Unlock()
+		return LoadProjectFile(pf)
+	}
+	m.mu.Unlock()
+	// 兼容旧 storage 工程；新工程必须走 OpenProjectFile 并已写入 locations
 	return m.storage.LoadProject(id)
 }
 
@@ -201,7 +206,12 @@ func (m *Manager) DeleteProject(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.locations, id)
-	return m.storage.DeleteProject(id)
+	// 同时尝试清理旧 storage（不存在时静默忽略）
+	if err := m.storage.DeleteProject(id); err != nil {
+		// 旧 storage 中可能不存在该工程（locations-only 工程），仅记录
+		_ = err
+	}
+	return nil
 }
 
 func (m *Manager) RenameProject(_ context.Context, id, newName string) (Project, error) {
@@ -211,6 +221,18 @@ func (m *Manager) RenameProject(_ context.Context, id, newName string) (Project,
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if pf, ok := m.locations[id]; ok {
+		p, err := LoadProjectFile(pf)
+		if err != nil {
+			return Project{}, err
+		}
+		p.Name = newName
+		if err := SaveProjectToFile(pf, p); err != nil {
+			return Project{}, err
+		}
+		return p, nil
+	}
+	// 旧 storage 路径（仅兜底）
 	p, err := m.storage.LoadProject(id)
 	if err != nil {
 		return Project{}, err

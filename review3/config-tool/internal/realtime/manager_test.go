@@ -467,3 +467,55 @@ func TestAtomicWrite(t *testing.T) {
 		t.Fatalf("expected atomic, got %s", loaded.Name)
 	}
 }
+
+// TestOpenProjectUsesLocationsMap 回归：CreateProjectAt 创建的工程位于 locations
+// map，Manager.OpenProject 必须先查 locations 再 fallback 旧 storage。
+// 之前直接走 storage.LoadProject(id) 会用 %UserConfigDir% 旧路径，
+// 找不到文件抛 'open project.yaml: The system cannot find the path specified'。
+func TestOpenProjectUsesLocationsMap(t *testing.T) {
+	fc := &fakeCompiler{result: validResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	proj, err := m.CreateProjectAt(ctx, "locmap", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 模拟 storage 缺失（旧 root 不存在）：把它指向一个不存在的目录
+	m.storage = NewProjectStorage(filepath.Join(t.TempDir(), "no-such-storage"))
+
+	got, err := m.OpenProject(ctx, proj.Project.ID)
+	if err != nil {
+		t.Fatalf("OpenProject should resolve via locations map: %v", err)
+	}
+	if got.ID != proj.Project.ID {
+		t.Fatalf("expected ID %s, got %s", proj.Project.ID, got.ID)
+	}
+}
+
+// TestCompileProjectUsesLocationsMap 同样：编译路径必须走 locations。
+// fake compiler 把 outputPath 当作"输出"返回而不写文件，所以只断言无 error。
+func TestCompileProjectUsesLocationsMap(t *testing.T) {
+	fc := &fakeCompiler{result: validResult()}
+	m := newTestManager(t, fc)
+	ctx := context.Background()
+
+	parent := t.TempDir()
+	proj, err := m.CreateProjectAt(ctx, "comploc", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yamlPath := writeYAML(t, t.TempDir(), "tank.yaml", tankYAML)
+	if _, err := m.AddSourceAt(ctx, proj.Project.ID, proj.ProjectFile, yamlPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// 同样的 storage 不存在场景
+	m.storage = NewProjectStorage(filepath.Join(t.TempDir(), "no-such-storage"))
+
+	out := filepath.Join(t.TempDir(), "compiled.yaml")
+	if _, err := m.CompileProject(ctx, proj.Project.ID, out); err != nil {
+		t.Fatalf("CompileProject should resolve via locations map: %v", err)
+	}
+}
