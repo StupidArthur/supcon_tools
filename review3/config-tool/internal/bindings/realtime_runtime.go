@@ -695,98 +695,85 @@ func (b *RealtimeRuntimeBinding) DeleteRunHistory(sessionID string) error {
 }
 
 func (b *RealtimeRuntimeBinding) Stop() error {
-	// 阶段 I 收口：stopTxnMu 保护完整 Stop 事务。必须先于任何 session
-	// 快照读取获得；事务结束（defer）后才释放。
-	// 这样第二个 Stop 会在第一个完整事务结束前阻塞，不会重复调用 archive stop，
-	// 也不会读取到被第一个 Stop 清理后的过期 session 状态。
+	// todo.md §9.4：stopTxnMu 保护完整 Stop 事务
 	b.stopTxnMu.Lock()
 	defer b.stopTxnMu.Unlock()
 
-	// 幂等退出条件：session 已被清理且进程不在运行 → 第二个 Stop 直接返回 nil。
-	// 必须在 stopTxnMu 内判断，避免两个 Stop 同时进入清理流程。
-	running := b.system.Status().Running
+	// 读取当前 session
 	b.mu.Lock()
 	sess := b.current
-	if sess == nil && !running {
-		b.mu.Unlock()
-		return nil
-	}
-	// 读取完整 session 快照（必须在 stopTxnMu 内，避免其他事务并发修改）
 	dir := b.curDir
 	archiveActive := b.archiveActive
-	// 阶段 H 收口：标记 Stop 事务开始，阻止 onSystemProcessExit 争抢清理。
-	b.orchestratedStop = true
+	client := b.serviceClient
 	b.mu.Unlock()
 
-	// 事务结束后必须清除标志（无论成功/失败）。
-	defer func() {
-		b.mu.Lock()
-		b.orchestratedStop = false
-		b.mu.Unlock()
-	}()
+	// 幂等：没有 session 时查询服务 runtime 状态
+	if sess == nil {
+		if client == nil {
+			return nil
+		}
+		runtimeState, err := b.getRuntimeStatusViaService()
+		if err != nil {
+			return nil // 服务不可用时静默返回
+		}
+		if runtimeState == "stopped" {
+			return nil // 已经停止，幂等成功
+		}
+		// runtime 仍在运行但没有 session → 异常状态，尝试停止
+	}
 
-	// 阶段 C4 收口：归档停止优先（保证 SQLite / jsonl flush / 句柄关闭），
-	// 仅在确实启用归档时调用。带 Bearer 鉴权。
-	// archivePending 跟踪"归档是否仍需重试"：
-	//   - archive stop 成功 → archivePending = false（不再重试）
-	//   - archive stop 失败 → archivePending = true（下次 Stop 重试）
-	// 关键：不得在 stop-failed 恢复路径中写回旧的 archiveActive 值，
-	// 否则已成功的 archive stop 会被错误地标记为仍需重试。
+	// 停止归档（todo.md §9.4 步骤 4）
 	var archiveErr error
-	archivePending := archiveActive
 	if archiveActive && sess != nil {
 		archiveErr = b.stopArchiveOnShutdown(*sess)
-		archivePending = archiveErr != nil
 		b.mu.Lock()
-		b.archiveActive = archivePending
+		b.archiveActive = archiveErr != nil
 		b.mu.Unlock()
 	}
 
-	if b.system.Status().Running {
-		if stopErr := b.system.Stop(); stopErr != nil {
-			// 阶段 5-2：Stop 失败但进程仍在 → 保留会话供重试。
-			if b.system.Status().Running {
-				combined := stopErr
-				if archiveErr != nil {
-					combined = fmt.Errorf("%w; 归档停止失败: %v", stopErr, archiveErr)
+	// 调用 /api/runtime/stop（todo.md §9.4 步骤 5）
+	if client != nil {
+		if err := b.stopRuntimeViaService(); err != nil {
+			// 停止失败：保留 session 供重试（todo.md §9.4）
+			if sess != nil {
+				rec, _ := b.sessionManager.ReadSessionRecord(dir)
+				rec.State = realtime.StateStopFailed
+				if writeErr := b.sessionManager.WriteSessionJSON(dir, rec); writeErr != nil {
+					fmt.Fprintf(os.Stderr, "[realtime] Stop: write stop-failed record failed: %v\n", writeErr)
 				}
-				if sess != nil {
-					// 写 stop-failed 状态
-					rec, _ := b.sessionManager.ReadSessionRecord(dir)
-					rec.State = realtime.StateStopFailed
-					if writeErr := b.sessionManager.WriteSessionJSON(dir, rec); writeErr != nil {
-						fmt.Fprintf(os.Stderr, "[realtime] Stop: write stop-failed record failed: %v\n", writeErr)
-					}
-					// 保留 current / curDir，标记 session.state 可见
-					// 关键：archiveActive 使用 archivePending（不恢复旧值）
-					stamped := *sess
-					stamped.State = realtime.StateStopFailed
-					b.mu.Lock()
-					b.current = &stamped
-					b.curDir = dir
-					b.archiveActive = archivePending
-					b.mu.Unlock()
-				}
-				return fmt.Errorf("停止 DataFactory 失败: %v", combined)
+				stamped := *sess
+				stamped.State = realtime.StateStopFailed
+				b.mu.Lock()
+				b.current = &stamped
+				b.curDir = dir
+				b.mu.Unlock()
 			}
-			// 进程已退出但 Stop 仍报错：清理
-			b.sessionManager.RemoveSessionDir(dir)
-			b.mu.Lock()
-			b.current = nil
-			b.curDir = ""
-			b.archiveActive = false
-			b.mu.Unlock()
 			if archiveErr != nil {
-				return fmt.Errorf("停止 DataFactory 失败: %v; 归档停止失败: %v", stopErr, archiveErr)
+				return fmt.Errorf("停止实时运行失败: %v; 归档停止失败: %v", err, archiveErr)
 			}
-			return stopErr
+			return fmt.Errorf("停止实时运行失败: %w", err)
 		}
 	}
 
-	// 阶段 H 收口：archive flush 失败时保留 session dir 作为诊断记录。
-	// 进程已死但 archive 数据可能不完整，保留 session.json 供后续分析。
-	// 下次启动由 CleanupOrphans 机制处理该目录（stop-failed 状态不被自动清理）。
+	// 查询 /api/runtime/status 确认已停止（todo.md §9.4 步骤 6）
+	if client != nil {
+		runtimeState, err := b.getRuntimeStatusViaService()
+		if err == nil && runtimeState != "stopped" {
+			// runtime 实际仍 running → 不得假装成功（todo.md §9.4）
+			if sess != nil {
+				stamped := *sess
+				stamped.State = realtime.StateStopFailed
+				b.mu.Lock()
+				b.current = &stamped
+				b.mu.Unlock()
+			}
+			return fmt.Errorf("停止后 runtime 状态仍为 %s，未真正停止", runtimeState)
+		}
+	}
+
+	// 清理 session（todo.md §9.4 步骤 7-10）
 	if archiveErr != nil {
+		// 归档失败：保留 session dir 作为诊断记录
 		rec, _ := b.sessionManager.ReadSessionRecord(dir)
 		rec.State = realtime.StateStopFailed
 		if writeErr := b.sessionManager.WriteSessionJSON(dir, rec); writeErr != nil {
@@ -795,11 +782,17 @@ func (b *RealtimeRuntimeBinding) Stop() error {
 	} else {
 		b.sessionManager.RemoveSessionDir(dir)
 	}
+
+	// 清空 current / curDir / 运行期状态（todo.md §9.4 步骤 10）
 	b.mu.Lock()
 	b.current = nil
 	b.curDir = ""
 	b.archiveActive = false
 	b.mu.Unlock()
+
+	// 保留常驻服务进程（todo.md §9.4 步骤 11）
+	// 不调用 system.Stop()，不结束 DataFactoryService
+
 	if archiveErr != nil {
 		return fmt.Errorf("归档停止失败: %v", archiveErr)
 	}
