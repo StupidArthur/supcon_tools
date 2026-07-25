@@ -60,6 +60,9 @@ type RealtimeRuntimeBinding struct {
 	serviceHost  string
 	servicePort  int
 	serviceToken string
+
+	// todo.md §9：服务客户端（由 container 注入）
+	serviceClient *DataFactoryServiceClient
 }
 
 // SetServiceEndpoint 注入常驻服务的 host/port/token（todo.md §6 / §7.2）。
@@ -69,6 +72,13 @@ func (b *RealtimeRuntimeBinding) SetServiceEndpoint(host string, port int, token
 	b.serviceHost = host
 	b.servicePort = port
 	b.serviceToken = token
+	b.mu.Unlock()
+}
+
+// SetServiceClient 注入服务客户端（todo.md §9）。
+func (b *RealtimeRuntimeBinding) SetServiceClient(client *DataFactoryServiceClient) {
+	b.mu.Lock()
+	b.serviceClient = client
 	b.mu.Unlock()
 }
 
