@@ -672,6 +672,17 @@ def main() -> None:
         action="store_true",
         help="从 stdin 读取 JSON（sources + output），编译合并为单一 YAML 文件"
     )
+    parser.add_argument(
+        "--service",
+        action="store_true",
+        help="以常驻服务模式启动：只 listen FastAPI，不创建 Engine，不启动 OPC UA（todo.md §4.1）"
+    )
+    parser.add_argument(
+        "--runtime-name",
+        type=str,
+        default="default",
+        help="服务实例名（--service 模式下用作 EngineBinding.instance_name）"
+    )
     args = parser.parse_args()
 
     if args.inspect_project:
@@ -680,6 +691,17 @@ def main() -> None:
 
     if args.compile_project:
         _run_compile_project()
+        return
+
+    # todo.md §4.1：--service 常驻服务模式
+    # - 不要求 -c/--config
+    # - 不自动创建 Engine（engine=None 是合法初始状态）
+    # - 不启动 OPC UA
+    # - FastAPI 服务立即启动
+    # - /api/health 返回 serviceState=ready, runtimeState=stopped
+    if args.service:
+        _run_service_mode(args)
+        return
         return
 
     # 内存结果行转换导出（不运行仿真，也不需要配置文件）
@@ -935,6 +957,88 @@ def main() -> None:
         if api_thread is not None:
             api_thread.join(timeout=1.0)
         print("[Main] All instances stopped")
+        sys.exit(0)
+
+
+def _run_service_mode(args) -> None:
+    """todo.md §4.1 常驻服务模式。
+
+    - 不要求 -c/--config（args.config 可空）
+    - 不创建 Engine；EngineBinding.engine = None 是合法初始状态
+    - 不启动 OPC UA
+    - FastAPI 服务立即启动（Uvicorn 在新线程）
+    - 工程上下文初始为空；通过 /api/project/open 加载
+    - 监听 /api/service/shutdown 优雅退出
+
+    兼容旧 batch / convert 模式：先判断 args.service，未启用则走 _run_service_mode
+    """
+    from datacenter.engine_api import (
+        EngineBinding,
+        run_api_server,
+        set_api_token,
+        set_binding,
+        set_service_state,
+        set_runtime_state,
+        RUNTIME_STATE_STOPPED,
+        SERVICE_STATE_READY,
+        shutdown_requested,
+    )
+
+    instance_name = args.runtime_name or "default"
+
+    # 构造最小 EngineBinding：engine=None，shared_data={}，force/quality 已就绪
+    # 这样 /api/health 立即返回 200（service_state=ready, runtime_state=stopped），
+    # /api/project/inspect /api/project/compile /api/batch/run /api/export/convert
+    # 都可以工作。Engine 由 /api/runtime/start 在进程内启动。
+    from datacenter.force_manager import ForceManager
+    from datacenter.quality_manager import QualityManager
+    force_manager = ForceManager()
+    quality_manager = QualityManager()
+
+    binding = EngineBinding(
+        instance_name=instance_name,
+        engine=None,
+        shared_data={},
+        force_manager=force_manager,
+        quality_manager=quality_manager,
+    )
+    set_binding(binding)
+    set_service_state(binding, SERVICE_STATE_READY)
+    set_runtime_state(binding, RUNTIME_STATE_STOPPED)
+    set_api_token(args.api_token)
+
+    # 监听地址：todo.md §7.2 仅 127.0.0.1；端口由调用方传入（Go 端动态选择）
+    api_host = args.api_host or "127.0.0.1"
+    api_port = args.api_port or 0  # 0 = 由 uvicorn 选端口；生产模式下 Go 端传入固定值
+    api_thread = run_api_server(
+        binding,
+        host=api_host,
+        port=api_port,
+        api_token=args.api_token,
+    )
+
+    print(f"[Service] DataFactory 常驻服务已启动 http://{api_host}:{api_port} (runtime_name={instance_name})")
+
+    # 阻塞主线程直到收到 /api/service/shutdown。
+    # uvicorn 在 daemon 线程里跑，主线程用 _shutdown_event.wait()。
+    try:
+        shutdown_requested(binding)  # 始终 False
+        # 这里用循环 + sleep 兜底 shutdown 事件检查；uvicorn 在子线程
+        # 收到 /api/service/shutdown 时会调用 request_service_shutdown。
+        import time as _time
+        while not shutdown_requested(binding):
+            _time.sleep(0.2)
+    except KeyboardInterrupt:
+        print("[Service] interrupted, shutting down")
+    finally:
+        # 优雅退出：要求 /api/runtime/stop
+        try:
+            from datacenter.engine_api import api_runtime_stop
+            api_runtime_stop()
+        except Exception:
+            pass
+        # uvicorn 在 daemon 线程，进程退出时随主线程回收
+        print("[Service] DataFactory 常驻服务已停止")
         sys.exit(0)
 
 

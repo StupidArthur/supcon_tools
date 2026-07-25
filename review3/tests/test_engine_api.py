@@ -723,3 +723,156 @@ def test_ws_snapshot_message_is_complete_dict_not_wrapped():
         bc.unregister(q)
     finally:
         engine_api.set_binding(None)  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- #
+# 10. todo.md §4.3 / §4.4 / §6：service / runtime 状态 + 工程上下文 + 进程内操作       #
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def service_binding() -> engine_api.EngineBinding:
+    """构造 service mode 的最小 EngineBinding（engine=None）。"""
+    b = engine_api.EngineBinding(
+        instance_name="service_runtime",
+        engine=None,
+        shared_data={},
+    )
+    engine_api.set_binding(b)
+    engine_api.set_service_state(b, engine_api.SERVICE_STATE_READY)
+    engine_api.set_runtime_state(b, engine_api.RUNTIME_STATE_STOPPED)
+    yield b
+    engine_api.set_binding(None)  # type: ignore[arg-type]
+
+
+def test_api_health_returns_ready_when_engine_none(service_binding):
+    """service mode 启动后 Engine 还没创建，/api/health 必须返回 200。"""
+    h = engine_api.api_health()
+    assert h["ok"] is True
+    assert h["protocolVersion"] == engine_api.SERVICE_PROTOCOL_VERSION
+    assert h["serviceState"] == "ready"
+    assert h["runtimeState"] == "stopped"
+    assert h["instanceName"] == "service_runtime"
+
+
+def test_api_runtime_status_reflects_state_transitions(service_binding):
+    s = engine_api.api_runtime_status()
+    assert s["runtimeState"] == "stopped"
+    assert s["serviceState"] == "ready"
+    # 手动转换 runtime_state，验证 /api/runtime/status 反映
+    engine_api.set_runtime_state(service_binding, engine_api.RUNTIME_STATE_STARTING)
+    s2 = engine_api.api_runtime_status()
+    assert s2["runtimeState"] == "starting"
+
+
+def test_api_service_shutdown_marks_stopping_and_signals(service_binding):
+    r = engine_api.api_service_shutdown(
+        engine_api.ShutdownRequest(reason="unit-test")
+    )
+    assert r["ok"] is True
+    assert r["serviceState"] == "stopping"
+    assert engine_api.shutdown_requested(service_binding) is True
+
+
+def test_api_project_current_empty_initially(service_binding):
+    cur = engine_api.api_project_current()
+    assert cur["ok"] is False
+    assert cur["projectFile"] is None
+
+
+def test_api_project_open_loads_validation(service_binding, tmp_path):
+    # 准备一个 project.yaml（内含 sources 但 sources 路径不存在）
+    # 我们用 mock：实际 inspect 会因 file 不存在而失败，所以这里只测 open 逻辑对失败有清晰错误
+    project_file = tmp_path / "project.yaml"
+    project_file.write_text(
+        "version: 1\nid: p1\nname: T\nsources:\n  - id: s1\n    name: a.yaml\n    file: sources/a.yaml\n    replicas: 1\n",
+        encoding="utf-8",
+    )
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir()
+    (sources_dir / "a.yaml").write_text(
+        "clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n",
+        encoding="utf-8",
+    )
+    r = engine_api.api_project_open(
+        engine_api.ProjectOpenRequest(projectFile=str(project_file))
+    )
+    assert r["ok"] is True
+    assert r["projectFile"] == str(project_file)
+    assert r["projectName"] == "T"
+    assert r["validation"]["ok"] is True
+    assert len(r["validation"]["instances"]) == 1
+
+
+def test_api_project_open_rejects_when_engine_running(service_binding, tmp_path):
+    project_file = tmp_path / "project.yaml"
+    project_file.write_text("version: 1\nid: p1\nname: T\nsources: []\n", encoding="utf-8")
+    # 模拟 Engine 运行中
+    engine_api.set_runtime_state(service_binding, engine_api.RUNTIME_STATE_RUNNING)
+    with pytest.raises(Exception):
+        engine_api.api_project_open(
+            engine_api.ProjectOpenRequest(projectFile=str(project_file))
+        )
+
+
+def test_api_project_inspect_uses_compiler_in_process(service_binding, tmp_path):
+    """inspect 进程内调用 realtime_config_compiler.validate_sources（不启动子进程）。"""
+    project_file = tmp_path / "project.yaml"
+    project_file.write_text("version: 1\nid: p1\nname: T\nsources: []\n", encoding="utf-8")
+    r = engine_api.api_project_inspect(engine_api.ProjectInspectRequest(projectFile=str(project_file)))
+    assert r["ok"] is True
+    assert r["valid"] is True
+
+
+def test_api_project_compile_writes_merged_yaml(service_binding, tmp_path):
+    """compile 进程内调用 compile_project_to_file。"""
+    project_file = tmp_path / "project.yaml"
+    project_file.write_text("version: 1\nid: p1\nname: T\nsources: []\n", encoding="utf-8")
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir()
+    (sources_dir / "a.yaml").write_text(
+        "clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "compiled.yaml"
+    r = engine_api.api_project_compile(
+        engine_api.ProjectCompileRequest(
+            sources=[{"id": "s1", "file": str(sources_dir / "a.yaml"), "replicas": 1}],
+            output=str(out),
+        )
+    )
+    assert r["ok"] is True
+    assert out.exists()
+    text = out.read_text(encoding="utf-8")
+    assert "a" in text or "Variable" in text
+
+
+def test_api_project_close_clears_context(service_binding, tmp_path):
+    project_file = tmp_path / "project.yaml"
+    project_file.write_text("version: 1\nid: p1\nname: T\nsources: []\n", encoding="utf-8")
+    engine_api.api_project_open(engine_api.ProjectOpenRequest(projectFile=str(project_file)))
+    r = engine_api.api_project_close()
+    assert r["ok"] is True
+    assert engine_api.api_project_current()["ok"] is False
+
+
+def test_api_runtime_stop_noop_when_already_stopped(service_binding):
+    r = engine_api.api_runtime_stop()
+    assert r["ok"] is True
+    assert r["runtimeState"] == "stopped"
+
+
+def test_api_export_convert_csv(tmp_path):
+    """export/convert 进程内调用现有 TemplateManager + CSVExporter。"""
+    from components.export_templates import TemplateManager
+
+    out = tmp_path / "out.csv"
+    r = engine_api.api_export_convert(
+        engine_api.ExportConvertRequest(
+            columns=["a", "b"],
+            rows=[{"a": 1.0, "b": 2.0, "_sim_time": 0.0, "_need_sample": True}],
+            exportPath=str(out),
+            format="csv",
+        )
+    )
+    assert r["ok"] is True
+    assert out.exists()

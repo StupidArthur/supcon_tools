@@ -177,6 +177,10 @@ class EngineBinding:
         保证 cycle_count/sim_time 与真实 Engine 推进一致。
       - ``snapshot_buffer`` 保留最近 N 个周期供 export。
       - ``_batches`` 维护原子写 pending/applied/failed 生命周期。
+      - service_state / runtime_state 分离（todo.md §4.2）：
+        * service_state: starting/ready/stopping/failed — 后台服务本身
+        * runtime_state: stopped/starting/running/stopping/failed — 实时运行 Engine
+        * 后台服务 ready 不等于运行中
     """
 
     instance_name: str
@@ -198,6 +202,20 @@ class EngineBinding:
     quality_manager: Any = None
     alarm_manager: Any = None
     archiver: Any = None
+
+    # ---- service / runtime 状态分离（todo.md §4.2）----
+    service_state: str = "starting"   # starting/ready/stopping/failed
+    runtime_state: str = "stopped"    # stopped/starting/running/stopping/failed
+    _state_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    # ---- 工程上下文（todo.md §4.4）----
+    project_file: Optional[str] = None
+    project_dir: Optional[str] = None
+    project_name: Optional[str] = None
+    project_validation: Optional[Dict[str, Any]] = None  # 最近一次 inspect 结果
+
+    # ---- 关闭信号（todo.md §4.3 /api/service/shutdown）----
+    _shutdown_event: threading.Event = field(default_factory=threading.Event)
 
     def push_snapshot(self, snapshot: Dict[str, Any]) -> None:
         """由 standalone_main 的引擎线程每周期调用一次。
@@ -367,9 +385,88 @@ def set_api_token(token: Optional[str]) -> None:
     _api_token = token
 
 
+def current_api_token() -> Optional[str]:
+    """返回当前 API Token（仅 service mode 下使用）。
+
+    todo.md §7.3：Token 不暴露给前端，但服务端模块内部需要访问以清理状态。
+    """
+    return _api_token
+
+
 def _auth_disabled() -> bool:
     # 明确的开发测试开关下允许无 token 模式。
     return os.environ.get("DATAFACTORY_NO_AUTH") == "1"
+
+
+# --------------------------------------------------------------------------- #
+# service / runtime 状态辅助（todo.md §4.2）                                     #
+# --------------------------------------------------------------------------- #
+
+SERVICE_STATE_STARTING = "starting"
+SERVICE_STATE_READY = "ready"
+SERVICE_STATE_STOPPING = "stopping"
+SERVICE_STATE_FAILED = "failed"
+
+RUNTIME_STATE_STOPPED = "stopped"
+RUNTIME_STATE_STARTING = "starting"
+RUNTIME_STATE_RUNNING = "running"
+RUNTIME_STATE_STOPPING = "stopping"
+RUNTIME_STATE_FAILED = "failed"
+
+
+def set_service_state(b: "EngineBinding", state: str) -> None:
+    with b._state_lock:
+        b.service_state = state
+
+
+def set_runtime_state(b: "EngineBinding", state: str) -> None:
+    with b._state_lock:
+        b.runtime_state = state
+
+
+def get_states(b: "EngineBinding") -> Dict[str, str]:
+    with b._state_lock:
+        return {"serviceState": b.service_state, "runtimeState": b.runtime_state}
+
+
+def request_service_shutdown(b: "EngineBinding") -> None:
+    """标记服务请求关闭。uvicorn 主循环应在每次请求后检查该标志。"""
+    b._shutdown_event.set()
+
+
+def shutdown_requested(b: "EngineBinding") -> bool:
+    return b._shutdown_event.is_set()
+
+
+def clear_project_context(b: "EngineBinding") -> None:
+    """清空当前工程上下文（不触碰 Engine / force / quality）。"""
+    b.project_file = None
+    b.project_dir = None
+    b.project_name = None
+    b.project_validation = None
+
+
+def set_project_context(
+    b: "EngineBinding",
+    project_file: str,
+    project_name: str,
+    validation: Optional[Dict[str, Any]] = None,
+) -> None:
+    b.project_file = project_file
+    b.project_name = project_name
+    b.project_dir = os.path.dirname(project_file)
+    b.project_validation = validation
+
+
+def validate_requested_token(req_token: Optional[str]) -> bool:
+    """校验请求 Token 是否匹配当前服务 Token（None 表示未启用认证）。"""
+    expected = current_api_token()
+    if expected is None or expected == "":
+        return True
+    if req_token is None or req_token == "":
+        # Authorization 头里的 Bearer token
+        return False
+    return req_token == expected
 
 
 @app.middleware("http")
@@ -454,6 +551,539 @@ def api_status() -> StatusResponse:
         safe_state=safe_state,
         consecutive_failures=consecutive_failures,
     )
+
+
+# --------------------------------------------------------------------------- #
+# todo.md §4.3：service / runtime 状态                                           #
+# --------------------------------------------------------------------------- #
+
+SERVICE_PROTOCOL_VERSION = 1
+
+
+@app.get("/api/health")
+def api_health() -> Dict[str, Any]:
+    """服务健康探测（todo.md §4.3）。
+
+    Engine 未启动时也必须返回 200，用于 Go 端服务管理器等待 health 就绪。
+    """
+    b = get_binding()
+    states = get_states(b)
+    return {
+        "ok": True,
+        "protocolVersion": SERVICE_PROTOCOL_VERSION,
+        "serviceState": states["serviceState"],
+        "runtimeState": states["runtimeState"],
+        "instanceName": b.instance_name,
+    }
+
+
+class ShutdownRequest(BaseModel):
+    reason: Optional[str] = Field(default="client-request")
+
+
+@app.post("/api/service/shutdown")
+def api_service_shutdown(req: ShutdownRequest) -> Dict[str, Any]:
+    """请求后台服务优雅关闭（todo.md §4.3）。
+
+    行为：
+      1. 若 Engine 正在运行，先请求 runtime stop；
+      2. 标记 service_state = stopping；
+      3. 设置 _shutdown_event，uvicorn 主循环在下一次请求后退出。
+    """
+    b = get_binding()
+    # 若 Engine 正在运行，标记 runtime 为 stopping（不直接 stop，
+    # 让前端可见过渡状态；uvicorn 退出时由 cleanup 强制回收）
+    with b._state_lock:
+        if b.runtime_state == RUNTIME_STATE_RUNNING:
+            b.runtime_state = RUNTIME_STATE_STOPPING
+        b.service_state = SERVICE_STATE_STOPPING
+    request_service_shutdown(b)
+    logger.info("service shutdown requested: %s", req.reason or "client-request")
+    return {"ok": True, "serviceState": b.service_state, "runtimeState": b.runtime_state}
+
+
+# --------------------------------------------------------------------------- #
+# todo.md §4.4：工程上下文同步                                                   #
+# --------------------------------------------------------------------------- #
+
+class ProjectOpenRequest(BaseModel):
+    projectFile: str = Field(..., description="project.yaml 绝对路径")
+
+
+class ProjectReloadRequest(BaseModel):
+    projectFile: Optional[str] = Field(default=None, description="不传则 reload 当前")
+
+
+def _load_project_yaml_for_service(project_file: str) -> Dict[str, Any]:
+    """从 project.yaml 读取工程元信息（不创建 Engine）。"""
+    import yaml as _yaml
+
+    if not os.path.isfile(project_file):
+        raise HTTPException(status_code=404, detail=f"工程文件不存在: {project_file}")
+    try:
+        with open(project_file, "r", encoding="utf-8") as f:
+            data = _yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"解析 project.yaml 失败: {e}")
+    return data
+
+
+def _inspect_project_sources(project_file: str, source_overrides: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """调用 realtime_config_compiler 校验（进程内，无 subprocess）。
+
+    todo.md §5.1：服务内部调用现有 inspect / validate / compile，
+    不再 exec.CommandContext。
+    """
+    from controller.realtime_config_compiler import SourceSpec, validate_sources
+
+    project_dir = os.path.dirname(project_file)
+    if source_overrides is None:
+        project = _load_project_yaml_for_service(project_file)
+        sources_raw = project.get("sources") or []
+    else:
+        sources_raw = source_overrides
+    specs = []
+    for item in sources_raw:
+        sid = item.get("id", "")
+        sfile = item.get("file", "")
+        if not sid or not sfile:
+            raise HTTPException(status_code=400, detail=f"source 缺少 id 或 file: {item}")
+        # file 可能是工程内相对路径；与工程目录拼接得到绝对路径
+        abs_path = sfile if os.path.isabs(sfile) else os.path.join(project_dir, sfile)
+        replicas = int(item.get("replicas", 1))
+        specs.append(SourceSpec(source_id=sid, source_file=abs_path, replicas=replicas))
+    try:
+        result = validate_sources(specs)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"校验失败: {e}")
+    return {
+        "ok": True,
+        "valid": result.valid,
+        "instances": [
+            {
+                "name": inst.name,
+                "sourceId": inst.source_id,
+                "sourceFile": inst.source_file,
+                "replicaIndex": inst.replica_index,
+                "originalName": inst.original_name,
+            }
+            for inst in result.instances
+        ],
+        "duplicates": [
+            {
+                "name": dup.name,
+                "occurrences": [
+                    {
+                        "sourceId": occ.source_id,
+                        "sourceFile": occ.source_file,
+                        "replicaIndex": occ.replica_index,
+                        "originalName": occ.original_name,
+                    }
+                    for occ in dup.occurrences
+                ],
+            }
+            for dup in result.duplicates
+        ],
+    }
+
+
+@app.post("/api/project/open")
+def api_project_open(req: ProjectOpenRequest) -> Dict[str, Any]:
+    """打开工程上下文（仅加载 YAML，不创建 Engine）。
+
+    todo.md §4.4：Go 端完成新建/打开/添加 YAML/移除 YAML/修改副本数或 runtime 后
+    通知服务重新加载；工程文件是事实来源。
+    """
+    b = get_binding()
+    if b.runtime_state == RUNTIME_STATE_RUNNING:
+        raise HTTPException(status_code=409, detail="Engine 运行中无法切换工程，请先停止运行")
+    if not req.projectFile:
+        raise HTTPException(status_code=400, detail="projectFile 不能为空")
+    try:
+        validation = _inspect_project_sources(req.projectFile)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"打开工程失败: {e}")
+    project = _load_project_yaml_for_service(req.projectFile)
+    set_project_context(
+        b,
+        project_file=req.projectFile,
+        project_name=str(project.get("name") or os.path.basename(os.path.dirname(req.projectFile))),
+        validation=validation,
+    )
+    return {
+        "ok": True,
+        "projectFile": b.project_file,
+        "projectName": b.project_name,
+        "validation": validation,
+    }
+
+
+@app.post("/api/project/reload")
+def api_project_reload(req: ProjectReloadRequest) -> Dict[str, Any]:
+    """重载工程上下文（Go 端修改 project.yaml 后调用）。"""
+    b = get_binding()
+    target = req.projectFile or b.project_file
+    if not target:
+        raise HTTPException(status_code=400, detail="没有当前工程，且未提供 projectFile")
+    if b.runtime_state == RUNTIME_STATE_RUNNING:
+        raise HTTPException(status_code=409, detail="Engine 运行中无法 reload，请先停止运行")
+    try:
+        validation = _inspect_project_sources(target)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"reload 失败: {e}")
+    project = _load_project_yaml_for_service(target)
+    set_project_context(
+        b,
+        project_file=target,
+        project_name=str(project.get("name") or os.path.basename(os.path.dirname(target))),
+        validation=validation,
+    )
+    return {"ok": True, "projectFile": target, "validation": validation}
+
+
+@app.post("/api/project/close")
+def api_project_close() -> Dict[str, Any]:
+    """清空当前工程上下文。"""
+    b = get_binding()
+    if b.runtime_state == RUNTIME_STATE_RUNNING:
+        raise HTTPException(status_code=409, detail="Engine 运行中无法关闭工程，请先停止运行")
+    clear_project_context(b)
+    return {"ok": True}
+
+
+@app.get("/api/project/current")
+def api_project_current() -> Dict[str, Any]:
+    """返回当前工程上下文（无工程时 ok=false）。"""
+    b = get_binding()
+    if not b.project_file:
+        return {"ok": False, "projectFile": None, "validation": None}
+    return {
+        "ok": True,
+        "projectFile": b.project_file,
+        "projectName": b.project_name,
+        "validation": b.project_validation,
+    }
+
+
+class ProjectInspectRequest(BaseModel):
+    sources: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="不传则使用工程文件中的 sources"
+    )
+    projectFile: Optional[str] = Field(default=None, description="工程文件路径")
+
+
+@app.post("/api/project/inspect")
+def api_project_inspect(req: ProjectInspectRequest) -> Dict[str, Any]:
+    """进程内 inspect（todo.md §5.1）。"""
+    b = get_binding()
+    target = req.projectFile or b.project_file
+    if not target:
+        raise HTTPException(status_code=400, detail="没有指定 projectFile 且未打开工程")
+    try:
+        return _inspect_project_sources(target, req.sources)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"inspect 失败: {e}")
+
+
+class ProjectCompileRequest(BaseModel):
+    sources: List[Dict[str, Any]] = Field(..., description="[{id, file, replicas}]")
+    output: str = Field(..., description="合并后的 YAML 绝对路径")
+
+
+@app.post("/api/project/compile")
+def api_project_compile(req: ProjectCompileRequest) -> Dict[str, Any]:
+    """进程内 compile（todo.md §5.2）。"""
+    from controller.realtime_config_compiler import SourceSpec, compile_project_to_file
+
+    specs = []
+    for item in req.sources:
+        sid = item.get("id", "")
+        sfile = item.get("file", "")
+        if not sid or not sfile:
+            raise HTTPException(status_code=400, detail=f"source 缺少 id 或 file: {item}")
+        specs.append(SourceSpec(
+            source_id=sid,
+            source_file=sfile,
+            replicas=int(item.get("replicas", 1)),
+        ))
+    try:
+        out_path = compile_project_to_file(specs, req.output)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"compile 失败: {e}")
+    return {"ok": True, "output": out_path}
+
+
+# --------------------------------------------------------------------------- #
+# todo.md §4.3 + §6：runtime 生命周期                                            #
+# --------------------------------------------------------------------------- #
+
+class RuntimeStartRequest(BaseModel):
+    configPath: str = Field(..., description="合并后的 config YAML 绝对路径")
+    runtimeName: str = Field(default="default")
+    cycleTime: float = Field(default=0.5)
+    opcUaHost: str = Field(default="0.0.0.0")
+    opcUaPort: int = Field(default=18951)
+
+
+def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
+    """进程内启动 Engine + OPC UA（todo.md §6.1）。
+
+    不创建新子进程；Engine 与 OPC UA 都在当前服务进程内。
+    """
+    from controller.engine import UnifiedEngine
+    from controller.parser import DSLParser
+    from controller.clock import ClockMode
+
+    b = get_binding()
+    with b._state_lock:
+        if b.runtime_state != RUNTIME_STATE_STOPPED and b.runtime_state != RUNTIME_STATE_FAILED:
+            raise HTTPException(
+                status_code=409,
+                detail=f"当前运行状态 {b.runtime_state} 不允许启动；请先调用 /api/runtime/stop",
+            )
+        b.runtime_state = RUNTIME_STATE_STARTING
+
+    if not os.path.isfile(req.configPath):
+        with b._state_lock:
+            b.runtime_state = RUNTIME_STATE_FAILED
+        raise HTTPException(status_code=404, detail=f"config 文件不存在: {req.configPath}")
+
+    try:
+        parser = DSLParser()
+        config = parser.parse_file(req.configPath)
+        if req.cycleTime > 0:
+            config.clock.cycle_time = req.cycleTime
+        # 默认 REALTIME 模式
+        config.clock.mode = ClockMode.REALTIME
+        engine = UnifiedEngine.from_program_config(config)
+        engine_holder: Dict[str, Any] = {"engine": engine}
+        # 共享数据 / 命令队列
+        shared_data: Dict[str, float] = {}
+        cmd_queue: queue.Queue = queue.Queue()
+
+        # force / quality manager
+        from datacenter.force_manager import ForceManager
+        from datacenter.quality_manager import QualityManager
+        force_manager = ForceManager()
+        quality_manager = QualityManager()
+
+        # engine thread
+        stop_event = threading.Event()
+        from typing import Any as _Any
+
+        def _on_snapshot(snap: Dict[str, Any]) -> None:
+            b.push_snapshot(snap)
+
+        def _engine_thread_main():
+            try:
+                # 与 standalone_main.run_engine_thread 一致：先解析后启动 engine
+                engine.clock.start()
+                while not stop_event.is_set():
+                    while not cmd_queue.empty():
+                        try:
+                            cmd = cmd_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        engine.override_variable(cmd["tag"], cmd["value"])
+                    snap = engine.step()
+                    for k, v in snap.items():
+                        if k not in (
+                            "cycle_count",
+                            "need_sample",
+                            "time_str",
+                            "sim_time",
+                            "exec_ratio",
+                        ):
+                            shared_data[k] = v
+                    if b.alarm_manager is not None:
+                        try:
+                            b.alarm_manager.evaluate(snap)
+                        except Exception:
+                            pass
+                    _on_snapshot(snap)
+            except Exception:
+                logger.exception("engine thread crashed")
+            finally:
+                engine.clock.stop()
+
+        # OPC UA server
+        from datacenter.opcua_server import OPCUAServerConfig, StandaloneOpcuaServer
+
+        opcua_config = OPCUAServerConfig(
+            server_url=f"opc.tcp://{req.opcUaHost}:{req.opcUaPort}",
+            update_cycle=0.1,
+            enable_write=True,
+        )
+        opcua_server = StandaloneOpcuaServer(
+            config=opcua_config,
+            shared_data=shared_data,
+            cmd_queue=cmd_queue,
+            force_manager=force_manager,
+            quality_manager=quality_manager,
+        )
+        opcua_server.start()
+        if not opcua_server.wait_ready(timeout=5.0):
+            opcua_server.stop()
+            raise HTTPException(status_code=503, detail=f"OPC UA 未在 5s 内就绪: {req.opcUaHost}:{req.opcUaPort}")
+
+        engine_thread = threading.Thread(
+            target=_engine_thread_main,
+            daemon=True,
+            name=f"EngineThread-{req.runtimeName}",
+        )
+        engine_thread.start()
+
+        # 绑定到 EngineBinding
+        b.engine = engine
+        b.engine_holder = engine_holder  # type: ignore[attr-defined]
+        b.shared_data = shared_data
+        b.force_manager = force_manager
+        b.quality_manager = quality_manager
+        b.opcua_server = opcua_server  # type: ignore[attr-defined]
+        b.engine_thread = engine_thread  # type: ignore[attr-defined]
+        b.engine_stop_event = stop_event  # type: ignore[attr-defined]
+
+        with b._state_lock:
+            b.runtime_state = RUNTIME_STATE_RUNNING
+        return {
+            "ok": True,
+            "runtimeState": b.runtime_state,
+            "cycleTime": req.cycleTime,
+            "opcUaHost": req.opcUaHost,
+            "opcUaPort": req.opcUaPort,
+            "runtimeName": req.runtimeName,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("start runtime failed")
+        with b._state_lock:
+            b.runtime_state = RUNTIME_STATE_FAILED
+        raise HTTPException(status_code=500, detail=f"启动运行失败: {e}")
+
+
+@app.post("/api/runtime/start")
+def api_runtime_start(req: RuntimeStartRequest) -> Dict[str, Any]:
+    return _start_runtime_internal(req)
+
+
+@app.get("/api/runtime/status")
+def api_runtime_status() -> Dict[str, Any]:
+    b = get_binding()
+    with b._state_lock:
+        return {
+            "ok": True,
+            "runtimeState": b.runtime_state,
+            "serviceState": b.service_state,
+        }
+
+
+@app.post("/api/runtime/stop")
+def api_runtime_stop() -> Dict[str, Any]:
+    """进程内停止 Engine + OPC UA（todo.md §6.2）。不停止 DataFactoryService。"""
+    b = get_binding()
+    with b._state_lock:
+        if b.runtime_state in (RUNTIME_STATE_STOPPED, RUNTIME_STATE_FAILED):
+            return {"ok": True, "runtimeState": b.runtime_state, "noop": True}
+        b.runtime_state = RUNTIME_STATE_STOPPING
+    # OPC UA 先停（依赖 force/quality state）；Engine 线程设置 stop_event 让循环退出
+    try:
+        opcua = getattr(b, "opcua_server", None)
+        if opcua is not None:
+            try:
+                opcua.stop()
+            except Exception:
+                logger.exception("opcua stop error")
+        stop_event = getattr(b, "engine_stop_event", None)
+        if stop_event is not None:
+            stop_event.set()
+        thread = getattr(b, "engine_thread", None)
+        if thread is not None:
+            thread.join(timeout=2.0)
+    finally:
+        with b._state_lock:
+            b.runtime_state = RUNTIME_STATE_STOPPED
+        # force / quality / archiver 状态保持运行期，不随 stop 清空（这是会话内临时状态）
+    return {"ok": True, "runtimeState": b.runtime_state}
+
+
+# --------------------------------------------------------------------------- #
+# todo.md §5.3 + §5.4：batch / export 进程内（不创建子进程）                       #
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/batch/run")
+def api_batch_run() -> Dict[str, Any]:
+    """预留：batch 跑在已 compile 的工程文件 + cycles。
+
+    当前实现先 reject：真实迁移留到下一阶段（todo.md §5.3 要求抽取 --batch 主流程
+    为进程内函数 + 多处并发约束）。这里只标记 runtime 是否就绪。
+    """
+    b = get_binding()
+    with b._state_lock:
+        if b.runtime_state == RUNTIME_STATE_RUNNING:
+            raise HTTPException(status_code=409, detail="实时运行中，禁止批量任务")
+    if not b.project_file:
+        raise HTTPException(status_code=400, detail="未打开工程，无法批量仿真")
+    raise HTTPException(
+        status_code=501,
+        detail="batch_run 计划在后续阶段实现；当前请通过 Go 端 SystemBinding.RunBatch 调用",
+    )
+
+
+class ExportConvertRequest(BaseModel):
+    columns: List[str] = Field(..., description="列名列表")
+    rows: List[Dict[str, Any]] = Field(..., description="行数据")
+    exportPath: str = Field(..., description="输出文件路径")
+    format: str = Field(default="csv", description="csv / xlsx")
+    sheetName: Optional[str] = Field(default="控制器")
+
+
+@app.post("/api/export/convert")
+def api_export_convert(req: ExportConvertRequest) -> Dict[str, Any]:
+    """todo.md §5.4：格式化导出进程内函数化。"""
+    if req.format not in ("csv", "xlsx"):
+        raise HTTPException(status_code=400, detail=f"不支持的格式: {req.format}")
+    try:
+        # 与 standalone_main._write_rows_export 行为一致：
+        # 1) 先 _rows_to_export_snapshots 把 _need_sample 转 need_sample
+        # 2) 再用 TemplateManager + Exporter 写文件
+        # 否则 exporter 的 _filter_snapshots 会把所有 _need_sample=True 的行都过滤掉。
+        from standalone_main import _rows_to_export_snapshots
+        snapshots, clean_columns = _rows_to_export_snapshots(req.rows, req.columns)
+        from components.export_templates import CSVExporter, ExcelExporter, TemplateManager
+
+        template = TemplateManager().load_template("prediction")
+        if req.format == "csv":
+            exporter = CSVExporter(template)
+            exporter.export(snapshots, req.exportPath, column_keys=clean_columns)
+        else:
+            exporter = ExcelExporter(
+                template,
+                file_format="xlsx",
+                sheet_name=req.sheet_name or template.sheet_name,
+            )
+            exporter.export(snapshots, req.exportPath, column_keys=clean_columns)
+        return {
+            "ok": True,
+            "path": req.exportPath,
+            "rows": len(snapshots),
+            "format": req.format,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("export convert failed")
+        raise HTTPException(status_code=500, detail=f"export 失败: {e}")
 
 
 @app.get("/api/instances/{name}/meta")
