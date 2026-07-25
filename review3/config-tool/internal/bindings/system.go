@@ -153,6 +153,16 @@ type SystemBinding struct {
 	// 不被 stopMu 包住，真正验证 attemptTermination 不并发。
 	// 生产代码不要设置此字段。
 	terminateAttemptHook func(enter bool)
+
+	// todo.md §14：服务客户端（由 Container 注入）
+	serviceClient *DataFactoryServiceClient
+}
+
+// SetServiceClient 注入服务客户端（todo.md §14）。
+func (b *SystemBinding) SetServiceClient(client *DataFactoryServiceClient) {
+	b.mu.Lock()
+	b.serviceClient = client
+	b.mu.Unlock()
 }
 
 // NewSystemBinding 创建系统绑定
@@ -1144,11 +1154,55 @@ func (b *SystemBinding) SaveExportFile(format string) (string, error) {
 
 // RunBatch 运行批量仿真
 func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, error) {
-	if err := b.ensureDataFactory(); err != nil {
-		return BatchResult{}, err
-	}
 	if cycles <= 0 {
 		return BatchResult{}, fmt.Errorf("周期数必须大于 0")
+	}
+
+	// todo.md §11.5：优先使用服务 API
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+
+	if client != nil {
+		return b.runBatchViaService(client, configPath, cycles)
+	}
+
+	// 降级：旧子进程模式（兼容测试）
+	return b.runBatchViaSubprocess(configPath, cycles)
+}
+
+// runBatchViaService 通过服务 API 执行 batch（todo.md §11.5）。
+func (b *SystemBinding) runBatchViaService(client *DataFactoryServiceClient, configPath string, cycles int) (BatchResult, error) {
+	req := map[string]any{
+		"configPath": configPath,
+		"cycles":     cycles,
+	}
+	var resp struct {
+		OK             bool                `json:"ok"`
+		Columns        []string            `json:"columns"`
+		Rows           []map[string]any    `json:"rows"`
+		DisplayColumns []string            `json:"displayColumns"`
+		PlotScales     map[string]float64  `json:"plotScales"`
+		Cycles         int                 `json:"cycles"`
+	}
+	if err := client.DoJSON(b.ctx, "POST", "/api/batch/run", req, &resp); err != nil {
+		return BatchResult{}, fmt.Errorf("服务 batch 失败: %w", err)
+	}
+	if !resp.OK {
+		return BatchResult{}, fmt.Errorf("服务 batch 返回 ok=false")
+	}
+	return BatchResult{
+		Columns:        resp.Columns,
+		Rows:           resp.Rows,
+		DisplayColumns: resp.DisplayColumns,
+		PlotScales:     resp.PlotScales,
+	}, nil
+}
+
+// runBatchViaSubprocess 旧子进程模式（兼容测试）。
+func (b *SystemBinding) runBatchViaSubprocess(configPath string, cycles int) (BatchResult, error) {
+	if err := b.ensureDataFactory(); err != nil {
+		return BatchResult{}, err
 	}
 	if err := b.beginBatch(); err != nil {
 		return BatchResult{}, err
