@@ -89,4 +89,19 @@ describe('flattenOpenedProject', () => {
     expect(Array.isArray(flat.sources)).toBe(true)
     expect(flat.sources.length).toBe(0)
   })
+
+  it('addSource 返回的 OpenedProjectView.project 也能被扁平化（嵌套层级一致）', () => {
+    // addSourceAt / removeSourceAt / updateReplicasAt 返回 OpenedProjectView
+    //   { applied, project: OpenedProject, validation }
+    // 取 view.project 传给 flattenOpenedProject，效果应与直接给 OpenedProject 相同
+    const view = {
+      applied: true,
+      project: openedSample,
+      validation: { valid: true, instances: [], duplicates: [] },
+    } as any
+    const proj = flattenOpenedProject(view.project)
+    expect(proj.sources).toBeDefined()
+    expect(Array.isArray(proj.sources)).toBe(true)
+    expect(proj.id).toBe('proj-1')
+  })
 })

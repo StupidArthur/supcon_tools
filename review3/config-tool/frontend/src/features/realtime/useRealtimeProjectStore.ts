@@ -173,6 +173,9 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
         set({ loading: false })
         return
       }
+      // 后端返回 OpenedProjectView：{ applied, project: OpenedProject, validation }
+      // OpenedProject 仍是嵌套 { project: Project, projectFile, projectDir }
+      // 必须 flattenOpenedProject 才能让 currentProject.sources / runtime 可访问
       const view = (await realtimeProjectApi.addSourceAt(projectId, projectFile, yamlPath)) as any
       if (!view || !view.project) {
         set({ loading: false })
@@ -185,9 +188,10 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
         })
         return
       }
+      const proj = flattenOpenedProject(view.project)
       set({
-        currentProject: { ...view.project, projectFile: view.project.projectFile || projectFile },
-        currentProjectFile: view.project.projectFile || projectFile,
+        currentProject: proj,
+        currentProjectFile: proj.projectFile || projectFile,
         instances: view.validation?.instances || [],
         duplicates: [],
         loading: false,
@@ -201,9 +205,10 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
     set({ loading: true, error: null })
     try {
       const view = (await realtimeProjectApi.removeSourceAt(projectId, projectFile, sourceId)) as any
+      const proj = flattenOpenedProject(view.project)
       set({
-        currentProject: { ...view.project, projectFile: view.project.projectFile || projectFile },
-        currentProjectFile: view.project.projectFile || projectFile,
+        currentProject: proj,
+        currentProjectFile: proj.projectFile || projectFile,
         instances: view.validation?.instances || [],
         duplicates: [],
         loading: false,
@@ -224,9 +229,10 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
         })
         return false
       }
+      const proj = flattenOpenedProject(view.project)
       set({
-        currentProject: { ...view.project, projectFile: view.project.projectFile || projectFile },
-        currentProjectFile: view.project.projectFile || projectFile,
+        currentProject: proj,
+        currentProjectFile: proj.projectFile || projectFile,
         instances: view.validation?.instances || [],
         duplicates: [],
         loading: false,
@@ -240,9 +246,10 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
 
   updateRuntime: async (projectId, projectFile, rt) => {
     try {
-      const proj = (await realtimeProjectApi.updateRuntime(projectId, projectFile, rt)) as unknown as ProjectView
+      const opened = await realtimeProjectApi.updateRuntime(projectId, projectFile, rt)
+      const proj = flattenOpenedProject(opened)
       set({
-        currentProject: { ...proj, projectFile: proj.projectFile || projectFile },
+        currentProject: proj,
         currentProjectFile: proj.projectFile || projectFile,
       })
     } catch (e: any) {
