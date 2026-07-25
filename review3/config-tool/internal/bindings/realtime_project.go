@@ -318,11 +318,12 @@ func ResolveRealtimeProjectsDir() (string, error) {
 
 // ChooseProjectFile 打开文件选择器，让用户选择 project.yaml。
 // 文件选择器默认进入 <EXE 同级目录>/project/（设计文档 §三 路径统一规则）。
+// 打开前再次调用 EnsureAppWorkspaceDirs 兜底，确保目录存在。
 func (b *RealtimeProjectBinding) ChooseProjectFile() (string, error) {
 	if b.ctx == nil {
 		return "", fmt.Errorf("wails context 未注入")
 	}
-	defaultDir, _ := ResolveProjectsRootDir()
+	defaultDir := mustDefaultDirForChoose(ResolveProjectsRootDir)
 	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
 		Title:            "选择 project.yaml",
 		DefaultDirectory: defaultDir,
@@ -355,11 +356,12 @@ func (b *RealtimeProjectBinding) ChooseSourceYAML() (string, error) {
 
 // ChooseYamlForDsl 打开 YAML 文件选择器，默认进入 <EXE 同级目录>/template/。
 // 用于组态调试首页"打开 YML"按钮（设计文档 §一.1）。
+// 打开前再次调用 EnsureAppWorkspaceDirs 兜底，确保目录存在。
 func (b *RealtimeProjectBinding) ChooseYamlForDsl() (string, error) {
 	if b.ctx == nil {
 		return "", fmt.Errorf("wails context 未注入")
 	}
-	defaultDir, _ := ResolveTemplateDir()
+	defaultDir := mustDefaultDirForChoose(ResolveTemplateDir)
 	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
 		Title:            "打开 YML",
 		DefaultDirectory: defaultDir,
@@ -371,6 +373,24 @@ func (b *RealtimeProjectBinding) ChooseYamlForDsl() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// mustDefaultDirForChoose 在显示文件选择器前确保默认目录存在。
+// 优先调用 EnsureAppWorkspaceDirs（一次创建 project/ + template/），
+// 失败时退回单目录 EnsureXxxDir，确保 Wails 拿到一个真实存在的路径。
+func mustDefaultDirForChoose(resolve func() (string, error)) string {
+	if _, err := EnsureAppWorkspaceDirs(); err == nil {
+		if p, err := resolve(); err == nil {
+			return p
+		}
+	}
+	// 兜底：单目录创建
+	if p, err := resolve(); err == nil {
+		if err := os.MkdirAll(p, 0o755); err == nil {
+			return p
+		}
+	}
+	return "" // Wails 收到空路径时使用上次目录或默认目录
 }
 
 // SetQuality 写入 OPC UA 质量码覆盖。
