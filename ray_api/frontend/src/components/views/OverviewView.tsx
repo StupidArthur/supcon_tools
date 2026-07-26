@@ -12,10 +12,11 @@ interface OverviewData {
 }
 
 export function OverviewView({ data, perf }: { data: OverviewData | null; perf: PerfMetrics | null }) {
-  if (!data) {
+  const nodes = data?.nodes ?? []
+  if (!data || nodes.length === 0) {
     return <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">暂无数据，请点击右上角“开始采集”</div>
   }
-  const { cluster, nodes } = data
+  const { cluster } = data
 
   // 实际占用（硬件视角）：汇总各节点
   const cpuUsedReal = nodes.reduce((s, n) => s + (n.cpu || 0), 0)
