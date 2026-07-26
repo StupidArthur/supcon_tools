@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act } from '@testing-library/react'
 import { useRuntimeStore } from './useRuntimeStore'
 import { computeStaleThresholdMs } from './dataSelection'
 
@@ -226,5 +227,131 @@ describe('useRuntimeStore', () => {
     expect(useRuntimeStore.getState().subscriptionSources.trend).toEqual(['pid2.SV'])
     // tagTable 不应被更新（因超过上限抛错）
     expect(useRuntimeStore.getState().subscriptionSources.tagTable).toBeUndefined()
+  })
+
+  // ———— §四.2 connect/disconnect 状态清洁测试 ————
+  // 用一个永不 resolve 的 status 模拟 connect 进行中
+  function pendingFetch(): ReturnType<typeof vi.fn> {
+    return vi.fn().mockReturnValue(new Promise(() => {}))
+  }
+
+  it('E: connect 开始清理旧 runtimeName / tagCatalog / lastError', async () => {
+    // 先写入旧数据
+    act(() =>
+      useRuntimeStore.setState({
+        runtimeName: 'old-runtime',
+        tagCatalog: [{ name: 'pid1.PV', instance: 'pid1' }] as any,
+        lastError: 'old error',
+        connectionState: 'connected',
+      }),
+    )
+    expect(useRuntimeStore.getState().runtimeName).toBe('old-runtime')
+    expect(useRuntimeStore.getState().tagCatalog.length).toBe(1)
+
+    // 用永不 resolve 的 status 让 connect 阻塞在第一个 await
+    vi.stubGlobal('fetch', pendingFetch())
+    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000)
+
+    // 启动 connect（不 await，因为它会永远 pending）
+    const connectPromise = useRuntimeStore.getState().connect()
+
+    // 让 microtask 跑一会儿 — generation 已被递增、状态已清空
+    await new Promise((r) => setTimeout(r, 30))
+
+    const s = useRuntimeStore.getState()
+    expect(s.connectionState).toBe('connecting')
+    expect(s.runtimeName).toBeNull()
+    expect(s.tagCatalog).toEqual([])
+    expect(s.lastError).toBeNull()
+    expect(s.connectGeneration).toBeGreaterThan(0)
+
+    // 清理：断开 — disconnect 把 generation 再 +1，让 pending connect 早返回
+    useRuntimeStore.getState().disconnect()
+    // 给一个 timeout 保险防止 promise 永久 pending
+    await Promise.race([
+      connectPromise,
+      new Promise((r) => setTimeout(r, 50)),
+    ])
+  })
+
+  it('F: tags 请求失败时把后端错误写入 lastError', async () => {
+    // /api/status 成功；/tags 返回 404
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/api/status')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            instance_name: 'real_runtime_xyz',
+            mode: 'REALTIME',
+            cycle_count: 0,
+            sim_time: 0,
+            cycle_time: 0.5,
+            safe_state: false,
+            consecutive_failures: 0,
+          }),
+        })
+      }
+      if (url.endsWith('/tags')) {
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+      }
+      // meta 是 best-effort；返回成功
+      if (url.endsWith('/meta')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ instance_name: 'real_runtime_xyz', meta: {}, statistics: {} }),
+        })
+      }
+      // snapshot：被 WS 调用前 connect 会一直等，先不返回也没关系
+      return new Promise(() => {})
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000)
+    useRuntimeStore.getState().connect()
+
+    // 让状态写完。检查 lastError
+    await new Promise((r) => setTimeout(r, 100))
+
+    const s = useRuntimeStore.getState()
+    expect(s.runtimeName).toBe('real_runtime_xyz')
+    expect(s.tagCatalog).toEqual([])
+    expect(s.lastError).toBeTruthy()
+    expect(s.lastError).toMatch(/加载运行参数失败/)
+    // 必须包含 HTTP 状态码信息
+    expect(s.lastError).toMatch(/404|status/)
+
+    // 同时确认调用的是真实 runtimeName，不是 default
+    const calledUrls = fetchMock.mock.calls.map((c) => c[0] as string)
+    expect(calledUrls.some((u) => u.includes('/instances/real_runtime_xyz/tags'))).toBe(true)
+    expect(calledUrls.some((u) => u.includes('/instances/default/'))).toBe(false)
+
+    // 清理
+    useRuntimeStore.getState().disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('G: disconnect 清理 runtimeName / tagCatalog / lastError，保留 snapshot', () => {
+    act(() =>
+      useRuntimeStore.setState({
+        runtimeName: 'runtime-a',
+        tagCatalog: [{ name: 'pid1.PV', instance: 'pid1' }] as any,
+        lastError: 'old',
+        connectionState: 'connected',
+        latestSnapshot: { values: { foo: 1 }, receivedAt: Date.now() } as any,
+        rawSnapshot: { foo: 1 },
+      }),
+    )
+
+    useRuntimeStore.getState().disconnect()
+
+    const s = useRuntimeStore.getState()
+    expect(s.connectionState).toBe('idle')
+    expect(s.runtimeName).toBeNull()
+    expect(s.tagCatalog).toEqual([])
+    expect(s.lastError).toBeNull()
+    // snapshot 必须保留（冻结最后值语义）
+    expect(s.latestSnapshot).not.toBeNull()
+    expect(s.rawSnapshot).not.toBeNull()
   })
 })

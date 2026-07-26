@@ -108,13 +108,16 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
 
   const handleApply = async () => {
     if (!opTargetTag) return
+
     setError(null)
+
+    if (!isConnected || !runtimeName) {
+      setError('运行连接信息尚未就绪')
+      return
+    }
+
     try {
       if (opKind === 'fix') {
-        if (!hasRuntimeName) {
-          setError('运行连接信息尚未就绪')
-          return
-        }
         const v = Number(inputValue)
         if (!Number.isFinite(v)) {
           setError('固定值必须是有限数')
@@ -122,10 +125,6 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
         }
         await realtimeProjectApi.setForce(apiHost, apiPort, opTargetTag, 'fixed', v, undefined)
       } else if (opKind === 'sv') {
-        if (!hasRuntimeName) {
-          setError('运行连接信息尚未就绪')
-          return
-        }
         const v = Number(inputValue)
         if (!Number.isFinite(v)) {
           setError('设定值必须是有限数')
@@ -209,6 +208,11 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
             const force = forces[tag.name]
             const quality = qualities[tag.name]
             const showForce = !!force && force.mode !== 'follow'
+            const canForce = tag.forceable === true
+            const canSetSV =
+              tag.writable === true &&
+              String(tag.attribute || '').toUpperCase() === 'SV'
+            const canSetQuality = true
             return (
               <div key={tag.name} className="grid grid-cols-[2fr_2fr_1fr_2fr] border-b border-border/50 text-xs" data-testid={`runtime-detail-row-${tag.name}`}>
                 <div className="truncate px-3 py-1.5 font-mono">{tag.attribute || tag.name}</div>
@@ -248,7 +252,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
                         ) : null}
                       </div>
                     ) : null}
-                    {isConnected && hasRuntimeName && tag.writable ? (
+                    {isConnected && hasRuntimeName && (canForce || canSetSV || canSetQuality) ? (
                       <select
                         value=""
                         onChange={(e) => {
@@ -263,9 +267,15 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
                         data-testid={`runtime-detail-action-${tag.name}`}
                       >
                         <option value="">选择操作</option>
-                        <option value="fix">固定 UA 输出值</option>
-                        <option value="sv">设置设定值</option>
-                        <option value="quality">修改 UA 质量码</option>
+                        {canForce ? (
+                          <option value="fix">固定 UA 输出值</option>
+                        ) : null}
+                        {canSetSV ? (
+                          <option value="sv">设置设定值</option>
+                        ) : null}
+                        {canSetQuality ? (
+                          <option value="quality">修改 UA 质量码</option>
+                        ) : null}
                       </select>
                     ) : null}
                   </div>
@@ -324,7 +334,8 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
             <button
               type="button"
               onClick={() => void handleApply()}
-              className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground"
+              disabled={!isConnected || !hasRuntimeName}
+              className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="runtime-detail-op-confirm"
             >
               确认

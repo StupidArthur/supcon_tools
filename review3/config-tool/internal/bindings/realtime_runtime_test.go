@@ -588,23 +588,85 @@ func TestStart_UnexpectedChildExitClearsSession(t *testing.T) {
 }
 
 // 阶段 C：报警配置推送失败必须使启动失败并回滚。
-func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
-	t.Skip("todo.md §9: 报警推送失败不再阻断启动（旧行为已变更）")
+func TestStart_AlarmPushFailure_DoesNotRollbackRunningRuntime(t *testing.T) {
+	// 报警配置失败不应阻断已启动的 runtime（todo.md §9 新语义）。
+	// mock service: /api/runtime/start 返回成功；/api/alarms/config 返回 500。
+	var callsMu sync.Mutex
+	var alarmCalled bool
+	var runtimeStartCalled bool
+	runtimeState := "stopped"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/project/inspect", func(w http.ResponseWriter, r *http.Request) {
+		// Accept absolute source paths
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"valid":true,"instances":[],"duplicates":[]}`))
+	})
+	mux.HandleFunc("/api/project/open", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"projectName":"T"}`))
+	})
+	mux.HandleFunc("/api/project/compile", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"output":"/tmp/compiled.yaml"}`))
+	})
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		callsMu.Lock()
+		state := runtimeState
+		callsMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"protocolVersion":1,"serviceState":"ready","runtimeState":"` + state + `"}`))
+	})
+	mux.HandleFunc("/api/runtime/status", func(w http.ResponseWriter, r *http.Request) {
+		callsMu.Lock()
+		state := runtimeState
+		callsMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"runtimeState":"` + state + `","serviceState":"ready"}`))
+	})
+	mux.HandleFunc("/api/runtime/start", func(w http.ResponseWriter, r *http.Request) {
+		callsMu.Lock()
+		runtimeStartCalled = true
+		runtimeState = "running"
+		callsMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"runtimeState":"running"}`))
+	})
+	mux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
+		callsMu.Lock()
+		alarmCalled = true
+		callsMu.Unlock()
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"detail":"simulated alarm push failure"}`))
+	})
+	mux.HandleFunc("/api/runtime/stop", func(w http.ResponseWriter, r *http.Request) {
+		callsMu.Lock()
+		runtimeState = "stopped"
+		callsMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"runtimeState":"stopped"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	client := NewDataFactoryServiceClient("127.0.0.1", port, "test-token")
+	compiler := NewServiceRealtimeCompiler(client)
+
 	tmp := t.TempDir()
 	storeRoot := filepath.Join(tmp, "store")
-	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	os.MkdirAll(storeRoot, 0o755)
 	storage := realtime.NewProjectStorage(storeRoot)
-	manager := realtime.NewManager(storage, &localFakeCompiler{})
+	manager := realtime.NewManager(storage, compiler)
 
-	// 创建项目 + 报警规则
 	ctx := context.Background()
 	if _, err := manager.CreateProject(ctx, "alarmfail"); err != nil {
 		t.Fatal(err)
 	}
 	projects, _ := manager.ListProjects(ctx)
 	pid := projects[0].ID
+
 	yamlPath := filepath.Join(tmp, "src.yaml")
 	os.WriteFile(yamlPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
 	view, err := manager.AddSource(ctx, pid, yamlPath)
@@ -613,9 +675,9 @@ func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
 	}
 	srcID := view.Project.Sources[0].ID
 	srcAbs := storage.SourceAbsPath(pid, srcID)
-	if err := os.WriteFile(srcAbs, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	os.WriteFile(srcAbs, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
+
+	// 添加一条报警规则，使 pushAlarmConfigViaService 真正推送（非 no-op）
 	_, err = manager.CreateAlarmRule(ctx, pid, realtime.AlarmRule{
 		Name: "high_level", Tag: "tank_2.level", Direction: realtime.DirectionHigh,
 		Limit: 1.0, Severity: realtime.SeverityCritical,
@@ -624,40 +686,40 @@ func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 启动 alarm push 失败 mock server
-	gotRules := atomic.Bool{}
-	runtimeStartCalled := atomic.Bool{}
-	_, client, cleanup := mockServiceServer(t, map[string]http.HandlerFunc{
-		"/api/runtime/start": func(w http.ResponseWriter, r *http.Request) {
-			runtimeStartCalled.Store(true)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{"ok": true, "runtimeState": "running"})
-		},
-		"/api/alarms/config": func(w http.ResponseWriter, r *http.Request) {
-			gotRules.Store(true)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"detail":"simulated push failure"}`))
-		},
-	})
-	defer cleanup()
-
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
-	binding := NewRealtimeRuntimeBinding(manager, NewSystemBinding(), sessionMgr)
-	binding.SetContext(context.Background())
-	defer cleanup()
-	binding.SetServiceClient(client)
+	system := NewSystemBinding()
+	system.SetServiceClient(client)
+	runtimeBinding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+	runtimeBinding.SetContext(ctx)
+	runtimeBinding.SetServiceClient(client)
+	runtimeBinding.SetServiceEndpoint("127.0.0.1", port, "test-token")
 
-	_, err = binding.StartProject(pid, realtime.RealtimeStartOptions{
-		RuntimeName: "alarmfail",
+	// StartProject 应成功，即使报警推送 500
+	session, err := runtimeBinding.StartProject(pid, realtime.RealtimeStartOptions{
+		APIHost: "127.0.0.1", APIPort: port, RuntimeName: "test-alarm",
 	})
-	if err == nil {
-		t.Fatal("报警推送失败时 Start 必须失败")
+	if err != nil {
+		t.Fatalf("报警推送 500 时 StartProject 必须成功，实际: %v", err)
 	}
-	if !gotRules.Load() {
-		t.Error("Start 期间必须实际调用 /api/alarms/config")
+	if session.RuntimeName == "" {
+		t.Fatal("session RuntimeName 不能为空")
 	}
-	if !runtimeStartCalled.Load() {
-		t.Error("Start 期间必须调用 /api/runtime/start")
+
+	callsMu.Lock()
+	started := runtimeStartCalled
+	alarmed := alarmCalled
+	callsMu.Unlock()
+
+	if !started {
+		t.Error("/api/runtime/start 必须被调用")
+	}
+	if !alarmed {
+		t.Error("/api/alarms/config 必须被调用（即使返回 500）")
+	}
+
+	// Stop 可以正常执行
+	if err := runtimeBinding.Stop(); err != nil {
+		t.Fatalf("报警推送失败后 Stop 必须成功，实际: %v", err)
 	}
 }
 

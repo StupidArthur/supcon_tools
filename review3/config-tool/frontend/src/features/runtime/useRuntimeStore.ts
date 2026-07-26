@@ -349,7 +349,13 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     connect: async () => {
       // 如果已有 WS，先停掉；递增 generation 让所有进行中的 connect 失效。
       const myGen = (get().connectGeneration ?? 0) + 1
-      set({ connectGeneration: myGen })
+      set({
+        connectGeneration: myGen,
+        connectionState: 'connecting',
+        runtimeName: null,
+        tagCatalog: [],
+        lastError: null,
+      })
       if (ws) {
         ws.stop()
         ws = null
@@ -383,14 +389,31 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         // 忽略
       }
 
-      // 通用 tag catalog（失败不阻止 WS）
+      // 通用 tag catalog。失败时把后端真实错误写到 lastError，
+      // 让前端展示“加载运行参数失败：...”而不是伪装成空数据。
       try {
-        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
-        if (get().connectGeneration === myGen && Array.isArray(tagsResp.tags)) {
+        const tagsResp = await getTags(
+          { apiHost: state.apiHost, apiPort: state.apiPort },
+          runtimeName,
+        )
+        if (
+          get().connectGeneration === myGen &&
+          Array.isArray(tagsResp.tags)
+        ) {
           set({ tagCatalog: tagsResp.tags })
         }
       } catch (e) {
-        // 忽略
+        if (get().connectGeneration !== myGen) {
+          return
+        }
+        const msg =
+          e instanceof RuntimeApiError
+            ? `${e.status} ${e.message}`
+            : String(e)
+        set({
+          tagCatalog: [],
+          lastError: `加载运行参数失败：${msg}`,
+        })
       }
 
       // 第三道闸：再次检查 generation，避免 meta 期间被打断
@@ -398,6 +421,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         return
       }
 
+      // tags 失败后仍允许后续 WS 建立，但只有 catalog 写入成功才清掉 lastError。
+      // 上一步可能在 lastError 上写入了 tags 失败信息；如果 tags 成功，
+      // 这里清空；如果 tags 失败，保持 lastError。
       set({
         runtimeName,
         cycleTime,
@@ -482,6 +508,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       }
       set({
         connectionState: 'idle',
+        runtimeName: null,
+        tagCatalog: [],
+        lastError: null,
         stale: true,
         lastAcknowledgedSubscription: undefined,
         subscriptionError: null,

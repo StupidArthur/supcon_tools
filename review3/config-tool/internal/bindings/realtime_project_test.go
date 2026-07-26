@@ -250,17 +250,161 @@ func TestReloadFailureIsReturnedToCaller_NotSwallowed(t *testing.T) {
 	}
 }
 
-func TestServiceRealtimeCompiler_HasNoProjectFileState(t *testing.T) {
-	// 切换工程不残留旧 projectFile — 本轮不再维护该字段。
-	// 验证 ServiceRealtimeCompiler 类型不存在 projectFile 字段 / SetProjectFile 方法。
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+func TestOpenProjectFile_ColdService_InspectsBeforeOpen(t *testing.T) {
+	// 使用真实 ServiceRealtimeCompiler 验证冷启动顺序：/api/project/inspect → /api/project/open。
+	// 不依赖服务已有 project context，不发送 projectFile 到 inspect（Go 只传 sources）。
+	var mu sync.Mutex
+	var calls []string
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/project/inspect", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, "inspect")
+		var body map[string]json.RawMessage
+		json.NewDecoder(r.Body).Decode(&body)
+		mu.Unlock()
+
+		// 断言没有 projectFile
+		if _, ok := body["projectFile"]; ok {
+			t.Error("inspect 请求不应包含 projectFile")
+		}
+		// 断言有 sources
+		sourcesRaw, ok := body["sources"]
+		if !ok {
+			t.Error("inspect 请求必须包含 sources")
+		} else {
+			var sources []struct {
+				ID       string `json:"id"`
+				File     string `json:"file"`
+				Replicas int    `json:"replicas"`
+			}
+			json.Unmarshal(sourcesRaw, &sources)
+			if len(sources) == 0 {
+				t.Error("sources 不得为空")
+			}
+			// 断言 source.file 是绝对路径
+			for _, s := range sources {
+				if !filepath.IsAbs(s.File) {
+					t.Errorf("source.file 必须是绝对路径，实际 %q", s.File)
+				}
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"ok":true,"valid":true,"instances":[],"duplicates":[]}`))
-	}))
+	})
+
+	mux.HandleFunc("/api/project/open", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, "open")
+		var body map[string]string
+		json.NewDecoder(r.Body).Decode(&body)
+		mu.Unlock()
+
+		if body["projectFile"] == "" {
+			t.Error("/api/project/open 必须携带 projectFile")
+		}
+		pf := body["projectFile"]
+		pfEscaped := strings.ReplaceAll(pf, `\`, `\\`)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"projectFile":"` + pfEscaped + `","projectName":"T","validation":{"ok":true,"valid":true,"instances":[],"duplicates":[]}}`))
+	})
+
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	port := srv.Listener.Addr().(*net.TCPAddr).Port
-	c := NewServiceRealtimeCompiler(NewDataFactoryServiceClient("127.0.0.1", port, "tok"))
-	_ = c
-	// 静态检查：编译期间下面的字段/方法已不存在。如存在，则此文件 build 失败。
-	// 这里不写额外代码，仅依赖人工 review 与 git grep。
+
+	client := NewDataFactoryServiceClient("127.0.0.1", port, "test-token")
+	compiler := NewServiceRealtimeCompiler(client)
+	storage := realtime.NewProjectStorage(t.TempDir())
+	manager := realtime.NewManager(storage, compiler)
+	binding := NewRealtimeProjectBinding(manager)
+	binding.SetContext(context.Background())
+	binding.SetServiceClient(client)
+
+	// 准备真实 project.yaml + sources/*.yaml
+	projectDir := t.TempDir()
+	os.MkdirAll(filepath.Join(projectDir, "sources"), 0o755)
+	yamlPath := filepath.Join(projectDir, "sources", "src.yaml")
+	os.WriteFile(yamlPath, []byte("clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n"), 0o644)
+	projectFile := filepath.Join(projectDir, "project.yaml")
+	projectContent := "version: 1\nid: p1\nname: T\nsources:\n  - id: s1\n    file: sources/src.yaml\n    replicas: 1\n"
+	os.WriteFile(projectFile, []byte(projectContent), 0o644)
+
+	_, err := binding.OpenProjectFile(projectFile)
+	if err != nil {
+		t.Fatalf("OpenProjectFile: %v", err)
+	}
+
+	mu.Lock()
+	callCopy := append([]string(nil), calls...)
+	mu.Unlock()
+
+	if len(callCopy) < 2 {
+		t.Fatalf("期望至少 inspect + open 两次调用，实际 %v", callCopy)
+	}
+	if callCopy[0] != "inspect" {
+		t.Fatalf("第一个调用必须是 inspect，实际顺序 %v", callCopy)
+	}
+	if callCopy[1] != "open" {
+		t.Fatalf("第二个调用必须是 open，实际顺序 %v", callCopy)
+	}
+}
+
+func TestOpenProjectFile_InspectFailure_DoesNotOpenServiceProject(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/project/inspect", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, "inspect")
+		mu.Unlock()
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"detail":"simulated inspect failure"}`))
+	})
+
+	mux.HandleFunc("/api/project/open", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, "open")
+		mu.Unlock()
+		t.Error("/api/project/open 不应该被调用（inspect 已失败）")
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	client := NewDataFactoryServiceClient("127.0.0.1", port, "test-token")
+	compiler := NewServiceRealtimeCompiler(client)
+	storage := realtime.NewProjectStorage(t.TempDir())
+	manager := realtime.NewManager(storage, compiler)
+	binding := NewRealtimeProjectBinding(manager)
+	binding.SetContext(context.Background())
+	binding.SetServiceClient(client)
+
+	projectDir := t.TempDir()
+	os.MkdirAll(filepath.Join(projectDir, "sources"), 0o755)
+	yamlPath := filepath.Join(projectDir, "sources", "src.yaml")
+	os.WriteFile(yamlPath, []byte("clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n"), 0o644)
+	projectFile := filepath.Join(projectDir, "project.yaml")
+	os.WriteFile(projectFile, []byte("version: 1\nid: p1\nname: T\nsources:\n  - id: s1\n    file: sources/src.yaml\n    replicas: 1\n"), 0o644)
+
+	_, err := binding.OpenProjectFile(projectFile)
+	if err == nil {
+		t.Fatal("inspect 400 时 OpenProjectFile 必须返回错误")
+	}
+	if !strings.Contains(err.Error(), "服务校验失败") {
+		t.Fatalf("错误必须包含服务校验失败，实际: %v", err)
+	}
+
+	mu.Lock()
+	callCopy := append([]string(nil), calls...)
+	mu.Unlock()
+
+	if len(callCopy) != 1 {
+		t.Fatalf("期望只有 inspect 被调用，实际 %v", callCopy)
+	}
 }
