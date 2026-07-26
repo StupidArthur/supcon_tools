@@ -403,6 +403,54 @@ func (m *CollectorManager) Status(clusterID string) model.CollectorStatus {
 	return e.coll.Status()
 }
 
+func (m *CollectorManager) Nodes(clusterID string) []model.NodeMetric {
+	e := m.entry(clusterID)
+	if e == nil {
+		return nil
+	}
+	return e.coll.Nodes()
+}
+
+func (m *CollectorManager) Workers(clusterID string) []model.WorkerSnapshot {
+	e := m.entry(clusterID)
+	if e == nil {
+		return nil
+	}
+	return e.coll.Workers()
+}
+
+func (m *CollectorManager) Actors(clusterID string) []model.ActorSnapshot {
+	e := m.entry(clusterID)
+	if e == nil {
+		return nil
+	}
+	return e.coll.Actors()
+}
+
+func (m *CollectorManager) Jobs(clusterID string) []model.JobSnapshot {
+	e := m.entry(clusterID)
+	if e == nil {
+		return nil
+	}
+	return e.coll.Jobs()
+}
+
+func (m *CollectorManager) Overview(clusterID string) model.Overview {
+	e := m.entry(clusterID)
+	if e == nil {
+		return model.Overview{}
+	}
+	return e.coll.Overview()
+}
+
+func (m *CollectorManager) Health(clusterID string) model.CollectionHealth {
+	e := m.entry(clusterID)
+	if e == nil {
+		return model.CollectionHealth{}
+	}
+	return e.coll.Health()
+}
+
 func (m *CollectorManager) GlobalPerf() model.GlobalPerf {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -22,6 +22,10 @@ const maxResponseBytes = 64 * 1024 * 1024
 // DefaultTimeoutSec 是 HTTP 请求的默认秒级超时。未对用户暴露，需要调整时改这里。
 const DefaultTimeoutSec = 10
 
+// DetailNodeConcurrency 是单集群内同时发起的 /nodes/{id} 请求数上限。
+// 同时作为 HTTP Transport 的 MaxConnsPerHost，即使 semaphore 被误删也不会无界并发。
+const DetailNodeConcurrency = 4
+
 type Client struct {
 	clusterID string
 	baseURL   string
@@ -38,7 +42,13 @@ func NewClient(opts CollectorOpts) *Client {
 	if timeout <= 0 {
 		timeout = DefaultTimeoutSec
 	}
-	transport := &http.Transport{DisableCompression: true}
+	transport := &http.Transport{
+		DisableCompression:  true,
+		MaxConnsPerHost:     DetailNodeConcurrency,
+		MaxIdleConnsPerHost: DetailNodeConcurrency,
+		MaxIdleConns:        DetailNodeConcurrency,
+		IdleConnTimeout:     30 * time.Second,
+	}
 	return &Client{
 		clusterID: opts.ClusterID,
 		baseURL:   strings.TrimRight(opts.PlatformURL, "/"),
@@ -253,10 +263,20 @@ type rawActor struct {
 }
 
 func (c *Client) FetchNodeDetail(ctx context.Context, nodeID string) (*NodeDetail, error) {
-	b, err := c.get(ctx, "/nodes/"+nodeID)
+	b, err := c.FetchNodeDetailRaw(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
+	return parseNodeDetail(b, nodeID)
+}
+
+// FetchNodeDetailRaw 只做 HTTP 下载，不解析。供 collectDetail 分阶段日志使用。
+func (c *Client) FetchNodeDetailRaw(ctx context.Context, nodeID string) ([]byte, error) {
+	return c.get(ctx, "/nodes/"+nodeID)
+}
+
+// parseNodeDetail 从原始 JSON 解析节点详情。纯逻辑，无网络依赖。
+func parseNodeDetail(b []byte, nodeID string) (*NodeDetail, error) {
 	var env detailEnvelope
 	if err := json.Unmarshal(b, &env); err != nil {
 		return nil, fmt.Errorf("parse detail %s: %w", nodeID, err)

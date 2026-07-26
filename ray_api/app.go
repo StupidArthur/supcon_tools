@@ -326,35 +326,45 @@ func (a *App) GetSnapshot(clusterID string) *collector.Snapshot {
 }
 
 func (a *App) GetNodes(clusterID string) []model.NodeMetric {
-	snap := a.GetSnapshot(clusterID)
-	if snap == nil {
+	if a.manager == nil {
 		return nil
 	}
-	return snap.Nodes
+	return a.manager.Nodes(clusterID)
 }
 
 func (a *App) GetWorkers(clusterID string) []model.WorkerSnapshot {
-	snap := a.GetSnapshot(clusterID)
-	if snap == nil {
+	if a.manager == nil {
 		return nil
 	}
-	return snap.Workers
+	return a.manager.Workers(clusterID)
 }
 
 func (a *App) GetActors(clusterID string) []model.ActorSnapshot {
-	snap := a.GetSnapshot(clusterID)
-	if snap == nil {
+	if a.manager == nil {
 		return nil
 	}
-	return snap.Actors
+	return a.manager.Actors(clusterID)
 }
 
 func (a *App) GetJobs(clusterID string) []model.JobSnapshot {
-	snap := a.GetSnapshot(clusterID)
-	if snap == nil {
+	if a.manager == nil {
 		return nil
 	}
-	return snap.Jobs
+	return a.manager.Jobs(clusterID)
+}
+
+func (a *App) GetOverview(clusterID string) model.Overview {
+	if a.manager == nil {
+		return model.Overview{}
+	}
+	return a.manager.Overview(clusterID)
+}
+
+func (a *App) GetHealth(clusterID string) model.CollectionHealth {
+	if a.manager == nil {
+		return model.CollectionHealth{}
+	}
+	return a.manager.Health(clusterID)
 }
 
 // ---- 历史查询 ----

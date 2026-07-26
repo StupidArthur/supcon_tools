@@ -26,7 +26,7 @@ func main() {
 		crashPath := filepath.Join(filepath.Dir(exe), "crash.log")
 		if f, err := os.OpenFile(crashPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 			fmt.Fprintf(f, "\n===== %s =====\n", logx.NowStr())
-			os.Stderr = f
+			redirectStderr(f)
 		}
 	}
 

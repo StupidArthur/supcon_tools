@@ -7,11 +7,19 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"raymonitor/logx"
 	"raymonitor/model"
 )
+
+// EnableHeavyHistoryStorage 控制是否写入 worker_snapshot / actor_snapshot /
+// cluster_metric / job_event 四张大表。生产验证版本暂时关闭以降低 I/O 压力。
+// 保留写入：node_metric / actor_event / job_snapshot / alert / alert_event。
+const EnableHeavyHistoryStorage = false
+
+var heavyStorageLogged atomic.Bool
 
 type Store interface {
 	WriteNodeMetrics(clusterID string, ns []model.NodeMetric) error
@@ -146,6 +154,93 @@ func (c *Collector) Snapshot() *Snapshot {
 	s.Health.FailedNodes = make([]model.NodeCollectionState, len(c.snap.Health.FailedNodes))
 	copy(s.Health.FailedNodes, c.snap.Health.FailedNodes)
 	return s
+}
+
+// Nodes 只复制节点切片，不复制 Workers/Actors/Jobs。
+func (c *Collector) Nodes() []model.NodeMetric {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.snap == nil {
+		return nil
+	}
+	out := make([]model.NodeMetric, len(c.snap.Nodes))
+	copy(out, c.snap.Nodes)
+	return out
+}
+
+// Workers 只复制 Worker 切片。
+func (c *Collector) Workers() []model.WorkerSnapshot {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.snap == nil {
+		return nil
+	}
+	out := make([]model.WorkerSnapshot, len(c.snap.Workers))
+	copy(out, c.snap.Workers)
+	return out
+}
+
+// Actors 只复制 Actor 切片。
+func (c *Collector) Actors() []model.ActorSnapshot {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.snap == nil {
+		return nil
+	}
+	out := make([]model.ActorSnapshot, len(c.snap.Actors))
+	copy(out, c.snap.Actors)
+	return out
+}
+
+// Jobs 只复制 Job 切片。
+func (c *Collector) Jobs() []model.JobSnapshot {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.snap == nil {
+		return nil
+	}
+	out := make([]model.JobSnapshot, len(c.snap.Jobs))
+	copy(out, c.snap.Jobs)
+	return out
+}
+
+// Overview 返回概览页所需的轻量数据（Cluster + Nodes + Jobs），不复制 Workers/Actors。
+func (c *Collector) Overview() model.Overview {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.snap == nil {
+		return model.Overview{}
+	}
+	nodes := make([]model.NodeMetric, len(c.snap.Nodes))
+	copy(nodes, c.snap.Nodes)
+	jobs := make([]model.JobSnapshot, len(c.snap.Jobs))
+	copy(jobs, c.snap.Jobs)
+	nodeCount := 0
+	for _, n := range nodes {
+		if n.State == "ALIVE" {
+			nodeCount++
+		}
+	}
+	return model.Overview{
+		Cluster:    c.snap.Cluster,
+		Nodes:      nodes,
+		NodeCount:  nodeCount,
+		RecentJobs: jobs,
+		UpdatedAt:  model.NowMs(),
+	}
+}
+
+// Health 只复制健康状态。
+func (c *Collector) Health() model.CollectionHealth {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.snap == nil {
+		return model.CollectionHealth{}
+	}
+	h := c.snap.Health
+	h.FailedNodes = make([]model.NodeCollectionState, len(c.snap.Health.FailedNodes))
+	copy(h.FailedNodes, c.snap.Health.FailedNodes)
+	return h
 }
 
 func (c *Collector) Perf() model.PerfMetrics {
@@ -343,7 +438,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		return
 	}
 
-	// 集群间排队：同一时间只有一个集群做 detail，单集群内节点全并行
+	// 集群间排队：同一时间只有一个集群做 detail
 	if c.detailLock != nil {
 		if err := c.detailLock.Acquire(ctx); err != nil {
 			if !errors.Is(err, context.Canceled) {
@@ -366,13 +461,49 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		return
 	}
 
-	// 诊断：记录 detail 开始时的内存与 goroutine 数，用于排查崩溃
+	// 诊断：记录 detail 开始时的内存与 goroutine 数
 	var memStart runtime.MemStats
 	runtime.ReadMemStats(&memStart)
 	logx.L().Info("detail starting", "cluster", c.opts.ClusterID,
-		"nodes", len(nodes),
+		"nodes", len(nodes), "nodeConcurrency", DetailNodeConcurrency,
 		"goroutines", runtime.NumGoroutine(),
 		"heapMB", memStart.HeapAlloc/1024/1024)
+
+	// 内存采样 goroutine：每秒记录一次，detail 结束或 ctx 取消后停止
+	var completedNodes atomic.Int64
+	var activeRequests atomic.Int64
+	stopSampling := make(chan struct{})
+	var samplingWg sync.WaitGroup
+	samplingWg.Add(1)
+	go func() {
+		defer samplingWg.Done()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopSampling:
+				return
+			case <-ticker.C:
+				var ms runtime.MemStats
+				runtime.ReadMemStats(&ms)
+				logx.L().Info("detail memory sample",
+					"cluster", c.opts.ClusterID,
+					"elapsedMs", time.Since(detailStart).Milliseconds(),
+					"completedNodes", completedNodes.Load(),
+					"activeRequests", activeRequests.Load(),
+					"heapAllocMB", ms.HeapAlloc/1024/1024,
+					"heapInuseMB", ms.HeapInuse/1024/1024,
+					"heapSysMB", ms.HeapSys/1024/1024,
+					"sysMB", ms.Sys/1024/1024,
+					"goroutines", runtime.NumGoroutine(),
+					"numGC", ms.NumGC)
+			}
+		}
+	}()
+	defer func() {
+		close(stopSampling)
+		samplingWg.Wait()
+	}()
 
 	c.mu.Lock()
 	c.health.LastDetailAttemptTs = now
@@ -388,6 +519,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		ms      int64
 	}
 	results := make([]nodeResult, len(nodes))
+	sem := make(chan struct{}, DetailNodeConcurrency)
 	var wg sync.WaitGroup
 
 	for i, nid := range nodes {
@@ -401,15 +533,55 @@ func (c *Collector) collectDetail(ctx context.Context) {
 				}
 			}()
 
-			ns := time.Now()
-			d, err := c.client.FetchNodeDetail(ctx, id)
-			ms := time.Since(ns).Milliseconds()
+			logx.L().Info("detail node started", "cluster", c.opts.ClusterID, "node", id)
 
-			if err != nil {
-				results[idx] = nodeResult{nodeID: id, ok: false, err: err, ms: ms}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				results[idx] = nodeResult{nodeID: id, ok: false, err: ctx.Err()}
+				completedNodes.Add(1)
 				return
 			}
-			results[idx] = nodeResult{nodeID: id, workers: d.Workers, actors: d.Actors, node: d.Node, ok: true, ms: ms}
+			defer func() { <-sem }()
+
+			activeRequests.Add(1)
+			defer activeRequests.Add(-1)
+
+			// 阶段 1：HTTP 下载
+			ns := time.Now()
+			b, err := c.client.FetchNodeDetailRaw(ctx, id)
+			downloadMs := time.Since(ns).Milliseconds()
+			if err != nil {
+				logx.L().Warn("detail node finished", "cluster", c.opts.ClusterID, "node", id,
+					"elapsedMs", downloadMs, "err", err)
+				results[idx] = nodeResult{nodeID: id, ok: false, err: err, ms: downloadMs}
+				completedNodes.Add(1)
+				return
+			}
+			logx.L().Info("detail node response read", "cluster", c.opts.ClusterID, "node", id,
+				"elapsedMs", downloadMs, "responseBytes", len(b))
+
+			// 阶段 2：JSON 解析
+			ps := time.Now()
+			d, err := parseNodeDetail(b, id)
+			parseMs := time.Since(ps).Milliseconds()
+			if err != nil {
+				logx.L().Warn("detail node finished", "cluster", c.opts.ClusterID, "node", id,
+					"elapsedMs", time.Since(ns).Milliseconds(), "err", err)
+				results[idx] = nodeResult{nodeID: id, ok: false, err: err, ms: time.Since(ns).Milliseconds()}
+				completedNodes.Add(1)
+				return
+			}
+			logx.L().Info("detail node parsed", "cluster", c.opts.ClusterID, "node", id,
+				"parseMs", parseMs, "workers", len(d.Workers), "actors", len(d.Actors))
+
+			// 阶段 3：完成
+			totalMs := time.Since(ns).Milliseconds()
+			logx.L().Info("detail node finished", "cluster", c.opts.ClusterID, "node", id,
+				"elapsedMs", totalMs, "responseBytes", len(b),
+				"workers", len(d.Workers), "actors", len(d.Actors))
+			results[idx] = nodeResult{nodeID: id, workers: d.Workers, actors: d.Actors, node: d.Node, ok: true, ms: totalMs}
+			completedNodes.Add(1)
 		}(i, nid)
 	}
 	wg.Wait()
@@ -549,15 +721,20 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			storeErrs = append(storeErrs, fmt.Errorf("write node metrics (%d nodes, first=%s): %w", len(freshNodes), freshNodes[0].NodeID, err))
 		}
 	}
-	if len(freshWorkers) > 0 {
-		if err := c.store.WriteWorkers(c.opts.ClusterID, freshWorkers); err != nil {
-			storeErrs = append(storeErrs, fmt.Errorf("write workers: %w", err))
+	if EnableHeavyHistoryStorage {
+		if len(freshWorkers) > 0 {
+			if err := c.store.WriteWorkers(c.opts.ClusterID, freshWorkers); err != nil {
+				storeErrs = append(storeErrs, fmt.Errorf("write workers: %w", err))
+			}
 		}
-	}
-	if len(freshActors) > 0 {
-		if err := c.store.WriteActors(c.opts.ClusterID, freshActors); err != nil {
-			storeErrs = append(storeErrs, fmt.Errorf("write actors: %w", err))
+		if len(freshActors) > 0 {
+			if err := c.store.WriteActors(c.opts.ClusterID, freshActors); err != nil {
+				storeErrs = append(storeErrs, fmt.Errorf("write actors: %w", err))
+			}
 		}
+	} else if !heavyStorageLogged.Load() {
+		heavyStorageLogged.Store(true)
+		logx.L().Info("heavy history storage disabled (worker_snapshot/actor_snapshot/cluster_metric/job_event)")
 	}
 	if len(actorEvents) > 0 {
 		if err := c.store.WriteActorEvents(c.opts.ClusterID, actorEvents); err != nil {
@@ -579,8 +756,10 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			c.prevCluster = cm
 			c.clusterStale = false
 			clusterFresh = true
-			if err := c.store.WriteCluster(c.opts.ClusterID, cm); err != nil {
-				storeErrs = append(storeErrs, fmt.Errorf("write cluster: %w", err))
+			if EnableHeavyHistoryStorage {
+				if err := c.store.WriteCluster(c.opts.ClusterID, cm); err != nil {
+					storeErrs = append(storeErrs, fmt.Errorf("write cluster: %w", err))
+				}
 			}
 		}
 	} else if !errors.Is(err, context.Canceled) {
@@ -605,7 +784,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			if err := c.store.WriteJobs(c.opts.ClusterID, jobs); err != nil {
 				storeErrs = append(storeErrs, fmt.Errorf("write jobs: %w", err))
 			}
-			if len(jobEvents) > 0 {
+			if EnableHeavyHistoryStorage && len(jobEvents) > 0 {
 				if err := c.store.WriteJobEvents(c.opts.ClusterID, jobEvents); err != nil {
 					storeErrs = append(storeErrs, fmt.Errorf("write job events: %w", err))
 				}
@@ -716,7 +895,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		DetailReqs:      len(nodes) + 2,
 		ProcMemBytes:    memStats.HeapAlloc,
 		ProcGoroutine:   runtime.NumGoroutine(),
-		Concurrency:     c.concurrency(),
+		Concurrency:     DetailNodeConcurrency,
 		SlowNodeID:      slowNodeID,
 		SlowNodeMs:      maxNodeMs,
 	}

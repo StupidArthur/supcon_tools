@@ -7,8 +7,6 @@ import { CollectionHealthNotice } from '@/components/CollectionHealthNotice'
 import { OverviewView } from '@/components/views/OverviewView'
 import { NodesView } from '@/components/views/NodesView'
 import { WorkersView } from '@/components/views/WorkersView'
-import { ActorsView } from '@/components/views/ActorsView'
-import { JobsView } from '@/components/views/JobsView'
 import { AlertsView } from '@/components/views/AlertsView'
 import {
   api,
@@ -16,7 +14,10 @@ import {
   type CollectorStatus,
   type GlobalPerf,
   type PerfMetrics,
-  type Snapshot,
+  type Overview,
+  type NodeMetric,
+  type WorkerSnapshot,
+  type CollectionHealth,
   type Config,
 } from '@/lib/api'
 
@@ -33,8 +34,6 @@ export default function App() {
   const [clusters, setClusters] = useState<ClusterConfig[]>([])
   const [selection, setSelection] = useState<Selection>({ kind: 'global-alerts' })
   const [statuses, setStatuses] = useState<Record<string, CollectorStatus>>({})
-  const [snapshots, setSnapshots] = useState<Record<string, Snapshot | null>>({})
-  const [perfs, setPerfs] = useState<Record<string, PerfMetrics>>({})
   const [globalPerf, setGlobalPerf] = useState<GlobalPerf | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
   const [sortBy, setSortBy] = useState<'cpu' | 'gpu'>('cpu')
@@ -44,12 +43,18 @@ export default function App() {
   const [running, setRunning] = useState(false)
   const [globalAlertCount, setGlobalAlertCount] = useState(0)
 
-  // 当前选中集群 ID（提前算，供 refresh 与渲染共用）
+  // 按页数据（不再拉完整 Snapshot）
+  const [overview, setOverview] = useState<Overview | null>(null)
+  const [perf, setPerf] = useState<PerfMetrics | null>(null)
+  const [nodes, setNodes] = useState<NodeMetric[]>([])
+  const [workers, setWorkers] = useState<WorkerSnapshot[]>([])
+  const [health, setHealth] = useState<CollectionHealth | null>(null)
+
   const clusterID = selection.kind === 'cluster' ? selection.id : ''
 
+  // 轻量刷新：集群列表 + 状态 + 全局 perf + 告警计数 + 当前页数据
   const refresh = useCallback(async () => {
     try {
-      // 轻量：集群列表 + 全局 perf + 配置
       const [ids, cfg, gp] = await Promise.all([api.listClusterIDs(), api.getConfig(), api.getGlobalPerf()])
       setGlobalPerf(gp)
       setConfig(cfg)
@@ -57,7 +62,6 @@ export default function App() {
       else setSortBy('cpu')
       setClusters(cfg.clusters || [])
 
-      // 每个集群只拉轻量 status（状态点用），不拉全量快照——避免 N 集群 × 大对象卡前端
       const stMap: Record<string, CollectorStatus> = {}
       let anyRunning = false
       await Promise.all(
@@ -69,25 +73,39 @@ export default function App() {
       )
       setStatuses(stMap)
       setRunning(anyRunning)
-
-      // 只拉当前选中集群的全量快照 + perf（用户在看的那一个）
-      if (clusterID) {
-        const [snap, pf] = await Promise.all([api.getSnapshot(clusterID), api.getPerf(clusterID)])
-        setSnapshots((prev) => ({ ...prev, [clusterID]: snap }))
-        setPerfs((prev) => ({ ...prev, [clusterID]: pf }))
-      }
-      // 全局告警计数（侧边栏角标）
       setGlobalAlertCount(await api.countAlerts(''))
+
+      // 按当前页拉数据，不拉完整 Snapshot
+      if (clusterID) {
+        if (tab === 'overview') {
+          const [ov, pf] = await Promise.all([api.getOverview(clusterID), api.getPerf(clusterID)])
+          setOverview(ov)
+          setPerf(pf)
+        } else if (tab === 'nodes') {
+          const [ns, h] = await Promise.all([api.getNodes(clusterID), api.getHealth(clusterID)])
+          setNodes(ns ?? [])
+          setHealth(h)
+        } else if (tab === 'workers') {
+          const [ws, ns, h] = await Promise.all([
+            api.getWorkers(clusterID),
+            api.getNodes(clusterID),
+            api.getHealth(clusterID),
+          ])
+          setWorkers(ws ?? [])
+          setNodes(ns ?? [])
+          setHealth(h)
+        }
+        // alerts 页自己拉数据（AlertsView 内部有 5s 轮询）
+      }
     } catch {
       // Wails 未就绪
     }
-  }, [clusterID])
+  }, [clusterID, tab])
 
   useEffect(() => {
     refresh()
   }, [refresh])
 
-  // 运行中定时刷新
   useEffect(() => {
     if (!running) return
     const t = setInterval(refresh, 5000)
@@ -100,19 +118,27 @@ export default function App() {
     if (config) await api.saveConfig({ ...config, sortBy: next })
   }, [sortBy, config])
 
-  // 当前选中集群的数据
-  const snap = clusterID ? snapshots[clusterID] : null
-  const perf = clusterID ? perfs[clusterID] : null
-
-  // 切换集群时立即拉一次该集群快照（不等下个 5 秒 tick）
+  // 切换集群/tab 时立即拉一次
   useEffect(() => {
-    if (clusterID) {
-      Promise.all([api.getSnapshot(clusterID), api.getPerf(clusterID)]).then(([snap2, pf]) => {
-        setSnapshots((prev) => ({ ...prev, [clusterID]: snap2 }))
-        setPerfs((prev) => ({ ...prev, [clusterID]: pf }))
+    if (!clusterID) return
+    if (tab === 'overview') {
+      Promise.all([api.getOverview(clusterID), api.getPerf(clusterID)]).then(([ov, pf]) => {
+        setOverview(ov)
+        setPerf(pf)
+      }).catch(() => {})
+    } else if (tab === 'nodes') {
+      Promise.all([api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ns, h]) => {
+        setNodes(ns ?? [])
+        setHealth(h)
+      }).catch(() => {})
+    } else if (tab === 'workers') {
+      Promise.all([api.getWorkers(clusterID), api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ws, ns, h]) => {
+        setWorkers(ws ?? [])
+        setNodes(ns ?? [])
+        setHealth(h)
       }).catch(() => {})
     }
-  }, [clusterID])
+  }, [clusterID, tab])
 
   const title =
     selection.kind === 'global-alerts'
@@ -143,7 +169,6 @@ export default function App() {
         />
         {selection.kind === 'cluster' ? (
           <>
-            {/* tab 栏 */}
             <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-7">
               {TABS.map((t) => (
                 <button
@@ -159,12 +184,12 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <CollectionHealthNotice health={snap?.health} />
+            <CollectionHealthNotice health={health} />
             <div className="flex-1 overflow-y-auto p-7">
-              {tab === 'overview' && <OverviewView data={snap ? buildOverview(snap) : null} perf={perf ?? null} />}
-              {tab === 'nodes' && <NodesView nodes={snap?.nodes ?? []} sortBy={sortBy} clusterName={title} />}
+              {tab === 'overview' && <OverviewView data={overview} perf={perf ?? null} />}
+              {tab === 'nodes' && <NodesView nodes={nodes} sortBy={sortBy} clusterName={title} />}
               {tab === 'workers' && (
-                <WorkersView workers={snap?.workers ?? []} nodes={snap?.nodes ?? []} sortBy={sortBy} health={snap?.health} clusterName={title} />
+                <WorkersView workers={workers} nodes={nodes} sortBy={sortBy} health={health} clusterName={title} />
               )}
               {tab === 'alerts' && (
                 <AlertsView clusterID={clusterID} clusterName={title} onJumpObject={() => setTab('nodes')} />
@@ -172,7 +197,6 @@ export default function App() {
             </div>
           </>
         ) : (
-          /* 全局报警视图（所有集群） */
           <div className="flex-1 overflow-y-auto p-7">
             <AlertsView clusterID="" clusterName="" />
           </div>
@@ -191,17 +215,4 @@ export default function App() {
       ) : null}
     </div>
   )
-}
-
-// 概览数据由快照聚合
-function buildOverview(snap: Snapshot) {
-  let nodeCount = 0
-  for (const n of snap.nodes) if (n.state === 'ALIVE') nodeCount++
-  return {
-    cluster: snap.cluster,
-    nodes: snap.nodes,
-    nodeCount,
-    recentJobs: snap.jobs ?? [],
-    updatedAt: Date.now(),
-  }
 }

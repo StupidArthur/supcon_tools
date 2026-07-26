@@ -898,7 +898,7 @@ func TestSnapshotStillUpdatesWhenStorageFails(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	store := &fakeStore{failWriteWorkers: true}
+	store := &fakeStore{failWriteNodes: true}
 	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)

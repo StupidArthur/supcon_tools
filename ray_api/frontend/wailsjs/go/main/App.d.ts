@@ -27,6 +27,8 @@ export function GetDBPath():Promise<string>;
 
 export function GetGlobalPerf():Promise<model.GlobalPerf>;
 
+export function GetHealth(arg1:string):Promise<model.CollectionHealth>;
+
 export function GetJobHistory(arg1:string,arg2:main.HistoryRange,arg3:string):Promise<Array<model.JobSnapshot>>;
 
 export function GetJobs(arg1:string):Promise<Array<model.JobSnapshot>>;
@@ -36,6 +38,8 @@ export function GetLogPath():Promise<string>;
 export function GetNodeHistory(arg1:string,arg2:string,arg3:main.HistoryRange):Promise<Array<model.NodeMetric>>;
 
 export function GetNodes(arg1:string):Promise<Array<model.NodeMetric>>;
+
+export function GetOverview(arg1:string):Promise<model.Overview>;
 
 export function GetPerf(arg1:string):Promise<model.PerfMetrics>;
 

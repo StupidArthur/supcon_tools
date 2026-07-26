@@ -46,6 +46,10 @@ export function GetGlobalPerf() {
   return window['go']['main']['App']['GetGlobalPerf']();
 }
 
+export function GetHealth(arg1) {
+  return window['go']['main']['App']['GetHealth'](arg1);
+}
+
 export function GetJobHistory(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetJobHistory'](arg1, arg2, arg3);
 }
@@ -64,6 +68,10 @@ export function GetNodeHistory(arg1, arg2, arg3) {
 
 export function GetNodes(arg1) {
   return window['go']['main']['App']['GetNodes'](arg1);
+}
+
+export function GetOverview(arg1) {
+  return window['go']['main']['App']['GetOverview'](arg1);
 }
 
 export function GetPerf(arg1) {

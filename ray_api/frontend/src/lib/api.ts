@@ -5,6 +5,7 @@ import {
   ListClusterIDs,
   GetClusterStatus, GetPerf, GetGlobalPerf,
   GetSnapshot, GetNodes, GetWorkers, GetActors, GetJobs,
+  GetOverview, GetHealth,
   GetNodeHistory, GetActorEvents, GetJobHistory,
   GetConfig, SaveConfig, AddCluster, RemoveCluster, UpdateCluster,
   ListAlerts, AckAlert, CountAlerts,
@@ -24,6 +25,8 @@ export type ActorSnapshot = model.ActorSnapshot
 export type JobSnapshot = model.JobSnapshot
 export type ActorEvent = model.ActorEvent
 export type Alert = model.Alert
+export type Overview = model.Overview
+export type CollectionHealth = model.CollectionHealth
 export type HistoryRange = main.HistoryRange
 export type SaveConfigResult = main.SaveConfigResult
 export type ExportSnapshotResult = main.ExportSnapshotResult
@@ -68,6 +71,8 @@ export const api = {
   getWorkers: GetWorkers,
   getActors: GetActors,
   getJobs: GetJobs,
+  getOverview: GetOverview,
+  getHealth: GetHealth,
   getNodeHistory: GetNodeHistory,
   getActorEvents: GetActorEvents,
   getJobHistory: GetJobHistory,
