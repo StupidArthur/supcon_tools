@@ -61,6 +61,8 @@ type Collector struct {
 	opts    CollectorOpts
 	limiter RequestLimiter
 
+	detailLock RequestLimiter // capacity=1，集群间 detail 排队
+
 	mu     sync.RWMutex
 	status model.CollectorStatus
 	snap   *Snapshot
@@ -111,6 +113,10 @@ func NewCollector(client *Client, store Store, opts CollectorOpts) *Collector {
 
 func (c *Collector) SetLimiter(l RequestLimiter) {
 	c.limiter = l
+}
+
+func (c *Collector) SetDetailLock(l RequestLimiter) {
+	c.detailLock = l
 }
 
 func (c *Collector) Status() model.CollectorStatus {
@@ -336,6 +342,18 @@ func (c *Collector) collectDetail(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
+
+	// 集群间排队：同一时间只有一个集群做 detail，单集群内节点全并行
+	if c.detailLock != nil {
+		if err := c.detailLock.Acquire(ctx); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				logx.L().Warn("detail lock acquire failed", "cluster", c.opts.ClusterID, "err", err)
+			}
+			return
+		}
+		defer c.detailLock.Release()
+	}
+
 	detailStart := time.Now()
 	now := model.NowMs()
 
@@ -352,7 +370,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 	var memStart runtime.MemStats
 	runtime.ReadMemStats(&memStart)
 	logx.L().Info("detail starting", "cluster", c.opts.ClusterID,
-		"nodes", len(nodes), "concurrency", c.concurrency(),
+		"nodes", len(nodes),
 		"goroutines", runtime.NumGoroutine(),
 		"heapMB", memStart.HeapAlloc/1024/1024)
 
@@ -370,7 +388,6 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		ms      int64
 	}
 	results := make([]nodeResult, len(nodes))
-	sem := make(chan struct{}, c.concurrency())
 	var wg sync.WaitGroup
 
 	for i, nid := range nodes {
@@ -384,22 +401,9 @@ func (c *Collector) collectDetail(ctx context.Context) {
 				}
 			}()
 
-			select {
-			case sem <- struct{}{}:
-			case <-ctx.Done():
-				results[idx] = nodeResult{nodeID: id, ok: false, err: ctx.Err()}
-				return
-			}
-			defer func() { <-sem }()
-
-			if err := c.acquireLimiter(ctx); err != nil {
-				results[idx] = nodeResult{nodeID: id, ok: false, err: err}
-				return
-			}
 			ns := time.Now()
 			d, err := c.client.FetchNodeDetail(ctx, id)
 			ms := time.Since(ns).Milliseconds()
-			c.releaseLimiter()
 
 			if err != nil {
 				results[idx] = nodeResult{nodeID: id, ok: false, err: err, ms: ms}

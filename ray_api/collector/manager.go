@@ -53,7 +53,7 @@ type CollectorManager struct {
 	collectors map[string]*collectorEntry
 	store      Store
 	cfg        config.Config
-	limiter    *semaphoreLimiter
+	detailLock *semaphoreLimiter // capacity=1，集群间 detail 排队
 	alerts     AlertChecker
 }
 
@@ -69,7 +69,7 @@ func NewManager(store Store, cfg config.Config) *CollectorManager {
 		collectors: map[string]*collectorEntry{},
 		store:      store,
 		cfg:        cfg,
-		limiter:    newSemaphoreLimiter(DefaultGlobalConcurrency),
+		detailLock: newSemaphoreLimiter(1), // 同一时间只有一个集群做 detail
 	}
 	for _, cl := range cfg.Clusters {
 		if cl.ID == "" || cl.PlatformURL == "" {
@@ -98,7 +98,7 @@ func (m *CollectorManager) newCollectorFor(cl config.ClusterConfig) *Collector {
 	opts := m.optsForCluster(cl)
 	client := NewClient(opts)
 	coll := NewCollector(client, m.store, opts)
-	coll.SetLimiter(m.limiter)
+	coll.SetDetailLock(m.detailLock)
 	coll.SetOnAlert(m.dispatchAlert)
 	return coll
 }
@@ -237,7 +237,7 @@ func (m *CollectorManager) ReloadAll(cfg config.Config) {
 		e.cancel()
 	}
 
-	m.limiter = newSemaphoreLimiter(DefaultGlobalConcurrency)
+	m.detailLock = newSemaphoreLimiter(1)
 
 	m.collectors = map[string]*collectorEntry{}
 	m.cfg = cfg
@@ -273,7 +273,7 @@ func (m *CollectorManager) ApplyConfig(cfg config.Config) {
 			entry.cancel()
 		}
 		m.cfg = cfg
-		m.limiter = newSemaphoreLimiter(DefaultGlobalConcurrency)
+		m.detailLock = newSemaphoreLimiter(1)
 		m.collectors = make(map[string]*collectorEntry, len(cfg.Clusters))
 		for _, cl := range cfg.Clusters {
 			if cl.ID == "" || cl.PlatformURL == "" {
@@ -408,7 +408,7 @@ func (m *CollectorManager) GlobalPerf() model.GlobalPerf {
 	defer m.mu.RUnlock()
 	gp := model.GlobalPerf{
 		ClusterCount:      len(m.collectors),
-		GlobalConcurrency: m.limiter.Capacity(),
+		GlobalConcurrency: m.detailLock.Capacity(),
 		UpdatedAt:         model.NowMs(),
 	}
 	for _, e := range m.collectors {
