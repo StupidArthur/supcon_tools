@@ -1,14 +1,14 @@
-# DataFactory 发布构建脚本（todo.md §15.2）
+# DataFactory Release Build Script (todo.md S15.2)
 #
-# 流程：
-# 1. 构建 DataFactoryService.exe
-# 2. 对服务 EXE 执行 health smoke
-# 3. 构建 config-tool.exe
-# 4. 将服务复制到 config-tool.exe 同级
-# 5. 创建 project/ 和 template/
-# 6. 输出两个 EXE 的大小和 SHA256
+# Flow:
+# 1. Build DataFactoryService.exe
+# 2. Health smoke test on service EXE
+# 3. Build config-tool.exe
+# 4. Copy service to config-tool.exe directory
+# 5. Create project/ and template/
+# 6. Output size and SHA256 of both EXEs
 #
-# 用法：
+# Usage:
 #   cd review3/config-tool
 #   .\scripts\build_release.ps1
 
@@ -24,45 +24,43 @@ $ConfigToolDir = Split-Path -Parent $ScriptDir
 $Review3Dir = Split-Path -Parent $ConfigToolDir
 $BuildBinDir = Join-Path $ConfigToolDir "build\bin"
 
-Write-Host "=== DataFactory 发布构建 ===" -ForegroundColor Cyan
-Write-Host "Config Tool 目录: $ConfigToolDir"
-Write-Host "Review3 目录: $Review3Dir"
+Write-Host "=== DataFactory Release Build ===" -ForegroundColor Cyan
+Write-Host "Config Tool Dir: $ConfigToolDir"
+Write-Host "Review3 Dir: $Review3Dir"
 Write-Host ""
 
-# 1. 构建 DataFactoryService.exe
+# 1. Build DataFactoryService.exe
 if (-not $SkipServiceBuild) {
-    Write-Host "[1/6] 构建 DataFactoryService.exe..." -ForegroundColor Yellow
+    Write-Host "[1/6] Building DataFactoryService.exe..." -ForegroundColor Yellow
     Push-Location $Review3Dir
     try {
         pyinstaller DataFactoryService.spec --noconfirm
         if ($LASTEXITCODE -ne 0) {
-            throw "PyInstaller 构建失败"
+            throw "PyInstaller build failed"
         }
         $ServiceExe = Join-Path $Review3Dir "dist\DataFactoryService.exe"
         if (-not (Test-Path $ServiceExe)) {
-            throw "DataFactoryService.exe 未生成"
+            throw "DataFactoryService.exe not generated"
         }
-        Write-Host "  DataFactoryService.exe 构建成功" -ForegroundColor Green
+        Write-Host "  DataFactoryService.exe build OK" -ForegroundColor Green
     }
     finally {
         Pop-Location
     }
 } else {
-    Write-Host "[1/6] 跳过 DataFactoryService.exe 构建" -ForegroundColor DarkGray
+    Write-Host "[1/6] Skipping DataFactoryService.exe build" -ForegroundColor DarkGray
     $ServiceExe = Join-Path $Review3Dir "dist\DataFactoryService.exe"
 }
 
-# 2. Health smoke test（真实验证）
-Write-Host "[2/6] 服务 health smoke test..." -ForegroundColor Yellow
+# 2. Health smoke test (real verification)
+Write-Host "[2/6] Service health smoke test..." -ForegroundColor Yellow
 if (-not (Test-Path $ServiceExe)) {
-    throw "DataFactoryService.exe 不存在: $ServiceExe"
+    throw "DataFactoryService.exe not found: $ServiceExe"
 }
 
-# 选择一个动态端口
 $SmokePort = 18999
 $SmokeProcess = $null
 try {
-    # 启动服务，设置无鉴权模式
     $env:DATAFACTORY_NO_AUTH = "1"
     $SmokeProcess = Start-Process -FilePath $ServiceExe `
         -ArgumentList "--service", "--api-host", "127.0.0.1", "--api-port", $SmokePort `
@@ -70,9 +68,9 @@ try {
         -RedirectStandardOutput (Join-Path $env:TEMP "df_smoke_stdout.log") `
         -RedirectStandardError (Join-Path $env:TEMP "df_smoke_stderr.log")
 
-    Write-Host "  服务 PID: $($SmokeProcess.Id)"
+    Write-Host "  Service PID: $($SmokeProcess.Id)"
 
-    # 等待 /api/health 就绪（最多 15 秒）
+    # Wait for /api/health ready (up to 15 seconds)
     $HealthOk = $false
     $HealthDetail = ""
     for ($i = 0; $i -lt 30; $i++) {
@@ -86,41 +84,41 @@ try {
             }
             $HealthDetail = "ok=$($resp.ok) serviceState=$($resp.serviceState)"
         } catch {
-            $HealthDetail = "等待中... ($($_.Exception.Message))"
+            $HealthDetail = "waiting... ($($_.Exception.Message))"
         }
     }
 
     if (-not $HealthOk) {
         $stderrLog = ""
         try { $stderrLog = Get-Content (Join-Path $env:TEMP "df_smoke_stderr.log") -Raw -ErrorAction Stop } catch {}
-        throw "Health smoke 失败: 服务未在 15s 内就绪。详情: $HealthDetail`nstderr: $stderrLog"
+        throw "Health smoke failed: service not ready in 15s. Detail: $HealthDetail`nstderr: $stderrLog"
     }
 
-    Write-Host "  Health 验证通过: $HealthDetail" -ForegroundColor Green
+    Write-Host "  Health OK: $HealthDetail" -ForegroundColor Green
 
-    # 验证 protocolVersion
+    # Verify protocolVersion
     $resp = Invoke-RestMethod -Uri "http://127.0.0.1:$SmokePort/api/health" -Method GET -TimeoutSec 2
     if ($resp.protocolVersion -ne 1) {
-        throw "protocolVersion 不匹配: 期望 1, 实际 $($resp.protocolVersion)"
+        throw "protocolVersion mismatch: expected 1, got $($resp.protocolVersion)"
     }
 
-    # 请求 /api/service/shutdown
+    # Request /api/service/shutdown
     try {
         Invoke-RestMethod -Uri "http://127.0.0.1:$SmokePort/api/service/shutdown" -Method POST -TimeoutSec 5 -Body '{}' -ContentType 'application/json'
     } catch {
-        # shutdown 可能导致连接断开，忽略
+        # shutdown may cause connection drop, ignore
     }
 
-    # 等待进程退出（最多 10 秒）
+    # Wait for process exit (up to 10 seconds)
     $Exited = $SmokeProcess.WaitForExit(10000)
     if (-not $Exited) {
-        Write-Host "  服务未在 10s 内退出，强制终止" -ForegroundColor Red
+        Write-Host "  Service did not exit in 10s, killing" -ForegroundColor Red
         $SmokeProcess.Kill()
         $SmokeProcess.WaitForExit(5000)
-        throw "服务未在超时内退出"
+        throw "Service did not exit within timeout"
     }
 
-    Write-Host "  服务已正常退出 (exit code: $($SmokeProcess.ExitCode))" -ForegroundColor Green
+    Write-Host "  Service exited normally (exit code: $($SmokeProcess.ExitCode))" -ForegroundColor Green
 }
 finally {
     if ($SmokeProcess -and -not $SmokeProcess.HasExited) {
@@ -129,56 +127,57 @@ finally {
     Remove-Item Env:\DATAFACTORY_NO_AUTH -ErrorAction SilentlyContinue
 }
 
-# 3. 构建 config-tool.exe
+# 3. Build config-tool.exe
 if (-not $SkipWailsBuild) {
-    Write-Host "[3/6] 构建 config-tool.exe..." -ForegroundColor Yellow
+    Write-Host "[3/6] Building config-tool.exe..." -ForegroundColor Yellow
     Push-Location $ConfigToolDir
     try {
-        wails build
+        wails build -skipbindings
         if ($LASTEXITCODE -ne 0) {
-            throw "Wails 构建失败"
+            throw "Wails build failed"
         }
-        Write-Host "  config-tool.exe 构建成功" -ForegroundColor Green
+        Write-Host "  config-tool.exe build OK" -ForegroundColor Green
     }
     finally {
         Pop-Location
     }
 } else {
-    Write-Host "[3/6] 跳过 config-tool.exe 构建" -ForegroundColor DarkGray
+    Write-Host "[3/6] Skipping config-tool.exe build" -ForegroundColor DarkGray
 }
 
-# 4. 复制服务到 config-tool.exe 同级
-Write-Host "[4/6] 复制 DataFactoryService.exe 到发布目录..." -ForegroundColor Yellow
+# 4. Copy service to config-tool.exe directory
+Write-Host "[4/6] Copying DataFactoryService.exe to release dir..." -ForegroundColor Yellow
 $TargetServiceExe = Join-Path $BuildBinDir "DataFactoryService.exe"
 Copy-Item -Path $ServiceExe -Destination $TargetServiceExe -Force
-Write-Host "  已复制到: $TargetServiceExe" -ForegroundColor Green
+Write-Host "  Copied to: $TargetServiceExe" -ForegroundColor Green
 
-# 5. 创建 project/ 和 template/
-Write-Host "[5/6] 创建 project/ 和 template/ 目录..." -ForegroundColor Yellow
+# 5. Create project/ and template/
+Write-Host "[5/6] Creating project/ and template/ dirs..." -ForegroundColor Yellow
 $ProjectDir = Join-Path $BuildBinDir "project"
 $TemplateDir = Join-Path $BuildBinDir "template"
 New-Item -ItemType Directory -Path $ProjectDir -Force | Out-Null
 New-Item -ItemType Directory -Path $TemplateDir -Force | Out-Null
-Write-Host "  已创建: $ProjectDir" -ForegroundColor Green
-Write-Host "  已创建: $TemplateDir" -ForegroundColor Green
+Write-Host "  Created: $ProjectDir" -ForegroundColor Green
+Write-Host "  Created: $TemplateDir" -ForegroundColor Green
 
-# 6. 输出 SHA256
-Write-Host "[6/6] 计算 SHA256..." -ForegroundColor Yellow
+# 6. Output SHA256
+Write-Host "[6/6] Computing SHA256..." -ForegroundColor Yellow
 $ConfigToolExe = Join-Path $BuildBinDir "config-tool.exe"
 
 Write-Host ""
-Write-Host "=== 构建结果 ===" -ForegroundColor Cyan
+Write-Host "=== Build Results ===" -ForegroundColor Cyan
 Write-Host ""
 
 if (Test-Path $ConfigToolExe) {
     $configToolInfo = Get-Item $ConfigToolExe
     $configToolHash = Get-FileHash $ConfigToolExe -Algorithm SHA256
+    $ctSizeMB = [math]::Round($configToolInfo.Length / 1MB, 2)
     Write-Host "config-tool.exe:" -ForegroundColor White
-    Write-Host "  路径: $ConfigToolExe"
-    Write-Host "  大小: $($configToolInfo.Length) bytes ($([math]::Round($configToolInfo.Length / 1MB, 2)) MB)"
+    Write-Host "  Path: $ConfigToolExe"
+    Write-Host "  Size: $($configToolInfo.Length) bytes ($ctSizeMB MB)"
     Write-Host "  SHA256: $($configToolHash.Hash)"
 } else {
-    Write-Host "config-tool.exe: 未找到" -ForegroundColor Red
+    Write-Host "config-tool.exe: NOT FOUND" -ForegroundColor Red
 }
 
 Write-Host ""
@@ -186,20 +185,21 @@ Write-Host ""
 if (Test-Path $TargetServiceExe) {
     $serviceInfo = Get-Item $TargetServiceExe
     $serviceHash = Get-FileHash $TargetServiceExe -Algorithm SHA256
+    $svcSizeMB = [math]::Round($serviceInfo.Length / 1MB, 2)
     Write-Host "DataFactoryService.exe:" -ForegroundColor White
-    Write-Host "  路径: $TargetServiceExe"
-    Write-Host "  大小: $($serviceInfo.Length) bytes ($([math]::Round($serviceInfo.Length / 1MB, 2)) MB)"
+    Write-Host "  Path: $TargetServiceExe"
+    Write-Host "  Size: $($serviceInfo.Length) bytes ($svcSizeMB MB)"
     Write-Host "  SHA256: $($serviceHash.Hash)"
 } else {
-    Write-Host "DataFactoryService.exe: 未找到" -ForegroundColor Red
+    Write-Host "DataFactoryService.exe: NOT FOUND" -ForegroundColor Red
 }
 
 Write-Host ""
-Write-Host "=== 发布目录结构 ===" -ForegroundColor Cyan
+Write-Host "=== Release Directory Structure ===" -ForegroundColor Cyan
 Write-Host "build/bin/"
-Write-Host "├── config-tool.exe"
-Write-Host "├── DataFactoryService.exe"
-Write-Host "├── project/"
-Write-Host "└── template/"
+Write-Host "  config-tool.exe"
+Write-Host "  DataFactoryService.exe"
+Write-Host "  project/"
+Write-Host "  template/"
 Write-Host ""
-Write-Host "构建完成！" -ForegroundColor Green
+Write-Host "Build complete!" -ForegroundColor Green
