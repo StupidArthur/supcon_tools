@@ -9,7 +9,7 @@ import {
   GetConfig, SaveConfig, AddCluster, RemoveCluster, UpdateCluster,
   ListAlerts, AckAlert, CountAlerts,
   OpenInFolder, GetLogPath, GetDBPath,
-  ExportSnapshot,
+  ExportSnapshot, ExportSnapshotAndPush, TestWebhook,
 } from '../../wailsjs/go/main/App'
 import type { model, config, collector, main } from '../../wailsjs/go/models'
 
@@ -27,6 +27,8 @@ export type Alert = model.Alert
 export type HistoryRange = main.HistoryRange
 export type SaveConfigResult = main.SaveConfigResult
 export type ExportSnapshotResult = main.ExportSnapshotResult
+export type PushSnapshotResult = main.PushSnapshotResult
+export type TestWebhookResult = main.TestWebhookResult
 
 // Config/ClusterConfig/Thresholds 用纯 interface（剥离 Wails 生成的 convertValues 方法），
 // 便于前端用对象字面量构造与 setState。
@@ -49,11 +51,7 @@ export interface Config {
   sortBy: string
   sampleEvery: number
   thresholds: Thresholds
-  // 以下后端用，前端不展示（可选）
-  timeoutSec?: number
-  concurrency?: number
-  globalConcurrency?: number
-  recoverConsecutive?: number
+  webhookUrl?: string
 }
 
 export const api = {
@@ -85,4 +83,6 @@ export const api = {
   getLogPath: GetLogPath,
   getDBPath: GetDBPath,
   exportSnapshot: ExportSnapshot as (nameBase: string, headers: string[], rows: string[][]) => Promise<ExportSnapshotResult>,
+  exportSnapshotAndPush: ExportSnapshotAndPush as (nameBase: string, headers: string[], rows: string[][]) => Promise<PushSnapshotResult>,
+  testWebhook: TestWebhook as (url: string) => Promise<TestWebhookResult>,
 }

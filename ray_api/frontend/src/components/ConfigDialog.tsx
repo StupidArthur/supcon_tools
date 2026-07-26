@@ -12,6 +12,10 @@ export function ConfigDialog({
   const [cfg, setCfg] = useState<Config>(config)
   const [logPath, setLogPath] = useState('')
   const [newURL, setNewURL] = useState('')
+  const [testStatus, setTestStatus] = useState<{ kind: 'idle' | 'done' | 'error'; msg: string }>({
+    kind: 'idle',
+    msg: '',
+  })
 
   useEffect(() => {
     api.getLogPath().then(setLogPath).catch(() => {})
@@ -24,6 +28,24 @@ export function ConfigDialog({
       onClose()
     } else {
       alert('保存失败：' + res.error)
+    }
+  }
+
+  const testWebhook = async () => {
+    if (!cfg.webhookUrl || !cfg.webhookUrl.trim()) {
+      setTestStatus({ kind: 'error', msg: '未填写 webhook URL' })
+      return
+    }
+    setTestStatus({ kind: 'idle', msg: '' })
+    try {
+      const res = await api.testWebhook(cfg.webhookUrl.trim())
+      if (res.success) {
+        setTestStatus({ kind: 'done', msg: '已发送，请到群机器人查看' })
+      } else {
+        setTestStatus({ kind: 'error', msg: res.error || '失败' })
+      }
+    } catch (e) {
+      setTestStatus({ kind: 'error', msg: String(e) })
     }
   }
 
@@ -85,6 +107,32 @@ export function ConfigDialog({
               onKeyDown={(e) => { if (e.key === 'Enter') addCluster() }}
             />
             <Button size="sm" variant="outline" onClick={addCluster}>添加</Button>
+          </div>
+        </div>
+
+        {/* Webhook 推送 */}
+        <div className="mb-5">
+          <div className="mb-2 text-xs font-medium text-muted-foreground">告警推送 · 企业微信群机器人（可选）</div>
+          <Field label="Webhook URL（留空则不推送）">
+            <input
+              className="input font-mono text-xs"
+              placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
+              value={cfg.webhookUrl || ''}
+              onChange={(e) => setCfg({ ...cfg, webhookUrl: e.target.value })}
+            />
+          </Field>
+          <div className="mt-2 flex items-center gap-3">
+            <Button size="sm" variant="outline" onClick={testWebhook}>测试推送</Button>
+            {testStatus.kind !== 'idle' && (
+              <span
+                className={`truncate text-xs ${
+                  testStatus.kind === 'done' ? 'text-green-600' : 'text-red-600'
+                }`}
+                title={testStatus.msg}
+              >
+                {testStatus.msg}
+              </span>
+            )}
           </div>
         </div>
 

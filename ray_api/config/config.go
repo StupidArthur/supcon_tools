@@ -46,6 +46,7 @@ type Config struct {
 	SortBy      string          `json:"sortBy"`
 	SampleEvery int             `json:"sampleEvery"`
 	Thresholds  Thresholds      `json:"thresholds"`
+	WebhookURL  string          `json:"webhookUrl,omitempty"`
 }
 
 func Default() Config {
@@ -241,6 +242,15 @@ func SaveClusters(clusters []ClusterConfig) error {
 func Validate(cfg Config) error {
 	if cfg.SampleEvery < 1 || cfg.SampleEvery > 3600 {
 		return fmt.Errorf("sampleEvery must be 1~3600")
+	}
+	if cfg.WebhookURL != "" {
+		u, err := url.Parse(cfg.WebhookURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("webhookUrl must be a valid http(s) URL")
+		}
+		if u.Query().Get("key") == "" {
+			return fmt.Errorf("webhookUrl must contain ?key= parameter")
+		}
 	}
 	th := cfg.Thresholds
 	for _, v := range []struct {

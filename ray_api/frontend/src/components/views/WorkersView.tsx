@@ -72,6 +72,7 @@ export function WorkersView({
             filenameBase={`${clusterName}_进程`}
             headers={COLS.map((c) => c.header)}
             rows={filtered.map((w) => COLS.map((c) => c.getValue(w)))}
+            withPush
           />
         </div>
       </CardHeader>

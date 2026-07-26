@@ -18,6 +18,10 @@ export function ExportSnapshot(arg1, arg2, arg3) {
   return window['go']['main']['App']['ExportSnapshot'](arg1, arg2, arg3);
 }
 
+export function ExportSnapshotAndPush(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportSnapshotAndPush'](arg1, arg2, arg3);
+}
+
 export function GetActorEvents(arg1, arg2) {
   return window['go']['main']['App']['GetActorEvents'](arg1, arg2);
 }
@@ -108,6 +112,10 @@ export function StopAll() {
 
 export function StopCluster(arg1) {
   return window['go']['main']['App']['StopCluster'](arg1);
+}
+
+export function TestWebhook(arg1) {
+  return window['go']['main']['App']['TestWebhook'](arg1);
 }
 
 export function UpdateCluster(arg1) {

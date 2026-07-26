@@ -139,6 +139,7 @@ export function AlertsView({
               filenameBase={showCluster ? '全局报警' : `${clusterName}_报警`}
               headers={COLS.map((c) => c.header)}
               rows={visible.map((a) => COLS.map((c) => c.getValue(a)))}
+              withPush
             />
           </div>
         </CardHeader>

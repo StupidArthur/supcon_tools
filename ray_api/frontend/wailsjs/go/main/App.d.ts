@@ -13,6 +13,8 @@ export function CountAlerts(arg1:string):Promise<number>;
 
 export function ExportSnapshot(arg1:string,arg2:Array<string>,arg3:Array<any>):Promise<main.ExportSnapshotResult>;
 
+export function ExportSnapshotAndPush(arg1:string,arg2:Array<string>,arg3:Array<any>):Promise<main.PushSnapshotResult>;
+
 export function GetActorEvents(arg1:string,arg2:main.HistoryRange):Promise<Array<model.ActorEvent>>;
 
 export function GetActors(arg1:string):Promise<Array<model.ActorSnapshot>>;
@@ -58,5 +60,7 @@ export function StartCluster(arg1:string):Promise<void>;
 export function StopAll():Promise<void>;
 
 export function StopCluster(arg1:string):Promise<void>;
+
+export function TestWebhook(arg1:string):Promise<main.TestWebhookResult>;
 
 export function UpdateCluster(arg1:config.ClusterConfig):Promise<main.SaveConfigResult>;

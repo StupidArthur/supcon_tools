@@ -88,6 +88,7 @@ export namespace config {
 	    sortBy: string;
 	    sampleEvery: number;
 	    thresholds: Thresholds;
+	    webhookUrl?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -101,6 +102,7 @@ export namespace config {
 	        this.sortBy = source["sortBy"];
 	        this.sampleEvery = source["sampleEvery"];
 	        this.thresholds = this.convertValues(source["thresholds"], Thresholds);
+	        this.webhookUrl = source["webhookUrl"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -156,12 +158,44 @@ export namespace main {
 	        this.to = source["to"];
 	    }
 	}
+	export class PushSnapshotResult {
+	    success: boolean;
+	    path: string;
+	    error: string;
+	    pushError: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PushSnapshotResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.path = source["path"];
+	        this.error = source["error"];
+	        this.pushError = source["pushError"];
+	    }
+	}
 	export class SaveConfigResult {
 	    success: boolean;
 	    error: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SaveConfigResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.error = source["error"];
+	    }
+	}
+	export class TestWebhookResult {
+	    success: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestWebhookResult(source);
 	    }
 	
 	    constructor(source: any = {}) {

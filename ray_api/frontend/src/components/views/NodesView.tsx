@@ -67,6 +67,7 @@ export function NodesView({ nodes, sortBy, clusterName }: { nodes: NodeMetric[];
             filenameBase={`${clusterName}_节点`}
             headers={COLS.map((c) => c.header)}
             rows={filtered.map((n) => COLS.map((c) => c.getValue(n)))}
+            withPush
           />
         </div>
       </CardHeader>

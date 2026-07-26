@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"raymonitor/logx"
 	"raymonitor/model"
 	"raymonitor/storage"
+	"raymonitor/wecom"
 )
 
 // DefaultRetentionDays 是节点/worker/actor/job/cluster 时序快照的保留天数。
@@ -558,6 +560,100 @@ func (a *App) GetLogPath() string {
 
 func (a *App) GetDBPath() string {
 	return a.resolveDBPath(a.cfg.DBPath)
+}
+
+// ---- Webhook 推送 ----
+
+// webhookClient 从给定的 WebhookURL 构造 wecom 客户端。
+// URL 形如 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx-xx。
+// 内部从 URL 中抽出 key 并剥掉 query 再传给 wecom 包。
+func (a *App) webhookClient(raw string) (*wecom.Client, error) {
+	if raw == "" {
+		return nil, fmt.Errorf("未配置 webhook URL")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("webhook URL 解析失败: %w", err)
+	}
+	key := u.Query().Get("key")
+	if key == "" {
+		return nil, fmt.Errorf("webhook URL 必须包含 ?key= 参数")
+	}
+	u.RawQuery = ""
+	return wecom.NewClient(key, wecom.WithWebhookURL(u.String()))
+}
+
+type TestWebhookResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+}
+
+// TestWebhook 用传入的 URL 发一条"配置成功"测试消息，不需要先保存配置。
+func (a *App) TestWebhook(webhookURL string) TestWebhookResult {
+	client, err := a.webhookClient(webhookURL)
+	if err != nil {
+		return TestWebhookResult{Error: err.Error()}
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+	defer cancel()
+
+	content := "## Ray 监控 - 推送配置成功\n\nWebhook 已连通，后续告警与快照将通过此通道推送。"
+	payload, err := wecom.BuildMarkdown(content)
+	if err != nil {
+		return TestWebhookResult{Error: err.Error()}
+	}
+	if _, err := client.Send(ctx, payload); err != nil {
+		logx.L().Warn("test webhook failed", "err", err)
+		return TestWebhookResult{Error: err.Error()}
+	}
+	logx.Event("app", "webhook_test_sent")
+	return TestWebhookResult{Success: true}
+}
+
+type PushSnapshotResult struct {
+	Success   bool   `json:"success"`
+	Path      string `json:"path"`
+	Error     string `json:"error"`
+	PushError string `json:"pushError"`
+}
+
+// ExportSnapshotAndPush 先按 ExportSnapshot 导出 CSV 到本地，再向 webhook 推一条通知。
+// 导出失败不会推送；推送失败不会回滚已写入的文件。
+func (a *App) ExportSnapshotAndPush(nameBase string, headers []string, rows [][]string) PushSnapshotResult {
+	expRes := a.ExportSnapshot(nameBase, headers, rows)
+	if !expRes.Success {
+		return PushSnapshotResult{Error: expRes.Error}
+	}
+
+	a.mu.Lock()
+	raw := a.cfg.WebhookURL
+	a.mu.Unlock()
+	client, err := a.webhookClient(raw)
+	if err != nil {
+		return PushSnapshotResult{Path: expRes.Path, PushError: err.Error()}
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+	defer cancel()
+
+	now := time.Now().Format("2006-01-02 15:04:05")
+	// 企业微信 markdown 把 \ 当转义符，Windows 路径反斜杠会被吃掉，转成正斜杠
+	displayPath := strings.ReplaceAll(expRes.Path, "\\", "/")
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## Ray 监控 - 快照导出\n\n")
+	fmt.Fprintf(&sb, "- **名称**: %s\n", nameBase)
+	fmt.Fprintf(&sb, "- **时间**: %s\n", now)
+	fmt.Fprintf(&sb, "- **行数**: %d\n", len(rows))
+	fmt.Fprintf(&sb, "- **文件**: `%s`\n", displayPath)
+
+	payload, err := wecom.BuildMarkdown(sb.String())
+	if err != nil {
+		return PushSnapshotResult{Path: expRes.Path, PushError: err.Error()}
+	}
+	if _, err := client.Send(ctx, payload); err != nil {
+		logx.L().Warn("snapshot push failed", "path", expRes.Path, "err", err)
+		return PushSnapshotResult{Path: expRes.Path, PushError: err.Error()}
+	}
+	return PushSnapshotResult{Success: true, Path: expRes.Path}
 }
 
 // ---- 快照导出 ----
