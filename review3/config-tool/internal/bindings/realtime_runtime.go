@@ -286,8 +286,7 @@ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime
 		return realtime.RealtimeRunSession{}, fmt.Errorf("已有实时运行在进行中")
 	}
 
-	// todo.md §9.2：检查没有 batch 运行（通过服务状态）
-	// 注意：batch 状态检查需要在服务内部实现，这里先跳过
+	// todo.md §9.2：batch 互斥由服务 /api/runtime/start 检查（返回 409）
 
 	revision, err := b.manager.RuntimeRevision(projectID)
 	if err != nil {
