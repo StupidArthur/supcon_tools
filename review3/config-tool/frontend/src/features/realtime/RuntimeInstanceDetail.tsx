@@ -2,13 +2,6 @@ import { useEffect, useState } from 'react'
 import { realtimeProjectApi } from '../../lib/api'
 import { useRuntimeStore } from '../runtime/useRuntimeStore'
 
-interface TagInfo {
-  name: string
-  attribute: string
-  description: string
-  writable: boolean
-}
-
 interface ForceEntry {
   mode: string
   value?: number
@@ -29,13 +22,12 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
   const stale = useRuntimeStore((s) => s.stale)
   const apiHost = useRuntimeStore((s) => s.apiHost)
   const apiPort = useRuntimeStore((s) => s.apiPort)
+  const runtimeName = useRuntimeStore((s) => s.runtimeName)
   const registerSubscription = useRuntimeStore((s) => s.registerSubscription)
   const unregisterSubscription = useRuntimeStore((s) => s.unregisterSubscription)
-  const session = (useRuntimeStore.getState() as any)
 
-  // 拉 tag catalog 仅一次（详情首次进入时）。
-  const [tags, setTags] = useState<TagInfo[]>([])
-  const [instanceNotReady, setInstanceNotReady] = useState(false)
+  const isRunning = connectionState === 'connected' || connectionState === 'connecting'
+
   const [forces, setForces] = useState<Record<string, ForceEntry>>({})
   const [qualities, setQualities] = useState<Record<string, string>>({})
   const [opKind, setOpKind] = useState<OpKind>('')
@@ -44,32 +36,12 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
   const [qualityValue, setQualityValue] = useState<'Good' | 'Uncertain' | 'Bad'>('Bad')
   const [error, setError] = useState<string | null>(null)
 
-  const isRunning = connectionState === 'connected' || connectionState === 'connecting'
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch(`http://${apiHost}:${apiPort}/api/instances/default/tags`)
-        if (cancelled) return
-        if (!res.ok) {
-          setInstanceNotReady(true)
-          return
-        }
-        const data = (await res.json()) as { tags?: TagInfo[] }
-        setTags(data.tags || [])
-        setInstanceNotReady(false)
-      } catch {
-        setInstanceNotReady(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [apiHost, apiPort, connectionState])
-
   // 当前实例 tags 列表（按 tag.instance === instanceName 过滤）
-  const instanceTags = tags.filter((t) => (t as any).instance === instanceName)
+  // instanceName 是 PID/罐/阀门名；runtimeName 是本次运行的工程名，用于 REST 路径。
+  // detail 页不复用 /api/instances/default/tags：useRuntimeStore.connect() 已用真实
+  // runtimeName 调过 /api/instances/{runtimeName}/tags，存到 tagCatalog。
+  const instanceTags = tagCatalog.filter((t) => t.instance === instanceName)
+
 
   // 订阅详情 tag
   useEffect(() => {
@@ -147,7 +119,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
           setError('设定值必须是有限数')
           return
         }
-        await realtimeProjectApi.setRuntimeValue(apiHost, apiPort, 'default', opTargetTag, v)
+        await realtimeProjectApi.setRuntimeValue(apiHost, apiPort, runtimeName ?? '', opTargetTag, v)
       } else if (opKind === 'quality') {
         await realtimeProjectApi.setQuality(apiHost, apiPort, opTargetTag, qualityValue)
       }
@@ -192,7 +164,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
         ) : null}
       </div>
 
-      {!isRunning && instanceNotReady ? (
+      {!isRunning ? (
         <div className="mt-4 text-sm text-muted-foreground" data-testid="runtime-detail-empty">
           服务尚未启动，暂无实时参数。
         </div>
