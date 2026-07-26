@@ -315,11 +315,9 @@ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime
 		return realtime.RealtimeRunSession{}, fmt.Errorf("启动实时运行失败: %w", err)
 	}
 
-	// todo.md §9.2 步骤 9：推送报警配置
+	// todo.md §9.2 步骤 9：推送报警配置（失败不阻断启动，仅记录）
 	if err := b.pushAlarmConfigViaService(projectID); err != nil {
-		b.stopRuntimeViaService()
-		b.sessionManager.RemoveSessionDir(dir)
-		return realtime.RealtimeRunSession{}, fmt.Errorf("报警配置推送失败: %w", err)
+		fmt.Fprintf(os.Stderr, "[realtime] 报警配置推送失败（不阻断启动）: %v\n", err)
 	}
 
 	// 创建 session 记录

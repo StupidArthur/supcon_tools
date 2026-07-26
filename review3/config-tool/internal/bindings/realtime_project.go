@@ -376,11 +376,11 @@ func (b *RealtimeProjectBinding) GetForces(apiHost string, apiPort int) (ForceSt
 }
 
 func ResolveRealtimeProjectsDir() (string, error) {
-	configDir, err := os.UserConfigDir()
+	exeDir, err := ResolveExeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(configDir, "DataFactory", "realtime_projects")
+	dir := filepath.Join(exeDir, "project", "realtime_projects")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
