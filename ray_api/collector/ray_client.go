@@ -19,6 +19,9 @@ import (
 
 const maxResponseBytes = 64 * 1024 * 1024
 
+// DefaultTimeoutSec 是 HTTP 请求的默认秒级超时。未对用户暴露，需要调整时改这里。
+const DefaultTimeoutSec = 10
+
 type Client struct {
 	clusterID string
 	baseURL   string
@@ -33,7 +36,7 @@ type Client struct {
 func NewClient(opts CollectorOpts) *Client {
 	timeout := opts.TimeoutSec
 	if timeout <= 0 {
-		timeout = 8
+		timeout = DefaultTimeoutSec
 	}
 	transport := &http.Transport{DisableCompression: true}
 	return &Client{

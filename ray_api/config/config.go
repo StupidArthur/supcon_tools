@@ -40,18 +40,12 @@ type Thresholds struct {
 }
 
 type Config struct {
-	Clusters           []ClusterConfig `json:"clusters"`
-	DBPath             string          `json:"dbPath"`
-	LogDir             string          `json:"logDir"`
-	SortBy             string          `json:"sortBy"`
-	SampleEvery        int             `json:"sampleEvery"`
-	Thresholds         Thresholds      `json:"thresholds"`
-	TimeoutSec         int             `json:"timeoutSec,omitempty"`
-	Concurrency        int             `json:"concurrency,omitempty"`
-	GlobalConcurrency  int             `json:"globalConcurrency,omitempty"`
-	RecoverConsecutive int             `json:"recoverConsecutive,omitempty"`
-	RetentionDays      int             `json:"retentionDays,omitempty"`
-	CleanupEveryHours  int             `json:"cleanupEveryHours,omitempty"`
+	Clusters    []ClusterConfig `json:"clusters"`
+	DBPath      string          `json:"dbPath"`
+	LogDir      string          `json:"logDir"`
+	SortBy      string          `json:"sortBy"`
+	SampleEvery int             `json:"sampleEvery"`
+	Thresholds  Thresholds      `json:"thresholds"`
 }
 
 func Default() Config {
@@ -59,17 +53,11 @@ func Default() Config {
 		Clusters: []ClusterConfig{
 			{ID: "default", PlatformURL: "http://10.30.144.41:32549"},
 		},
-		DBPath:             "ray_monitor.db",
-		LogDir:             "logs",
-		SortBy:             "cpu",
-		SampleEvery:        10,
-		TimeoutSec:         8,
-		Concurrency:        10,
-		GlobalConcurrency:  30,
-		Thresholds:         DefaultThresholds(),
-		RecoverConsecutive: 3,
-		RetentionDays:      90,
-		CleanupEveryHours:  6,
+		DBPath:      "ray_monitor.db",
+		LogDir:      "logs",
+		SortBy:      "cpu",
+		SampleEvery: 10,
+		Thresholds:  DefaultThresholds(),
 	}
 }
 
@@ -89,20 +77,6 @@ func (c *Config) SampleInterval() int {
 		return c.SampleEvery
 	}
 	return 10
-}
-
-func (c *Config) EffectiveRetentionDays() int {
-	if c.RetentionDays > 0 {
-		return c.RetentionDays
-	}
-	return 90
-}
-
-func (c *Config) EffectiveCleanupEveryHours() int {
-	if c.CleanupEveryHours > 0 {
-		return c.CleanupEveryHours
-	}
-	return 6
 }
 
 func Path() string {
@@ -175,26 +149,8 @@ func Load() (Config, error) {
 	if len(cfg.Clusters) == 0 {
 		cfg.Clusters = Default().Clusters
 	}
-	if cfg.TimeoutSec <= 0 {
-		cfg.TimeoutSec = 8
-	}
-	if cfg.Concurrency <= 0 {
-		cfg.Concurrency = 10
-	}
-	if cfg.GlobalConcurrency <= 0 {
-		cfg.GlobalConcurrency = 30
-	}
-	if cfg.RecoverConsecutive <= 0 {
-		cfg.RecoverConsecutive = 3
-	}
 	if cfg.SortBy == "" {
 		cfg.SortBy = "cpu"
-	}
-	if cfg.RetentionDays <= 0 {
-		cfg.RetentionDays = 90
-	}
-	if cfg.CleanupEveryHours <= 0 {
-		cfg.CleanupEveryHours = 6
 	}
 	return cfg, nil
 }
@@ -227,24 +183,6 @@ func migrateFromLegacy(b []byte) Config {
 	}
 	if cfg.Thresholds == (Thresholds{}) {
 		cfg.Thresholds = DefaultThresholds()
-	}
-	if cfg.RecoverConsecutive == 0 {
-		cfg.RecoverConsecutive = 3
-	}
-	if cfg.GlobalConcurrency == 0 {
-		cfg.GlobalConcurrency = 30
-	}
-	if cfg.Concurrency == 0 {
-		cfg.Concurrency = 10
-	}
-	if cfg.TimeoutSec == 0 {
-		cfg.TimeoutSec = 8
-	}
-	if cfg.RetentionDays == 0 {
-		cfg.RetentionDays = 90
-	}
-	if cfg.CleanupEveryHours == 0 {
-		cfg.CleanupEveryHours = 6
 	}
 	return cfg
 }
@@ -304,25 +242,6 @@ func Validate(cfg Config) error {
 	if cfg.SampleEvery < 1 || cfg.SampleEvery > 3600 {
 		return fmt.Errorf("sampleEvery must be 1~3600")
 	}
-	if cfg.TimeoutSec < 1 || cfg.TimeoutSec > 300 {
-		return fmt.Errorf("timeoutSec must be 1~300")
-	}
-	if cfg.Concurrency < 1 || cfg.Concurrency > 1000 {
-		return fmt.Errorf("concurrency must be 1~1000")
-	}
-	if cfg.GlobalConcurrency < 1 || cfg.GlobalConcurrency > 5000 {
-		return fmt.Errorf("globalConcurrency must be 1~5000")
-	}
-	if cfg.GlobalConcurrency < cfg.Concurrency {
-		return fmt.Errorf("globalConcurrency must be >= concurrency")
-	}
-	if cfg.RecoverConsecutive < 1 || cfg.RecoverConsecutive > 100 {
-		return fmt.Errorf("recoverConsecutive must be 1~100")
-	}
-	if cfg.RetentionDays < 1 || cfg.RetentionDays > 3650 {
-		return fmt.Errorf("retentionDays must be 1~3650")
-	}
-
 	th := cfg.Thresholds
 	for _, v := range []struct {
 		name string

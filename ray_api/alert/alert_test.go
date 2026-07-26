@@ -42,7 +42,7 @@ func (s *memoryAlertStore) AddAlertEvent(model.AlertEvent) error { return nil }
 
 func TestRecoverConsecutiveHotUpdatePreservesBelowCount(t *testing.T) {
 	store := &memoryAlertStore{active: &model.Alert{ID: 1}}
-	manager := NewManager(store, 3)
+	manager := NewManager(store)
 
 	check := func() {
 		manager.checkMetric("cluster", "cluster", "node", "worker", "worker", "worker", "cpu", 50, 10)
@@ -62,7 +62,7 @@ func TestRecoverConsecutiveHotUpdatePreservesBelowCount(t *testing.T) {
 
 func TestRecoverConsecutiveHotUpdateUsesLowerValueOnNextCheck(t *testing.T) {
 	store := &memoryAlertStore{active: &model.Alert{ID: 1}}
-	manager := NewManager(store, 5)
+	manager := NewManager(store)
 
 	manager.checkMetric("cluster", "cluster", "node", "worker", "worker", "worker", "cpu", 50, 10)
 	manager.checkMetric("cluster", "cluster", "node", "worker", "worker", "worker", "cpu", 50, 10)

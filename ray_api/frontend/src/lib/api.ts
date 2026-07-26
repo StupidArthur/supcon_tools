@@ -9,6 +9,7 @@ import {
   GetConfig, SaveConfig, AddCluster, RemoveCluster, UpdateCluster,
   ListAlerts, AckAlert, CountAlerts,
   OpenInFolder, GetLogPath, GetDBPath,
+  ExportSnapshot,
 } from '../../wailsjs/go/main/App'
 import type { model, config, collector, main } from '../../wailsjs/go/models'
 
@@ -25,6 +26,7 @@ export type ActorEvent = model.ActorEvent
 export type Alert = model.Alert
 export type HistoryRange = main.HistoryRange
 export type SaveConfigResult = main.SaveConfigResult
+export type ExportSnapshotResult = main.ExportSnapshotResult
 
 // Config/ClusterConfig/Thresholds 用纯 interface（剥离 Wails 生成的 convertValues 方法），
 // 便于前端用对象字面量构造与 setState。
@@ -82,4 +84,5 @@ export const api = {
   openInFolder: OpenInFolder,
   getLogPath: GetLogPath,
   getDBPath: GetDBPath,
+  exportSnapshot: ExportSnapshot as (nameBase: string, headers: string[], rows: string[][]) => Promise<ExportSnapshotResult>,
 }

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes, pct, FilterInput } from '@/lib/utils'
+import { ExportSnapshotButton } from '@/components/ExportSnapshotButton'
 import type { NodeMetric } from '@/lib/api'
 
 // 列定义：key = 列 ID，header = 表头文字，getValue = 取该列字符串值（用于 contains 筛）
@@ -23,7 +24,7 @@ const COLS = [
   { key: 'state', header: '状态', getValue: (n: NodeMetric) => n.state },
 ]
 
-export function NodesView({ nodes, sortBy }: { nodes: NodeMetric[]; sortBy: 'cpu' | 'gpu' }) {
+export function NodesView({ nodes, sortBy, clusterName }: { nodes: NodeMetric[]; sortBy: 'cpu' | 'gpu'; clusterName: string }) {
   // 列筛选（contains，不区分大小写）
   const [filters, setFilters] = useState<Record<string, string>>({})
   const setFilter = (key: string, val: string) => setFilters((p) => ({ ...p, [key]: val }))
@@ -58,9 +59,16 @@ export function NodesView({ nodes, sortBy }: { nodes: NodeMetric[]; sortBy: 'cpu
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          节点列表 · 共 {filtered.length} / {nodes.length} 个（按 {sortBy === 'cpu' ? 'CPU' : 'GPU'} 排序）
-        </CardTitle>
+        <div className="flex items-center gap-3">
+          <CardTitle>
+            节点列表 · 共 {filtered.length} / {nodes.length} 个（按 {sortBy === 'cpu' ? 'CPU' : 'GPU'} 排序）
+          </CardTitle>
+          <ExportSnapshotButton
+            filenameBase={`${clusterName}_节点`}
+            headers={COLS.map((c) => c.header)}
+            rows={filtered.map((n) => COLS.map((c) => c.getValue(n)))}
+          />
+        </div>
       </CardHeader>
       <CardContent>
         <Table>

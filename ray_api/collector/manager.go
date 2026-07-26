@@ -10,6 +10,12 @@ import (
 	"raymonitor/model"
 )
 
+// DefaultConcurrency 是单集群节点详情 fan-out 的并发上限。未对用户暴露，需要调整时改这里。
+const DefaultConcurrency = 50
+
+// DefaultGlobalConcurrency 是所有集群 HTTP 请求共享的并发上限。未对用户暴露，需要调整时改这里。
+const DefaultGlobalConcurrency = 100
+
 type AlertChecker interface {
 	Check(clusterID, clusterName string, th config.Thresholds, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool)
 }
@@ -59,15 +65,11 @@ type collectorEntry struct {
 }
 
 func NewManager(store Store, cfg config.Config) *CollectorManager {
-	gc := cfg.GlobalConcurrency
-	if gc <= 0 {
-		gc = 30
-	}
 	m := &CollectorManager{
 		collectors: map[string]*collectorEntry{},
 		store:      store,
 		cfg:        cfg,
-		limiter:    newSemaphoreLimiter(gc),
+		limiter:    newSemaphoreLimiter(DefaultGlobalConcurrency),
 	}
 	for _, cl := range cfg.Clusters {
 		if cl.ID == "" || cl.PlatformURL == "" {
@@ -87,8 +89,8 @@ func (m *CollectorManager) optsForCluster(cl config.ClusterConfig) CollectorOpts
 		PlatformURL:  cl.PlatformURL,
 		SummaryEvery: interval,
 		DetailEvery:  interval,
-		TimeoutSec:   m.cfg.TimeoutSec,
-		Concurrency:  m.cfg.Concurrency,
+		TimeoutSec:   DefaultTimeoutSec,
+		Concurrency:  DefaultConcurrency,
 	}
 }
 
@@ -235,13 +237,7 @@ func (m *CollectorManager) ReloadAll(cfg config.Config) {
 		e.cancel()
 	}
 
-	gc := cfg.GlobalConcurrency
-	if gc <= 0 {
-		gc = 30
-	}
-	if cap(m.limiter.ch) != gc {
-		m.limiter = newSemaphoreLimiter(gc)
-	}
+	m.limiter = newSemaphoreLimiter(DefaultGlobalConcurrency)
 
 	m.collectors = map[string]*collectorEntry{}
 	m.cfg = cfg
@@ -261,16 +257,14 @@ func (m *CollectorManager) ReloadAll(cfg config.Config) {
 	logx.L().Info("all collectors reloaded", "count", len(cfg.Clusters))
 }
 
-// ApplyConfig updates the manager's complete configuration. Collector-wide
-// runtime settings require rebuilding collectors; threshold and other policy
-// changes retain the existing collectors and their snapshots.
+// ApplyConfig updates the manager's complete configuration. Only changes to
+// user-facing config fields (clusters, sample interval, thresholds) are acted
+// on here; concurrency / timeout / etc. are compile-time constants so they
+// never trigger a rebuild.
 func (m *CollectorManager) ApplyConfig(cfg config.Config) {
 	m.mu.Lock()
 	old := m.cfg
-	rebuildAll := old.SampleEvery != cfg.SampleEvery ||
-		old.TimeoutSec != cfg.TimeoutSec ||
-		old.Concurrency != cfg.Concurrency ||
-		old.GlobalConcurrency != cfg.GlobalConcurrency
+	rebuildAll := old.SampleEvery != cfg.SampleEvery
 
 	if rebuildAll {
 		started := make(map[string]bool, len(m.collectors))
@@ -278,12 +272,8 @@ func (m *CollectorManager) ApplyConfig(cfg config.Config) {
 			started[id] = entry.started
 			entry.cancel()
 		}
-		gc := cfg.GlobalConcurrency
-		if gc <= 0 {
-			gc = 30
-		}
 		m.cfg = cfg
-		m.limiter = newSemaphoreLimiter(gc)
+		m.limiter = newSemaphoreLimiter(DefaultGlobalConcurrency)
 		m.collectors = make(map[string]*collectorEntry, len(cfg.Clusters))
 		for _, cl := range cfg.Clusters {
 			if cl.ID == "" || cl.PlatformURL == "" {

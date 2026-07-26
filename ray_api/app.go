@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +18,14 @@ import (
 	"raymonitor/model"
 	"raymonitor/storage"
 )
+
+// DefaultRetentionDays 是节点/worker/actor/job/cluster 时序快照的保留天数。
+// 未对用户暴露，需要调整时改这里。
+const DefaultRetentionDays = 90
+
+// DefaultCleanupEveryHours 是后台清理任务的执行间隔（小时）。
+// 未对用户暴露，需要调整时改这里。
+const DefaultCleanupEveryHours = 6
 
 type App struct {
 	ctx context.Context
@@ -59,11 +70,12 @@ func (a *App) startup(ctx context.Context) {
 		"clusters", len(cfg.Clusters),
 		"cluster_ids", clusterIDs(cfg.Clusters),
 		"sample_every_sec", cfg.SampleInterval(),
-		"timeout_sec", cfg.TimeoutSec,
-		"concurrency", cfg.Concurrency,
-		"global_concurrency", cfg.GlobalConcurrency,
-		"retention_days", cfg.EffectiveRetentionDays(),
-		"cleanup_every_hours", cfg.EffectiveCleanupEveryHours(),
+		"timeout_sec", collector.DefaultTimeoutSec,
+		"concurrency", collector.DefaultConcurrency,
+		"global_concurrency", collector.DefaultGlobalConcurrency,
+		"recover_consecutive", alert.DefaultRecoverConsecutive,
+		"retention_days", DefaultRetentionDays,
+		"cleanup_every_hours", DefaultCleanupEveryHours,
 		"db_path", dbPath)
 
 	store, err := storage.Open(dbPath)
@@ -77,11 +89,11 @@ func (a *App) startup(ctx context.Context) {
 
 	if a.store != nil {
 		a.manager = collector.NewManager(a.store, cfg)
-		a.alerts = alert.NewManager(a.store, cfg.RecoverConsecutive)
+		a.alerts = alert.NewManager(a.store)
 		a.manager.SetAlertChecker(a.alerts)
 		dbg = append(dbg, "manager created, clusters="+itoa(len(cfg.Clusters)))
 
-		a.startCleanupLoop(cfg)
+		a.startCleanupLoop()
 		logx.Event("app", "runtime_initialized", "store_ok", true, "collectors", len(cfg.Clusters))
 	} else {
 		dbg = append(dbg, "manager NOT created (store nil)")
@@ -107,24 +119,21 @@ func (a *App) resolveDBPath(dbPath string) string {
 	return resolved
 }
 
-func (a *App) startCleanupLoop(cfg config.Config) {
+func (a *App) startCleanupLoop() {
 	cleanupCtx, cancel := context.WithCancel(a.ctx)
 	a.cleanupCancel = cancel
 
-	retentionDays := cfg.EffectiveRetentionDays()
-	everyHours := cfg.EffectiveCleanupEveryHours()
-
 	go func() {
-		a.runCleanup(cleanupCtx, retentionDays)
+		a.runCleanup(cleanupCtx, DefaultRetentionDays)
 
-		ticker := time.NewTicker(time.Duration(everyHours) * time.Hour)
+		ticker := time.NewTicker(time.Duration(DefaultCleanupEveryHours) * time.Hour)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-cleanupCtx.Done():
 				return
 			case <-ticker.C:
-				a.runCleanup(cleanupCtx, retentionDays)
+				a.runCleanup(cleanupCtx, DefaultRetentionDays)
 			}
 		}
 	}()
@@ -408,7 +417,6 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 	}
 
 	a.mu.Lock()
-	old := a.cfg
 	a.mu.Unlock()
 
 	if err := config.Save(cfg); err != nil {
@@ -417,18 +425,6 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 
 	if a.manager != nil {
 		a.manager.ApplyConfig(cfg)
-		if old.RecoverConsecutive != cfg.RecoverConsecutive {
-			if am := a.alertManager(); am != nil {
-				am.UpdateRecoverConsecutive(cfg.RecoverConsecutive)
-			}
-		}
-	}
-
-	if old.RetentionDays != cfg.RetentionDays || old.CleanupEveryHours != cfg.CleanupEveryHours {
-		if a.cleanupCancel != nil {
-			a.cleanupCancel()
-		}
-		a.startCleanupLoop(cfg)
 	}
 
 	a.mu.Lock()
@@ -440,12 +436,12 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 		"clusters", len(cfg.Clusters),
 		"cluster_ids", clusterIDs(cfg.Clusters),
 		"sample_every_sec", cfg.SampleInterval(),
-		"timeout_sec", cfg.TimeoutSec,
-		"concurrency", cfg.Concurrency,
-		"global_concurrency", cfg.GlobalConcurrency,
-		"recover_consecutive", cfg.RecoverConsecutive,
-		"retention_days", cfg.EffectiveRetentionDays(),
-		"cleanup_every_hours", cfg.EffectiveCleanupEveryHours())
+		"timeout_sec", collector.DefaultTimeoutSec,
+		"concurrency", collector.DefaultConcurrency,
+		"global_concurrency", collector.DefaultGlobalConcurrency,
+		"recover_consecutive", alert.DefaultRecoverConsecutive,
+		"retention_days", DefaultRetentionDays,
+		"cleanup_every_hours", DefaultCleanupEveryHours)
 	return SaveConfigResult{Success: true}
 }
 
@@ -562,4 +558,70 @@ func (a *App) GetLogPath() string {
 
 func (a *App) GetDBPath() string {
 	return a.resolveDBPath(a.cfg.DBPath)
+}
+
+// ---- 快照导出 ----
+
+type ExportSnapshotResult struct {
+	Success bool   `json:"success"`
+	Path    string `json:"path"`
+	Error   string `json:"error"`
+}
+
+// ExportSnapshot 将当前页列表导出为单页 CSV。
+// nameBase 形如 "集群名_节点" 或 "全局报警"，后端追加 _{datetime}_snapshot.csv。
+// 文件落到 exe 同级 snapshot 目录（不存在则新建）。返回完整路径。
+func (a *App) ExportSnapshot(nameBase string, headers []string, rows [][]string) ExportSnapshotResult {
+	baseDir := ""
+	if exe, err := os.Executable(); err == nil {
+		baseDir = filepath.Dir(exe)
+	} else {
+		baseDir = "."
+	}
+	snapshotDir := filepath.Join(baseDir, "snapshot")
+	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+		return ExportSnapshotResult{Error: "create snapshot dir: " + err.Error()}
+	}
+
+	safe := sanitizeFilename(nameBase)
+	stamp := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("%s_%s_snapshot.csv", safe, stamp)
+	full := filepath.Join(snapshotDir, filename)
+
+	f, err := os.Create(full)
+	if err != nil {
+		return ExportSnapshotResult{Error: "create file: " + err.Error()}
+	}
+	defer f.Close()
+
+	// UTF-8 BOM，让 Excel 正确识别中文
+	if _, err := f.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
+		return ExportSnapshotResult{Error: "write BOM: " + err.Error()}
+	}
+	w := csv.NewWriter(f)
+	if len(headers) > 0 {
+		if err := w.Write(headers); err != nil {
+			return ExportSnapshotResult{Error: "write header: " + err.Error()}
+		}
+	}
+	for _, row := range rows {
+		if err := w.Write(row); err != nil {
+			return ExportSnapshotResult{Error: "write row: " + err.Error()}
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return ExportSnapshotResult{Error: "flush: " + err.Error()}
+	}
+	logx.L().Info("snapshot exported", "path", full, "headers", len(headers), "rows", len(rows))
+	return ExportSnapshotResult{Success: true, Path: full}
+}
+
+// sanitizeFilename 替换 Windows 文件名非法字符为下划线。
+func sanitizeFilename(s string) string {
+	repl := strings.NewReplacer(
+		`\`, "_", `/`, "_", `:`, "_", `*`, "_", `?`, "_",
+		`"`, "_", `<`, "_", `>`, "_", `|`, "_",
+	)
+	return strings.TrimSpace(repl.Replace(s))
 }

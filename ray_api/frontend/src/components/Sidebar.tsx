@@ -78,7 +78,7 @@ export function Sidebar({
         ) : null}
       </nav>
       <div className="px-5 py-3 text-[11px] text-muted-foreground/70">
-        v0.92 designed by @yuzechao
+        v0.93 designed by @yuzechao
       </div>
     </aside>
   )

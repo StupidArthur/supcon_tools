@@ -14,6 +14,10 @@ export function CountAlerts(arg1) {
   return window['go']['main']['App']['CountAlerts'](arg1);
 }
 
+export function ExportSnapshot(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportSnapshot'](arg1, arg2, arg3);
+}
+
 export function GetActorEvents(arg1, arg2) {
   return window['go']['main']['App']['GetActorEvents'](arg1, arg2);
 }

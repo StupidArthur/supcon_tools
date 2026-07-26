@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes, FilterInput, applyFilters } from '@/lib/utils'
+import { ExportSnapshotButton } from '@/components/ExportSnapshotButton'
 import type { WorkerSnapshot, NodeMetric } from '@/lib/api'
 import type { CollectionHealth } from '@/components/CollectionHealthNotice'
 
@@ -10,11 +11,13 @@ export function WorkersView({
   nodes,
   sortBy,
   health,
+  clusterName,
 }: {
   workers: WorkerSnapshot[]
   nodes: NodeMetric[]
   sortBy: 'cpu' | 'gpu'
   health?: CollectionHealth | null
+  clusterName: string
 }) {
   const [filters, setFilters] = useState<Record<string, string>>({})
   const setFilter = (k: string, v: string) => setFilters((p) => ({ ...p, [k]: v }))
@@ -61,9 +64,16 @@ export function WorkersView({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          Worker 进程 · 共 {filtered.length} / {workers.length} 个（按 {sortBy === 'cpu' ? 'CPU' : 'GPU'} 排序）
-        </CardTitle>
+        <div className="flex items-center gap-3">
+          <CardTitle>
+            Worker 进程 · 共 {filtered.length} / {workers.length} 个（按 {sortBy === 'cpu' ? 'CPU' : 'GPU'} 排序）
+          </CardTitle>
+          <ExportSnapshotButton
+            filenameBase={`${clusterName}_进程`}
+            headers={COLS.map((c) => c.header)}
+            rows={filtered.map((w) => COLS.map((c) => c.getValue(w)))}
+          />
+        </div>
       </CardHeader>
       <CardContent>
         {workers.length === 0 ? (

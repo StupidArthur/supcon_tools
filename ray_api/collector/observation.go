@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,6 +44,12 @@ func (c *Client) logRequest(path string, status int, started time.Time, header h
 }
 
 func (c *Client) observeSchema(path string, data []byte, header http.Header) {
+	// Schema 观测日志默认关闭：不同节点 Actor 字段组合差异导致指纹频繁变化，
+	// 生产一日可产生 20MB+ 日志（environment_*.jsonl），价值低。
+	// 需调试 Ray 接口形状时设置环境变量 RAY_MONITOR_OBSERVE_SCHEMA=1 重新开启。
+	if os.Getenv("RAY_MONITOR_OBSERVE_SCHEMA") == "" {
+		return
+	}
 	var value any
 	if err := json.Unmarshal(data, &value); err != nil {
 		logx.Event("error", "ray_json_shape_failed",

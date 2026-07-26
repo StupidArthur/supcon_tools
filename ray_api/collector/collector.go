@@ -434,10 +434,6 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			freshActors = append(freshActors, r.actors...)
 			freshNodes = append(freshNodes, r.node)
 
-			if err := c.store.WriteNodeMetrics(c.opts.ClusterID, []model.NodeMetric{r.node}); err != nil {
-				storeErrs = append(storeErrs, fmt.Errorf("write node metrics node=%s: %w", r.nodeID, err))
-			}
-
 			evts := c.diffActorsForNode(r.nodeID, r.actors)
 			actorEvents = append(actorEvents, evts...)
 
@@ -524,6 +520,11 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		return a.PID < b.PID
 	})
 
+	if len(freshNodes) > 0 {
+		if err := c.store.WriteNodeMetrics(c.opts.ClusterID, freshNodes); err != nil {
+			storeErrs = append(storeErrs, fmt.Errorf("write node metrics (%d nodes, first=%s): %w", len(freshNodes), freshNodes[0].NodeID, err))
+		}
+	}
 	if len(freshWorkers) > 0 {
 		if err := c.store.WriteWorkers(c.opts.ClusterID, freshWorkers); err != nil {
 			storeErrs = append(storeErrs, fmt.Errorf("write workers: %w", err))

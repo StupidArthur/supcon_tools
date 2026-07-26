@@ -11,6 +11,8 @@ export function AddCluster(arg1:config.ClusterConfig):Promise<main.SaveConfigRes
 
 export function CountAlerts(arg1:string):Promise<number>;
 
+export function ExportSnapshot(arg1:string,arg2:Array<string>,arg3:Array<any>):Promise<main.ExportSnapshotResult>;
+
 export function GetActorEvents(arg1:string,arg2:main.HistoryRange):Promise<Array<model.ActorEvent>>;
 
 export function GetActors(arg1:string):Promise<Array<model.ActorSnapshot>>;

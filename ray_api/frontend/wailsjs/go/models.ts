@@ -88,12 +88,6 @@ export namespace config {
 	    sortBy: string;
 	    sampleEvery: number;
 	    thresholds: Thresholds;
-	    timeoutSec?: number;
-	    concurrency?: number;
-	    globalConcurrency?: number;
-	    recoverConsecutive?: number;
-	    retentionDays?: number;
-	    cleanupEveryHours?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -107,12 +101,6 @@ export namespace config {
 	        this.sortBy = source["sortBy"];
 	        this.sampleEvery = source["sampleEvery"];
 	        this.thresholds = this.convertValues(source["thresholds"], Thresholds);
-	        this.timeoutSec = source["timeoutSec"];
-	        this.concurrency = source["concurrency"];
-	        this.globalConcurrency = source["globalConcurrency"];
-	        this.recoverConsecutive = source["recoverConsecutive"];
-	        this.retentionDays = source["retentionDays"];
-	        this.cleanupEveryHours = source["cleanupEveryHours"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -138,6 +126,22 @@ export namespace config {
 
 export namespace main {
 	
+	export class ExportSnapshotResult {
+	    success: boolean;
+	    path: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportSnapshotResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.path = source["path"];
+	        this.error = source["error"];
+	    }
+	}
 	export class HistoryRange {
 	    from: number;
 	    to: number;

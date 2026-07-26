@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -24,7 +26,7 @@ func TestAlertManagerAccessConcurrentWithConfigUpdate(t *testing.T) {
 		cfg:     cfg,
 		store:   store,
 		manager: collector.NewManager(store, cfg),
-		alerts:  alert.NewManager(store, cfg.RecoverConsecutive),
+		alerts:  alert.NewManager(store),
 	}
 	app.manager.SetAlertChecker(app.alerts)
 
@@ -55,4 +57,67 @@ func TestAlertManagerAccessConcurrentWithConfigUpdate(t *testing.T) {
 	}
 	close(start)
 	wg.Wait()
+}
+
+func TestExportSnapshot(t *testing.T) {
+	app := &App{}
+	headers := []string{"节点名", "CPU", "状态"}
+	rows := [][]string{
+		{"node-1", "12.5", "ALIVE"},
+		{"node-2", "80.0", "ALIVE"},
+		{"node-3", "0", "DEAD"},
+	}
+
+	// 集群名含 Windows 非法字符 ':'，应被替换为 '_'
+	res := app.ExportSnapshot("10.30.144.41:32549_节点", headers, rows)
+	if !res.Success {
+		t.Fatalf("export failed: %s", res.Error)
+	}
+
+	// 落在 exe 同级 snapshot/ 目录
+	exeDir := filepath.Dir(mustExe(t))
+	if !strings.HasPrefix(res.Path, filepath.Join(exeDir, "snapshot")) {
+		t.Fatalf("path %s not under snapshot dir", res.Path)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Join(exeDir, "snapshot")) })
+
+	// 文件名不含 ':' 且含 _snapshot.csv
+	base := filepath.Base(res.Path)
+	if strings.Contains(base, ":") {
+		t.Fatalf("filename contains illegal colon: %s", base)
+	}
+	if !strings.HasSuffix(base, "_snapshot.csv") {
+		t.Fatalf("filename suffix wrong: %s", base)
+	}
+	if !strings.HasPrefix(base, "10.30.144.41_32549_节点_") {
+		t.Fatalf("filename prefix wrong: %s", base)
+	}
+
+	// 内容：BOM + 表头 + 3 行
+	data, err := os.ReadFile(res.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 3 || data[0] != 0xEF || data[1] != 0xBB || data[2] != 0xBF {
+		t.Fatalf("missing UTF-8 BOM")
+	}
+	body := strings.TrimPrefix(string(data), "\ufeff")
+	if !strings.Contains(body, "节点名,CPU,状态") {
+		t.Fatalf("header row missing: %s", body)
+	}
+	if !strings.Contains(body, "node-2,80.0,ALIVE") {
+		t.Fatalf("data row missing: %s", body)
+	}
+	if strings.Count(body, "\n") < 4 {
+		t.Fatalf("expected >=4 lines, got body:\n%s", body)
+	}
+}
+
+func mustExe(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exe
 }

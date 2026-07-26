@@ -162,19 +162,19 @@ export default function App() {
             <CollectionHealthNotice health={snap?.health} />
             <div className="flex-1 overflow-y-auto p-7">
               {tab === 'overview' && <OverviewView data={snap ? buildOverview(snap) : null} perf={perf ?? null} />}
-              {tab === 'nodes' && <NodesView nodes={snap?.nodes ?? []} sortBy={sortBy} />}
+              {tab === 'nodes' && <NodesView nodes={snap?.nodes ?? []} sortBy={sortBy} clusterName={title} />}
               {tab === 'workers' && (
-                <WorkersView workers={snap?.workers ?? []} nodes={snap?.nodes ?? []} sortBy={sortBy} health={snap?.health} />
+                <WorkersView workers={snap?.workers ?? []} nodes={snap?.nodes ?? []} sortBy={sortBy} health={snap?.health} clusterName={title} />
               )}
               {tab === 'alerts' && (
-                <AlertsView clusterID={clusterID} onJumpObject={() => setTab('nodes')} />
+                <AlertsView clusterID={clusterID} clusterName={title} onJumpObject={() => setTab('nodes')} />
               )}
             </div>
           </>
         ) : (
           /* 全局报警视图（所有集群） */
           <div className="flex-1 overflow-y-auto p-7">
-            <AlertsView clusterID="" />
+            <AlertsView clusterID="" clusterName="" />
           </div>
         )}
       </main>

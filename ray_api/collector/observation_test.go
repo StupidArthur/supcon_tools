@@ -15,6 +15,8 @@ import (
 )
 
 func TestRayObservationLogsSchemaWithoutCookieOrDynamicActorID(t *testing.T) {
+	// Schema 观测默认关闭，此测试验证其行为，显式开启。
+	t.Setenv("RAY_MONITOR_OBSERVE_SCHEMA", "1")
 	const secretCookie = "session=top-secret"
 	const actorID = "dynamic-actor-id-123"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

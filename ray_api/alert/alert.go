@@ -17,6 +17,10 @@ type Store interface {
 	AddAlertEvent(model.AlertEvent) error
 }
 
+// DefaultRecoverConsecutive 是报警从"已触发"过渡到"已恢复"所需的连续低于阈值次数。
+// 未对用户暴露，需要调整时改这里。
+const DefaultRecoverConsecutive = 3
+
 type Manager struct {
 	store    Store
 	recoverN int
@@ -25,20 +29,17 @@ type Manager struct {
 	belowCnt map[string]int
 }
 
-func NewManager(store Store, recoverConsecutive int) *Manager {
-	if recoverConsecutive <= 0 {
-		recoverConsecutive = 3
-	}
+func NewManager(store Store) *Manager {
 	return &Manager{
 		store:    store,
-		recoverN: recoverConsecutive,
+		recoverN: DefaultRecoverConsecutive,
 		belowCnt: map[string]int{},
 	}
 }
 
 func (m *Manager) UpdateRecoverConsecutive(n int) {
 	if n <= 0 {
-		n = 3
+		n = DefaultRecoverConsecutive
 	}
 	m.mu.Lock()
 	m.recoverN = n

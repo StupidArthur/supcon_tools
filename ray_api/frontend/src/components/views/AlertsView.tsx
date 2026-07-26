@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtDateTime, FilterInput, applyFilters } from '@/lib/utils'
+import { ExportSnapshotButton } from '@/components/ExportSnapshotButton'
 import { api, type Alert } from '@/lib/api'
 
 // stateVariant 报警状态对应的 badge 样式。
@@ -22,9 +23,11 @@ function stateText(a: Alert): string {
 
 export function AlertsView({
   clusterID,
+  clusterName,
   onJumpObject,
 }: {
   clusterID: string
+  clusterName: string
   onJumpObject?: () => void
 }) {
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -125,12 +128,19 @@ export function AlertsView({
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            报警 · {visible.length} 条
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              (clusterID={clusterID || '全局'}, 共{alerts.length}条)
-            </span>
-          </CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle>
+              报警 · {visible.length} 条
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                (clusterID={clusterID || '全局'}, 共{alerts.length}条)
+              </span>
+            </CardTitle>
+            <ExportSnapshotButton
+              filenameBase={showCluster ? '全局报警' : `${clusterName}_报警`}
+              headers={COLS.map((c) => c.header)}
+              rows={visible.map((a) => COLS.map((c) => c.getValue(a)))}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {visible.length === 0 ? (
