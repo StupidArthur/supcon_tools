@@ -3,7 +3,7 @@ module raymonitor
 go 1.25.7
 
 require (
-	github.com/wailsapp/wails/v2 v2.13.0
+	github.com/wailsapp/wails/v2 v2.12.0
 	modernc.org/sqlite v1.53.0
 )
 
