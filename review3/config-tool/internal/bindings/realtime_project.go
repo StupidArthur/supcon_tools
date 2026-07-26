@@ -237,10 +237,10 @@ func SetCurrentAPIToken(token string) {
 	currentToken = token
 }
 
+// CurrentAPIToken todo.md §13.2：前端不持有 Token，由 Go 代理。
+// 保留函数签名供旧测试编译，但始终返回空字符串。
 func CurrentAPIToken() string {
-	tokenMu.Lock()
-	defer tokenMu.Unlock()
-	return currentToken
+	return ""
 }
 
 func applyAuth(req *http.Request) {

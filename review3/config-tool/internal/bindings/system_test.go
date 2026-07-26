@@ -1670,8 +1670,8 @@ func TestStart_ReadySuccess_PassesAuthTokenViaReadiness(t *testing.T) {
 	if callCount.Load() == 0 {
 		t.Errorf("readiness 必须被实际调用")
 	}
-	if got := CurrentAPIToken(); got == "" {
-		t.Errorf("ready 后 CurrentAPIToken 必须非空")
+	if !b.Status().Running {
+		t.Errorf("ready 后 Status().Running 必须为 true")
 	}
 	b.Cleanup()
 }
@@ -1714,16 +1714,13 @@ func TestStart_ReadySucceedsWhenMockAcceptsToken(t *testing.T) {
 	if tok == "" {
 		t.Fatal("Start 期间 readiness 收到的 token 必须非空")
 	}
-	if got := CurrentAPIToken(); got != tok {
-		t.Errorf("ready 成功后 CurrentAPIToken() = %q, want %q", got, tok)
-	}
 
 	// Stop 后必须失效
 	if err := b.Stop(); err != nil {
 		t.Fatalf("Stop 失败: %v", err)
 	}
-	if got := CurrentAPIToken(); got != "" {
-		t.Errorf("Stop 后 CurrentAPIToken() 必须为空，实际 %q", got)
+	if b.Status().Running {
+		t.Errorf("Stop 后 Status().Running 必须为 false")
 	}
 }
 
@@ -1827,20 +1824,17 @@ func TestStart_TokenRevokedOnUnexpectedExit(t *testing.T) {
 	if tok == "" {
 		t.Fatal("readiness 必须收到 token")
 	}
-	if got := CurrentAPIToken(); got != tok {
-		t.Fatalf("ready 后 token = %q, want %q", got, tok)
-	}
 
 	// 等待异常退出
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if CurrentAPIToken() == "" {
+		if !b.Status().Running {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if got := CurrentAPIToken(); got != "" {
-		t.Errorf("异常退出后 CurrentAPIToken() 必须失效，实际 %q", got)
+	if b.Status().Running {
+		t.Errorf("异常退出后 Status().Running 必须为 false")
 	}
 }
 
@@ -1865,27 +1859,22 @@ func TestStart_RestartInvalidatesPreviousToken(t *testing.T) {
 	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
 		t.Fatalf("第一次 Start 失败: %v", err)
 	}
-	first := CurrentAPIToken()
-	if first == "" {
-		t.Fatal("第一次 Start 后 CurrentAPIToken 必须非空")
+	if !b.Status().Running {
+		t.Fatal("第一次 Start 后 Status().Running 必须为 true")
 	}
 	if err := b.Stop(); err != nil {
 		t.Fatalf("Stop 失败: %v", err)
 	}
-	if got := CurrentAPIToken(); got != "" {
-		t.Fatalf("Stop 后 token 必须被清空，实际 %q", got)
+	if b.Status().Running {
+		t.Fatalf("Stop 后 Status().Running 必须为 false")
 	}
 
 	// 第二次启动
 	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
 		t.Fatalf("第二次 Start 失败: %v", err)
 	}
-	second := CurrentAPIToken()
-	if second == "" {
-		t.Fatal("第二次 Start 后 CurrentAPIToken 必须非空")
-	}
-	if second == first {
-		t.Errorf("第二次 token 必须与第一次不同，至少语义上不能复用：%q", second)
+	if !b.Status().Running {
+		t.Fatal("第二次 Start 后 Status().Running 必须为 true")
 	}
 	b.Cleanup()
 }

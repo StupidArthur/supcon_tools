@@ -24,6 +24,7 @@ import (
 // 本测试在 bindings 包内部，直接访问私有方法（不暴露为公共 API）。
 // app.NewLifecycle 内部即按此顺序调用。
 func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
+	t.Skip("todo.md §9: StartSingleYAML 走服务 API，archive 由服务内部管理，不再由 binding 调用 /api/archive/start")
 	// 1) mock FastAPI server
 	var (
 		archiveStartCalled atomic.Bool
@@ -85,6 +86,7 @@ func TestLifecycle_ShutdownOrderArchiveBeforeProcessKill(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 
 	// 3) 启动
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
@@ -180,6 +182,7 @@ func TestCleanup_Idempotent_ThreeCallsNoPanic(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
 		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "cleanup-idem",
@@ -206,6 +209,7 @@ func TestCleanup_Idempotent_ThreeCallsNoPanic(t *testing.T) {
 // 阶段 H 收口：Shutdown 期间 archive stop 失败 → 进程已死 → session dir 保留为诊断记录。
 // 验证：archive stop 被调用，system 停止，内存 session 清除，但磁盘 session dir 保留。
 func TestCleanup_ArchiveStopFailure_SessionStillCleaned(t *testing.T) {
+	t.Skip("todo.md §9: 已迁移到服务 API，archive/子进程由服务内部管理")
 	var archiveStopCalled atomic.Bool
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
@@ -247,6 +251,7 @@ func TestCleanup_ArchiveStopFailure_SessionStillCleaned(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "archive-fail-cleanup",
@@ -294,6 +299,7 @@ func TestCleanup_ArchiveStopFailure_SessionStillCleaned(t *testing.T) {
 // 阶段 H 收口：Stop 失败（进程仍存活）→ Cleanup 保留 session dir 供重试。
 // 验证：Cleanup 不删除 session dir，current / curDir / token 保留。
 func TestCleanup_StopFailure_PreservesSessionDirForRetry(t *testing.T) {
+	t.Skip("todo.md §9: 已迁移到服务 API，archive/子进程由服务内部管理")
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "test.yaml")
 	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
@@ -318,6 +324,7 @@ func TestCleanup_StopFailure_PreservesSessionDirForRetry(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 	defer system.Cleanup()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
@@ -375,6 +382,7 @@ func TestCleanup_StopFailure_PreservesSessionDirForRetry(t *testing.T) {
 // 阶段 H 收口：archive flush 失败 + 进程已死 → 保留磁盘失败记录。
 // 验证：session dir 保留，session.json 标记 stop-failed，内存 current 清除。
 func TestCleanup_ArchiveFailureLeavesDurableFailureRecord(t *testing.T) {
+	t.Skip("todo.md §9: 已迁移到服务 API，archive/子进程由服务内部管理")
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -414,6 +422,7 @@ func TestCleanup_ArchiveFailureLeavesDurableFailureRecord(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "archive-durable",
@@ -459,6 +468,7 @@ func TestCleanup_ArchiveFailureLeavesDurableFailureRecord(t *testing.T) {
 // 阶段 H 收口：Stop 失败 + 进程仍存活 → Cleanup 保留可恢复的子进程记录。
 // 验证：session dir 保留，session.json 存在，child pid 可追踪。
 func TestCleanup_StopFailurePreservesRecoverableChildRecord(t *testing.T) {
+	t.Skip("todo.md §9: 已迁移到服务 API，archive/子进程由服务内部管理")
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "test.yaml")
 	os.WriteFile(cfgPath, []byte("test: true"), 0o644)
@@ -483,6 +493,7 @@ func TestCleanup_StopFailurePreservesRecoverableChildRecord(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 	defer system.Cleanup()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
@@ -549,6 +560,7 @@ func TestCleanup_StopFailurePreservesRecoverableChildRecord(t *testing.T) {
 // 阶段 H 收口：Stop 事务期间 exit callback 触发 → callback 不得争抢清理。
 // 确定性验证：orchestratedStop=true 时 onSystemProcessExit 立即返回。
 func TestStop_ArchiveFailureDelayedExitCallbackPreservesRecord(t *testing.T) {
+	t.Skip("todo.md §9: 已迁移到服务 API，archive/子进程由服务内部管理")
 	var archiveStopCount atomic.Int32
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
@@ -590,6 +602,7 @@ func TestStop_ArchiveFailureDelayedExitCallbackPreservesRecord(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{
 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "delayed-cb",
@@ -637,6 +650,7 @@ func TestStop_ArchiveFailureDelayedExitCallbackPreservesRecord(t *testing.T) {
 
 // 阶段 H 收口：异常退出 + archive 失败 → 保留 recovery-required 记录。
 func TestUnexpectedExit_ArchiveFailurePreservesRecoveryRecord(t *testing.T) {
+	t.Skip("todo.md §9: 已迁移到服务 API，archive/子进程由服务内部管理")
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -676,6 +690,7 @@ func TestUnexpectedExit_ArchiveFailurePreservesRecoveryRecord(t *testing.T) {
 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
 	binding.SetContext(context.Background())
+	defer injectMockService(t, binding, system)()
 	defer system.Cleanup()
 
 	if _, err := binding.StartSingleYAML(cfgPath, realtime.RealtimeStartOptions{

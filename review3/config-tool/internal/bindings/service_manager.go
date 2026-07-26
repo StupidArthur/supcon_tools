@@ -92,6 +92,8 @@ func NewDataFactoryServiceManager(devMode bool) (*DataFactoryServiceManager, err
 	if devMode {
 		repoRoot, err := resolveRepoRootForDevService(exeDir)
 		if err != nil {
+			// wails generate module 等场景：找不到 standalone_main.py 时跳过启动
+			// 返回 nil 和 error，让调用方决定是否继续（生产模式必须报错）
 			return nil, fmt.Errorf("开发模式：找不到 review3 仓库根: %w", err)
 		}
 		serviceExe = "python"
@@ -132,6 +134,8 @@ func NewDataFactoryServiceManager(devMode bool) (*DataFactoryServiceManager, err
 
 		cmd := exec.Command(serviceExe, args...)
 		configureBackgroundProcess(cmd) // todo.md §5.5
+		// todo.md §13.2：前端不持有 Token，由 Go 代理。设置 DATAFACTORY_NO_AUTH=1 让 Python 服务跳过前端鉴权。
+		cmd.Env = append(os.Environ(), "DATAFACTORY_NO_AUTH=1")
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
