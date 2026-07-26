@@ -416,8 +416,7 @@ func (b *SystemBinding) Start(params StartParams) error {
 		return b.startViaService(client, params)
 	}
 
-	// 降级：旧子进程模式（仅兼容旧测试）
-	return b.startViaSubprocess(params)
+	return fmt.Errorf("DataFactoryService 未初始化")
 }
 
 // startViaService 通过 /api/runtime/start 启动运行时（todo.md §14.3）。
@@ -860,8 +859,7 @@ func (b *SystemBinding) Stop() error {
 		return b.stopViaService(client)
 	}
 
-	// 降级：旧子进程模式（仅兼容旧测试）
-	return b.stopViaSubprocess()
+	return fmt.Errorf("DataFactoryService 未初始化")
 }
 
 // stopViaService 通过 /api/runtime/stop 停止运行时（todo.md §14.3）。
@@ -1300,8 +1298,7 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 		return b.runBatchViaService(client, configPath, cycles)
 	}
 
-	// 降级：旧子进程模式（兼容测试）
-	return b.runBatchViaSubprocess(configPath, cycles)
+	return BatchResult{}, fmt.Errorf("DataFactoryService 未初始化")
 }
 
 // runBatchViaService 通过服务 API 执行 batch（todo.md §11.5）。
@@ -1576,8 +1573,7 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 		return b.exportViaService(client, columns, rows, exportPath, fmtLower, sheetName)
 	}
 
-	// 降级：旧子进程模式（仅兼容旧测试）
-	return b.exportViaSubprocess(columns, rows, exportPath, fmtLower, sheetName)
+	return fmt.Errorf("DataFactoryService 未初始化")
 }
 
 // exportViaService 通过 /api/export/convert 导出（todo.md §12）。
