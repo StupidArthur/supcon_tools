@@ -617,7 +617,7 @@ type PushSnapshotResult struct {
 	PushError string `json:"pushError"`
 }
 
-// ExportSnapshotAndPush 先按 ExportSnapshot 导出 CSV 到本地，再向 webhook 推一条通知。
+// ExportSnapshotAndPush 先按 ExportSnapshot 导出 CSV 到本地，再把 CSV 文件推送到企业微信。
 // 导出失败不会推送；推送失败不会回滚已写入的文件。
 func (a *App) ExportSnapshotAndPush(nameBase string, headers []string, rows [][]string) PushSnapshotResult {
 	expRes := a.ExportSnapshot(nameBase, headers, rows)
@@ -632,26 +632,19 @@ func (a *App) ExportSnapshotAndPush(nameBase string, headers []string, rows [][]
 	if err != nil {
 		return PushSnapshotResult{Path: expRes.Path, PushError: err.Error()}
 	}
-	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(a.ctx, 60*time.Second)
 	defer cancel()
 
-	now := time.Now().Format("2006-01-02 15:04:05")
-	// 企业微信 markdown 把 \ 当转义符，Windows 路径反斜杠会被吃掉，转成正斜杠
-	displayPath := strings.ReplaceAll(expRes.Path, "\\", "/")
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Ray 监控 - 快照导出\n\n")
-	fmt.Fprintf(&sb, "- **名称**: %s\n", nameBase)
-	fmt.Fprintf(&sb, "- **时间**: %s\n", now)
-	fmt.Fprintf(&sb, "- **行数**: %d\n", len(rows))
-	fmt.Fprintf(&sb, "- **文件**: `%s`\n", displayPath)
-
-	payload, err := wecom.BuildMarkdown(sb.String())
+	// 1. 上传 CSV 文件拿 media_id（3 天有效）
+	mediaID, err := client.UploadMedia(ctx, expRes.Path, "file")
 	if err != nil {
-		return PushSnapshotResult{Path: expRes.Path, PushError: err.Error()}
+		logx.L().Warn("snapshot upload failed", "path", expRes.Path, "err", err)
+		return PushSnapshotResult{Path: expRes.Path, PushError: "上传文件失败: " + err.Error()}
 	}
-	if _, err := client.Send(ctx, payload); err != nil {
-		logx.L().Warn("snapshot push failed", "path", expRes.Path, "err", err)
-		return PushSnapshotResult{Path: expRes.Path, PushError: err.Error()}
+	// 2. 发文件消息
+	if _, err := client.SendFile(ctx, mediaID); err != nil {
+		logx.L().Warn("snapshot push failed", "path", expRes.Path, "mediaID", mediaID, "err", err)
+		return PushSnapshotResult{Path: expRes.Path, PushError: "发送文件消息失败: " + err.Error()}
 	}
 	return PushSnapshotResult{Success: true, Path: expRes.Path}
 }
