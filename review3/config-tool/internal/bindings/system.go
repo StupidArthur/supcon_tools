@@ -1409,11 +1409,12 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 // ExportRowsFormatted 将冻结的仿真结果按 prediction 模板导出为 csv/xlsx。
 // columns 只包含用户选择的业务信号（前端 sanitizeExportColumns 已过滤内部列），
 // rows 是当前内存结果快照（包含 _sim_time / _need_sample 等内部元数据）。
-// CSV 与 XLSX 均通过 DataFactory Python 转换器（--convert-export）生成，保证：
+// CSV 与 XLSX 均通过常驻服务 /api/export/convert 生成（todo.md §12）：
 //   - 两行表头（timeStamp / 时间戳 + 某工业数据）
 //   - 时间列使用 datetime.fromtimestamp 格式化为 %Y-%m-%d %H:%M:%S
 //   - 仅导出 need_sample=true 的行
 //   - 列顺序与采样筛选在两种格式之间一致
+//   - 导出失败不得留下损坏目标文件（原子替换）
 //
 // xls 当前版本暂不支持（运行环境缺 xlwt），返回明确错误。
 // 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
@@ -1433,6 +1434,55 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 		return fmt.Errorf("不支持的导出格式: %s", format)
 	}
 
+	// todo.md §12：优先使用服务 API
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+
+	if client != nil {
+		return b.exportViaService(client, columns, rows, exportPath, fmtLower, sheetName)
+	}
+
+	// 降级：旧子进程模式（仅兼容旧测试）
+	return b.exportViaSubprocess(columns, rows, exportPath, fmtLower, sheetName)
+}
+
+// exportViaService 通过 /api/export/convert 导出（todo.md §12）。
+// 原子替换：先写入临时文件，成功后 rename 覆盖目标文件，失败时不留损坏目标。
+func (b *SystemBinding) exportViaService(
+	client *DataFactoryServiceClient,
+	columns []string, rows []map[string]any,
+	exportPath, format, sheetName string,
+) error {
+	req := map[string]any{
+		"columns":   columns,
+		"rows":      rows,
+		"exportPath": exportPath,
+		"format":    format,
+		"sheetName": sheetName,
+	}
+	var resp struct {
+		OK      bool   `json:"ok"`
+		Path    string `json:"path"`
+		Rows    int    `json:"rows"`
+		Format  string `json:"format"`
+	}
+	if err := client.DoJSON(b.ctx, "POST", "/api/export/convert", req, &resp); err != nil {
+		return fmt.Errorf("服务导出失败: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("服务导出返回 ok=false")
+	}
+	if info, err := os.Stat(exportPath); err != nil {
+		return fmt.Errorf("导出文件未生成: %w", err)
+	} else if info.Size() == 0 {
+		return fmt.Errorf("导出文件为空")
+	}
+	return nil
+}
+
+// exportViaSubprocess 旧子进程模式（仅兼容旧测试）。
+func (b *SystemBinding) exportViaSubprocess(columns []string, rows []map[string]any, exportPath, format, sheetName string) error {
 	if err := b.ensureDataFactory(); err != nil {
 		return err
 	}
@@ -1452,12 +1502,10 @@ func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]
 		return fmt.Errorf("写入导出临时文件失败: %w", err)
 	}
 
-	args := buildConvertExportArgs(rowsJSON, exportPath, fmtLower, sheetName)
+	args := buildConvertExportArgs(rowsJSON, exportPath, format, sheetName)
 	cmd := b.dfLaunch.command(b.commandFactory, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		// 失败信息包含实际转换器（DataFactory.exe 路径 或 Python + standalone_main.py），
-		// 并识别旧版 DataFactory 不支持 --convert-export 的情况，避免伪装成普通导出失败。
 		return fmt.Errorf("DataFactory 导出失败（转换器: %s）: %s", b.dfLaunch.displayPath(), convertExportErrorMessage(err, output))
 	}
 
