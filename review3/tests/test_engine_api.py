@@ -876,3 +876,97 @@ def test_api_export_convert_csv(tmp_path):
     )
     assert r["ok"] is True
     assert out.exists()
+
+
+def test_api_project_inspect_accepts_absolute_sources_without_project(service_binding, tmp_path):
+    """无工程上下文、传绝对路径 sources 时 inspect 返回 200。
+
+    Go 端校验时已把所有 source.file 转成绝对路径，应该能直接校验，
+    不应强制要求先调用 /api/project/open。
+    """
+    yaml = tmp_path / "src.yaml"
+    yaml.write_text(
+        "clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n",
+        encoding="utf-8",
+    )
+    r = engine_api.api_project_inspect(
+        engine_api.ProjectInspectRequest(
+            sources=[{"id": "s1", "file": str(yaml), "replicas": 1}],
+        )
+    )
+    assert r["ok"] is True
+    assert r["valid"] is True
+    # 不能修改当前工程上下文
+    assert service_binding.project_file is None
+
+
+def test_api_project_inspect_rejects_relative_sources_without_project(service_binding, tmp_path):
+    """无工程上下文、传相对路径 sources 时 inspect 返回 400。"""
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        engine_api.api_project_inspect(
+            engine_api.ProjectInspectRequest(
+                sources=[{"id": "s1", "file": "rel/s.yaml", "replicas": 1}],
+            )
+        )
+    assert exc.value.status_code == 400
+    assert "projectFile" in str(exc.value.detail)
+
+
+def test_api_project_inspect_rejects_empty_sources_without_project(service_binding):
+    """不传 sources、也不传 projectFile，保留原 400 行为。"""
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        engine_api.api_project_inspect(
+            engine_api.ProjectInspectRequest(sources=None, projectFile=None),
+        )
+    assert exc.value.status_code == 400
+    assert "projectFile" in str(exc.value.detail)
+
+
+def test_api_project_inspect_does_not_set_project_context(service_binding, tmp_path):
+    """inspect 必须不修改当前工程上下文（只读语义）。
+
+    即使调用时传了 projectFile（让 inspect 读 project.yaml 做 validate），
+    也不应修改 binding.project_file。这条规则由 api_project_open 单独负责。
+    """
+    yaml = tmp_path / "src.yaml"
+    yaml.write_text(
+        "clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n",
+        encoding="utf-8",
+    )
+    project_file = tmp_path / "project.yaml"
+    project_file.write_text("version: 1\nid: p\nname: T\nsources: []\n", encoding="utf-8")
+
+    # 直接拿 binding 的初始 project_file（应该是 None）
+    initial = service_binding.project_file
+
+    # 用 projectFile 走一次 inspect
+    engine_api.api_project_inspect(
+        engine_api.ProjectInspectRequest(projectFile=str(project_file)),
+    )
+    assert service_binding.project_file == initial
+
+    # 用绝对路径 sources 调用 inspect
+    engine_api.api_project_inspect(
+        engine_api.ProjectInspectRequest(
+            sources=[{"id": "s1", "file": str(yaml), "replicas": 1}],
+        )
+    )
+    assert service_binding.project_file == initial
+
+    # 用相对路径 sources 调用 inspect（需 projectFile），也不应修改上下文
+    rel_yaml = tmp_path / "rel.yaml"
+    rel_yaml.write_text(
+        "clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram:\n  - name: a\n    type: Variable\n    value: 1.0\n",
+        encoding="utf-8",
+    )
+    engine_api.api_project_inspect(
+        engine_api.ProjectInspectRequest(
+            projectFile=str(project_file),
+            sources=[{"id": "s2", "file": "rel.yaml", "replicas": 1}],
+        )
+    )
+    assert service_binding.project_file == initial

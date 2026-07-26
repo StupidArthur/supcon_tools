@@ -628,16 +628,23 @@ def _load_project_yaml_for_service(project_file: str) -> Dict[str, Any]:
     return data
 
 
-def _inspect_project_sources(project_file: str, source_overrides: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _inspect_project_sources(project_file: Optional[str], source_overrides: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """调用 realtime_config_compiler 校验（进程内，无 subprocess）。
 
     todo.md §5.1：服务内部调用现有 inspect / validate / compile，
     不再 exec.CommandContext。
+
+    project_file 可为 None：
+      - source_overrides 非空且所有 file 都是绝对路径时不需要
+      - source_overrides 非空但包含相对路径时用于解析 project_dir
+      - source_overrides 为空时用于读取工程 YAML
     """
     from controller.realtime_config_compiler import SourceSpec, validate_sources
 
-    project_dir = os.path.dirname(project_file)
+    project_dir = os.path.dirname(project_file) if project_file else None
     if source_overrides is None:
+        if not project_file:
+            raise HTTPException(status_code=400, detail="projectFile 不能为空")
         project = _load_project_yaml_for_service(project_file)
         sources_raw = project.get("sources") or []
     else:
@@ -649,7 +656,10 @@ def _inspect_project_sources(project_file: str, source_overrides: Optional[List[
         if not sid or not sfile:
             raise HTTPException(status_code=400, detail=f"source 缺少 id 或 file: {item}")
         # file 可能是工程内相对路径；与工程目录拼接得到绝对路径
-        abs_path = sfile if os.path.isabs(sfile) else os.path.join(project_dir, sfile)
+        if os.path.isabs(sfile) or project_dir is None:
+            abs_path = sfile
+        else:
+            abs_path = os.path.join(project_dir, sfile)
         replicas = int(item.get("replicas", 1))
         specs.append(SourceSpec(source_id=sid, source_file=abs_path, replicas=replicas))
     try:
@@ -780,11 +790,33 @@ class ProjectInspectRequest(BaseModel):
 
 @app.post("/api/project/inspect")
 def api_project_inspect(req: ProjectInspectRequest) -> Dict[str, Any]:
-    """进程内 inspect（todo.md §5.1）。"""
+    """进程内 inspect（todo.md §5.1）。
+
+    仅修改：现在允许 sources 全部为绝对路径时不要求 projectFile
+    或当前工程上下文。未传 sources 时仍要求 projectFile 或当前工程。
+    """
     b = get_binding()
     target = req.projectFile or b.project_file
-    if not target:
-        raise HTTPException(status_code=400, detail="没有指定 projectFile 且未打开工程")
+
+    # 未传 sources 时必须提供 projectFile（load project.yaml 读 sources）
+    if req.sources is None or len(req.sources) == 0:
+        if not target:
+            raise HTTPException(status_code=400, detail="没有指定 projectFile 且未打开工程")
+        return _inspect_project_sources(target, None)
+
+    # 传了 sources：全部为绝对路径时不需要 projectFile
+    if target is None:
+        all_abs = all(
+            os.path.isabs((item or {}).get("file", ""))
+            for item in req.sources
+        )
+        if not all_abs:
+            raise HTTPException(
+                status_code=400,
+                detail="sources 包含相对路径时必须指定 projectFile 或打开工程",
+            )
+        target = None  # 显式保持 None，让 _inspect_project_sources 不参与路径解析
+
     try:
         return _inspect_project_sources(target, req.sources)
     except HTTPException:
