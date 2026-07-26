@@ -53,15 +53,24 @@ interface RealtimeProjectState {
   clearError: () => void
 }
 
-async function fetchValidation(projectId: string): Promise<{ instances: ExpandedInstance[]; duplicates: DuplicateInstance[] }> {
+type FetchValidationResult =
+  | { ok: true; instances: ExpandedInstance[]; duplicates: DuplicateInstance[] }
+  | { ok: false; error: string }
+
+async function fetchValidation(projectId: string): Promise<FetchValidationResult> {
   try {
     const validation = (await realtimeProjectApi.validateProject(projectId)) as any
     return {
+      ok: true,
       instances: validation?.instances || [],
       duplicates: validation?.duplicates || [],
     }
-  } catch {
-    return { instances: [], duplicates: [] }
+  } catch (e: any) {
+    const msg =
+      typeof e === 'string'
+        ? e
+        : e?.message || String(e) || '校验工程失败'
+    return { ok: false, error: `工程校验失败：${msg}` }
   }
 }
 
@@ -113,6 +122,19 @@ export const useRealtimeProjectStore = create<RealtimeProjectState>((set, get) =
       const validation = await fetchValidation(proj.id)
       // 记录到最近列表
       void rememberRecent(proj.projectFile || projectFile)
+      if (!validation.ok) {
+        // 校验失败必须显式传递给前端，不得把请求错误转换为空实例。
+        set({
+          currentProject: proj,
+          currentProjectFile: proj.projectFile || projectFile,
+          instances: [],
+          duplicates: [],
+          error: validation.error,
+          loading: false,
+        })
+        void get().refreshRecentProjects()
+        return
+      }
       set({
         currentProject: proj,
         currentProjectFile: proj.projectFile || projectFile,

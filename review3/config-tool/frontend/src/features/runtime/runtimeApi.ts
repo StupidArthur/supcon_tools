@@ -28,7 +28,24 @@ export class RuntimeApiError extends Error {
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const resp = await fetch(url, { signal })
   if (!resp.ok) {
-    throw new RuntimeApiError(resp.status, `${url} -> HTTP ${resp.status}`)
+    // 尽量解析后端 JSON {detail, message}。
+    // 错误必须含：状态码 + 路径 + detail/message（不再只显示 “URL -> HTTP 500”）。
+    let detail = ''
+    try {
+      const clone = resp.clone()
+      const data = await clone.json()
+      if (data && typeof data === 'object') {
+        const d = (data as any).detail ?? (data as any).message
+        if (typeof d === 'string') {
+          detail = d
+        }
+      }
+    } catch {
+      // ignore: body 不是 JSON 或不可读
+    }
+    const parts = [`HTTP ${resp.status}`, url]
+    if (detail) parts.push(detail)
+    throw new RuntimeApiError(resp.status, parts.join(' | '))
   }
   return (await resp.json()) as T
 }

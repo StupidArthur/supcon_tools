@@ -56,6 +56,9 @@ export function RealtimeRunPage() {
     const rtStore = useRuntimeStore.getState()
     const myGen = ++useRealtimeRunSessionStore.getState().bootstrapGen
     const mySessionId = session?.sessionId ?? null
+    // 新一次 bootstrap 开始：清掉旧连接错误（包括旧 generation 的失败）。
+    // 后续 verify-after-await 还会再判 generation 防止晚到错误覆盖新状态。
+    setError('')
     if (dfStatus.running && dfStatus.apiReady && session?.sourceKind === 'project') {
       void (async () => {
         let info
@@ -81,6 +84,8 @@ export function RealtimeRunPage() {
         ) {
           return
         }
+        // 成功：连接前清掉 lastError 让 WS 第一次错误独立。
+        useRuntimeStore.setState({ lastError: null })
         if (!info.apiHost || !info.apiPort) {
           setError('运行 host/port 缺失，连接被拒绝。请重新启动实时工程。')
           return
@@ -142,7 +147,11 @@ export function RealtimeRunPage() {
     setError('')
     await stopSession()
     refreshStatus()
-    clearSessionError()
+    // 只有当 store 内没有错误（即停止成功）时才清除。
+    // 停止失败必须保留错误提示和 session 给用户重试。
+    if (!useRealtimeRunSessionStore.getState().error) {
+      clearSessionError()
+    }
   }
 
   if (!currentProject) {

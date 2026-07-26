@@ -16,6 +16,7 @@ type OpKind = '' | 'fix' | 'sv' | 'quality'
 
 export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
   const tagCatalog = useRuntimeStore((s) => s.tagCatalog)
+  const tagCatalogError = useRuntimeStore((s) => s.tagCatalogError)
   const latestFrame = useRuntimeStore((s) => s.latestFrame)
   const rawSnapshot = useRuntimeStore((s) => s.rawSnapshot)
   const connectionState = useRuntimeStore((s) => s.connectionState)
@@ -175,7 +176,12 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
         ) : null}
       </div>
 
-      {connectionState === 'error' || (lastError && !isRunning) ? (
+      {tagCatalogError ? (
+        // tags 加载失败：优先显示真实错误，不得伪装成空参数
+        <div className="mt-4 text-sm text-destructive" data-testid="runtime-detail-error">
+          {tagCatalogError}
+        </div>
+      ) : connectionState === 'error' || (lastError && !isRunning) ? (
         <div className="mt-4 text-sm text-destructive" data-testid="runtime-detail-error">
           {lastError}
         </div>

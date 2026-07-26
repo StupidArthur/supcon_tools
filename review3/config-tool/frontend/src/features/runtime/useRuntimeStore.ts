@@ -74,6 +74,12 @@ export interface RuntimeStoreState {
   latestFrame: RuntimeFrame | null
   // 通用 tag catalog（阶段 6）
   tagCatalog: RuntimeTagMeta[]
+  // 独立于 lastError：tag catalog 专有错误，避免被 snapshot/WS 错误覆盖。
+  tagCatalogError: string | null
+  // tags 已成功加载过（即便当前为空数组）：用于支持"连接成功后 refetch 让 forceable 稳定"
+  tagCatalogLoaded: boolean
+  // tags 是否已在第一次 snapshot 到达后 refetch 过；防止每次 snapshot 都重复 refetch。
+  tagCatalogRefetched: boolean
   snapshotReceivedAt: number | null
   lastHeartbeatAt: number | null
   stale: boolean
@@ -209,19 +215,52 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       if (Object.keys(raw).length === 0) return
       const receivedAt = Date.now()
       const snap = mapApiSnapshot(raw, receivedAt)
+      // snapshot 错误不应破坏 tag catalog 错误状态；只清空自己的 lastError。
       set((prev) => ({
         latestSnapshot: snap,
         snapshotReceivedAt: receivedAt,
         stale: false,
-        lastError: prev.lastError?.startsWith('加载运行参数失败：')
-          ? prev.lastError
-          : null,
+        lastError: null,
+        // tagCatalogError 是独立字段，保留之前的值。
       }))
+      // 第一个有效 snapshot 到达后 refetch 标签：
+      // 第一次拉取时 shared_data 为空导致 forceable 全 false；refetch 后稳定。
+      if (!get().tagCatalogRefetched) {
+        void refetchTagCatalogAfterFirstSnapshot(runtimeName)
+      }
     } catch (e) {
       if (signal?.aborted || get().connectGeneration !== generation) return
       const msg = e instanceof RuntimeApiError ? `${e.status} ${e.message}` : String(e)
       set({ lastError: msg })
       throw e
+    }
+  }
+
+  const refetchTagCatalogAfterFirstSnapshot = async (
+    runtimeName: string,
+  ): Promise<void> => {
+    const target = get()
+    if (!target.runtimeName) {
+      return
+    }
+    try {
+      const tagsResp = await getTags(
+        { apiHost: target.apiHost, apiPort: target.apiPort },
+        runtimeName,
+      )
+      if (Array.isArray(tagsResp.tags)) {
+        set({
+          tagCatalog: tagsResp.tags,
+          tagCatalogError: null,
+          tagCatalogLoaded: true,
+        })
+      }
+    } catch (e) {
+      // 重试失败：保留原有 tagCatalogError；不静默吞错。
+      void e
+    } finally {
+      // 不管成功失败，都标记 refetch 已发生，避免无限循环
+      set({ tagCatalogRefetched: true })
     }
   }
 
@@ -236,6 +275,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     rawSnapshot: null,
     latestFrame: null,
     tagCatalog: [],
+    tagCatalogError: null,
+    tagCatalogLoaded: false,
+    tagCatalogRefetched: false,
     snapshotReceivedAt: null,
     lastHeartbeatAt: null,
     stale: false,
@@ -356,6 +398,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         connectionState: 'connecting',
         runtimeName: null,
         tagCatalog: [],
+        tagCatalogError: null,
+        tagCatalogLoaded: false,
         lastError: null,
       })
       if (ws) {
@@ -391,8 +435,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         // 忽略
       }
 
-      // 通用 tag catalog。失败时把后端真实错误写到 lastError，
-      // 让前端展示“加载运行参数失败：...”而不是伪装成空数据。
+      // 通用 tag catalog。失败写入独立 tagCatalogError，不污染 lastError；
+      // 成功清除 tagCatalogError 并标记已加载。这样 snapshot/WS 的错误不会
+      // 覆盖 tag catalog 的真实状态。
       try {
         const tagsResp = await getTags(
           { apiHost: state.apiHost, apiPort: state.apiPort },
@@ -402,7 +447,11 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
           get().connectGeneration === myGen &&
           Array.isArray(tagsResp.tags)
         ) {
-          set({ tagCatalog: tagsResp.tags })
+          set({
+            tagCatalog: tagsResp.tags,
+            tagCatalogError: null,
+            tagCatalogLoaded: true,
+          })
         }
       } catch (e) {
         if (get().connectGeneration !== myGen) {
@@ -413,8 +462,11 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
             ? `${e.status} ${e.message}`
             : String(e)
         set({
+          // 保留 tagCatalog 已加载值以避免被 snapshot 错误清空；
+          // 但本次失败把 catalog 置空并写入 tagCatalogError 显示真实错误。
           tagCatalog: [],
-          lastError: `加载运行参数失败：${msg}`,
+          tagCatalogError: `加载运行参数失败：${msg}`,
+          tagCatalogLoaded: false,
         })
       }
 
@@ -423,9 +475,6 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         return
       }
 
-      // tags 失败后仍允许后续 WS 建立，但只有 catalog 写入成功才清掉 lastError。
-      // 上一步可能在 lastError 上写入了 tags 失败信息；如果 tags 成功，
-      // 这里清空；如果 tags 失败，保持 lastError。
       set({
         runtimeName,
         cycleTime,
@@ -452,6 +501,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
                 lastHeartbeatAt: null,
               }
             })
+            // 注：tag catalog refetch 在 doFetchSnapshot() REST 快照成功后触发，
+            // 不在 WS snapshot 消息上。WS 实时帧不能保证 forceable 字段更新。
           } else if (msg.type === 'heartbeat') {
             // 心跳：只更新 lastHeartbeatAt，不替换 latestSnapshot，不追加趋势。
             set({ lastHeartbeatAt: Date.now() })
@@ -512,6 +563,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         connectionState: 'idle',
         runtimeName: null,
         tagCatalog: [],
+        tagCatalogError: null,
+        tagCatalogLoaded: false,
+        tagCatalogRefetched: false,
         lastError: null,
         stale: true,
         lastAcknowledgedSubscription: undefined,
@@ -562,6 +616,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
         rawSnapshot: null,
         latestFrame: null,
         tagCatalog: [],
+        tagCatalogError: null,
+        tagCatalogLoaded: false,
+        tagCatalogRefetched: false,
         snapshotReceivedAt: null,
         lastHeartbeatAt: null,
         stale: false,

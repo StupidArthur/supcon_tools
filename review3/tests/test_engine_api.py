@@ -896,6 +896,208 @@ def test_api_runtime_stop_noop_when_already_stopped(service_binding):
     assert r["runtimeState"] == "stopped"
 
 
+# --------------------------------------------------------------------------- #
+# 启动/停止生命周期回归（§1 + §2）                                            #
+# --------------------------------------------------------------------------- #
+from fastapi import HTTPException
+
+
+def _make_failed_start_state(port: int = 1) -> engine_api.EngineBinding:
+    """构造一个会触发 OPC UA wait_ready 超时的配置（端口 1 几乎一定冲突）。"""
+    b = engine_api.EngineBinding(
+        instance_name="test_runtime",
+        engine=None,
+        shared_data={},
+    )
+    engine_api.set_binding(b)
+    return b
+
+
+def _write_minimal_config(tmp_path, name: str = "p") -> str:
+    project_dir = tmp_path / name
+    project_dir.mkdir(exist_ok=True)
+    sources_dir = project_dir / "sources"
+    sources_dir.mkdir(exist_ok=True)
+    (sources_dir / "src.yaml").write_text(
+        "clock:\n  mode: GENERATOR\n  cycle_time: 0.5\nprogram: []\n",
+        encoding="utf-8",
+    )
+    pf = project_dir / "project.yaml"
+    pf.write_text(
+        "version: 1\nid: p\nname: T\nsources:\n  - id: s1\n    file: sources/src.yaml\n    replicas: 1\n",
+        encoding="utf-8",
+    )
+    return str(pf)
+
+
+def _build_start_request(opcUaPort: int, configPath: str) -> engine_api.RuntimeStartRequest:
+    return engine_api.RuntimeStartRequest(
+        configPath=configPath,
+        runtimeName="test_runtime",
+        cycleTime=0.5,
+        opcUaHost="127.0.0.1",
+        opcUaPort=opcUaPort,
+    )
+
+
+# A. OPC UA 端口占用导致启动失败，释放/修改端口后无需重启应用即可重新启动。
+def test_start_failure_then_retry_succeeds(tmp_path):
+    """占用一个端口让 OPC UA wait_ready 失败。
+
+    第一次启动失败后 runtime_state 不应停留在 STARTING；
+    释放端口后再次启动成功。
+    """
+    import socket
+    # 占一个端口
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    port = holder.getsockname()[1]
+
+    b = _make_failed_start_state()
+    try:
+        # 第一次启动失败：端口已被占用
+        with pytest.raises(HTTPException):
+            engine_api._start_runtime_internal(
+                _build_start_request(opcUaPort=port, configPath=_write_minimal_config(tmp_path))
+            )
+        with b._state_lock:
+            assert b.runtime_state != "starting", (
+                f"start failed but runtime_state left at {b.runtime_state!r}"
+            )
+        assert not b.engine, "start failed but engine leaked"
+        assert not getattr(b, "opcua_server", None), "start failed but opcua_server leaked"
+        assert not getattr(b, "engine_thread", None), "start failed but engine_thread leaked"
+
+        # 释放端口
+        holder.close()
+
+        # 第二次启动：用一个动态分配的空端口
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        free_port = sock.getsockname()[1]
+        sock.close()
+        r = engine_api._start_runtime_internal(
+            _build_start_request(opcUaPort=free_port, configPath=_write_minimal_config(tmp_path))
+        )
+        assert r["ok"] is True
+        assert b.runtime_state == "running"
+    finally:
+        try:
+            engine_api.api_runtime_stop()
+        except Exception:
+            pass
+        engine_api.set_binding(None)
+
+
+# B. 启动失败后 runtime_state 不停留在 starting。
+def test_start_failure_clears_starting_state(tmp_path):
+    import socket
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    port = holder.getsockname()[1]
+
+    b = _make_failed_start_state()
+    try:
+        with pytest.raises(HTTPException):
+            engine_api._start_runtime_internal(
+                _build_start_request(opcUaPort=port, configPath=_write_minimal_config(tmp_path))
+            )
+        with b._state_lock:
+            assert b.runtime_state != "starting"
+            assert b.runtime_state in (
+                engine_api.RUNTIME_STATE_STOPPED,
+                engine_api.RUNTIME_STATE_FAILED,
+            )
+    finally:
+        holder.close()
+        engine_api.set_binding(None)
+
+
+# C. stop 第一次超时后，第二次 stop 会继续尝试并完成资源清理。
+def test_stop_timeout_retry_cleans_resources(tmp_path):
+    import threading
+    b = engine_api.EngineBinding(
+        instance_name="test_runtime",
+        engine=None,
+        shared_data={},
+    )
+    engine_api.set_binding(b)
+    try:
+        # 模拟"线程 join 超时但资源仍挂"
+        stop_event = threading.Event()
+        b.engine_stop_event = stop_event
+        b.instance_name = "test_runtime"
+        b.shared_data = {}
+        b.engine = object()  # non-None placeholder
+        # 线程只 sleep 不响应 stop_event；join 5s 必须超时
+        stop_flag = threading.Event()
+        def _no_exit():
+            # 永久 sleep 直到外部 kill（测试结束时不复用）
+            while not stop_flag.is_set():
+                stop_flag.wait(timeout=60)
+        t = threading.Thread(target=_no_exit, daemon=True)
+        t.start()
+        b.engine_thread = t
+        b.runtime_state = engine_api.RUNTIME_STATE_RUNNING
+
+        # 第一次 stop：join 5s 超时，stop 抛 500
+        with pytest.raises(HTTPException) as exc:
+            engine_api.api_runtime_stop()
+        assert exc.value.status_code == 500
+        with b._state_lock:
+            assert b.runtime_state == engine_api.RUNTIME_STATE_FAILED
+        assert b.engine_thread is t
+        assert b.engine_stop_event is stop_event
+
+        # 模拟"用户重启线程能退"，把 stop_event 真设上 + 关掉死循环
+        stop_event.set()
+        stop_flag.set()
+        t.join(timeout=5)
+        assert not t.is_alive()
+
+        # 第二次 stop：清理所有资源，状态 STOPPED
+        r = engine_api.api_runtime_stop()
+        assert r["ok"] is True
+        with b._state_lock:
+            assert b.runtime_state == engine_api.RUNTIME_STATE_STOPPED
+        assert b.engine is None
+        assert b.engine_thread is None
+        assert b.engine_stop_event is None
+        assert b.opcua_server is None
+    finally:
+        # 兜底：让死循环线程能退
+        try:
+            stop_event.set()
+            stop_flag.set()
+        except Exception:
+            pass
+        engine_api.set_binding(None)
+
+
+# B. 启动失败后 runtime_state 不停留在 starting。
+def test_start_failure_clears_starting_state(tmp_path):
+    import socket
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    port = holder.getsockname()[1]
+
+    b = _make_failed_start_state()
+    try:
+        with pytest.raises(HTTPException):
+            engine_api._start_runtime_internal(
+                _build_start_request(opcUaPort=port, configPath=_write_minimal_config(tmp_path))
+            )
+        with b._state_lock:
+            assert b.runtime_state != "starting"
+            assert b.runtime_state in (
+                engine_api.RUNTIME_STATE_STOPPED,
+                engine_api.RUNTIME_STATE_FAILED,
+            )
+    finally:
+        holder.close()
+        engine_api.set_binding(None)
+
+
 def test_api_export_convert_csv(tmp_path):
     """export/convert 进程内调用现有 TemplateManager + CSVExporter。"""
     from components.export_templates import TemplateManager

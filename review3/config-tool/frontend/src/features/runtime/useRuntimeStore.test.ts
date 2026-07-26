@@ -274,7 +274,7 @@ describe('useRuntimeStore', () => {
     ])
   })
 
-  it('F: tags 请求失败后 snapshot 成功不应清空 lastError', async () => {
+  it('F: tags 请求失败后 snapshot 成功不应清空 tagCatalogError', async () => {
     // /api/status 成功；/tags 返回 404
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.endsWith('/api/status')) {
@@ -329,9 +329,11 @@ describe('useRuntimeStore', () => {
     expect(s.tagCatalog).toEqual([])
     // snapshot 已成功写入
     expect(s.latestSnapshot).not.toBeNull()
-    // lastError 仍保留 tags 错误，未被 snapshot 成功清空
-    expect(s.lastError).toContain('加载运行参数失败')
-    expect(s.lastError).toMatch(/404|status/)
+    // tagCatalogError 保留 tags 错误，未被 snapshot 成功清空
+    expect(s.tagCatalogError).toContain('加载运行参数失败')
+    expect(s.tagCatalogError).toMatch(/404|status/)
+    // lastError 应被 snapshot 成功清空（独立字段，互不影响）
+    expect(s.lastError).toBeNull()
 
     // 调用的是真实 runtimeName，不是 default
     const calledUrls = fetchMock.mock.calls.map((c) => c[0] as string)

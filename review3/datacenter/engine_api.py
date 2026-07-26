@@ -876,10 +876,17 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
     """进程内启动 Engine + OPC UA（todo.md §6.1）。
 
     不创建新子进程；Engine 与 OPC UA 都在当前服务进程内。
+
+    任何路径（包括 HTTPException）失败都必须清理本次已创建的资源
+    （engine / engine_thread / stop_event / opcua_server / shared_data /
+    force/quality manager / engine_holder），并把 runtime_state 恢复到可重新
+    启动的状态（如 STOPPED 或 FAILED）。失败时不得残留半启动资源，也不得
+    吞掉原始错误信息。
     """
     from controller.engine import UnifiedEngine
     from controller.parser import DSLParser
     from controller.clock import ClockMode
+    from typing import Any as _Any
 
     b = get_binding()
     with b._state_lock:
@@ -902,6 +909,50 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
             b.runtime_state = RUNTIME_STATE_FAILED
         raise HTTPException(status_code=404, detail=f"config 文件不存在: {req.configPath}")
 
+    # 跟踪本次启动创建的资源。任何路径失败都必须清理这些资源。
+    created: Dict[str, _Any] = {}
+    cleanup_called = False
+
+    def _cleanup_partial() -> None:
+        # 幂等：可能因为 stop_event 未设而 join 超时，但同样尝试 join。
+        nonlocal cleanup_called
+        if cleanup_called:
+            return
+        cleanup_called = True
+
+        opcua_local = created.get("opcua_server")
+        if opcua_local is not None:
+            try:
+                opcua_local.stop()
+            except Exception:
+                logger.exception("start-time cleanup: opcua stop error")
+        thread_local = created.get("engine_thread")
+        if thread_local is not None:
+            try:
+                thread_local.join(timeout=2.0)
+            except Exception:
+                logger.exception("start-time cleanup: thread join error")
+        # 清空 binding 上被本次启动触达过的字段（保持 STOPPED 状态）
+        with b._state_lock:
+            # engine / opcua / thread / stop_event / engine_holder 不直接清，
+            # 以便用户/前端能拿到错误上下文；但保证 runtime_state 可重新启动
+            if b.runtime_state != RUNTIME_STATE_STOPPED:
+                b.runtime_state = RUNTIME_STATE_STOPPED
+        # 清空本次启动创建的资源对象引用，避免资源泄漏
+        for k in (
+            "engine",
+            "engine_holder",
+            "shared_data",
+            "force_manager",
+            "quality_manager",
+            "opcua_server",
+            "engine_thread",
+            "engine_stop_event",
+            "instance_name",
+        ):
+            if k in created:
+                setattr(b, k, None if k != "instance_name" else None)
+
     try:
         parser = DSLParser()
         config = parser.parse_file(req.configPath)
@@ -910,7 +961,7 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
         # 默认 REALTIME 模式
         config.clock.mode = ClockMode.REALTIME
         engine = UnifiedEngine.from_program_config(config)
-        engine_holder: Dict[str, Any] = {"engine": engine}
+        engine_holder: Dict[str, _Any] = {"engine": engine}
         # 共享数据 / 命令队列
         shared_data: Dict[str, float] = {}
         cmd_queue: queue.Queue = queue.Queue()
@@ -923,9 +974,8 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
 
         # engine thread
         stop_event = threading.Event()
-        from typing import Any as _Any
 
-        def _on_snapshot(snap: Dict[str, Any]) -> None:
+        def _on_snapshot(snap: Dict[str, _Any]) -> None:
             b.push_snapshot(snap)
 
         def _engine_thread_main():
@@ -976,9 +1026,13 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
             quality_manager=quality_manager,
         )
         opcua_server.start()
+        created["opcua_server"] = opcua_server
+
         if not opcua_server.wait_ready(timeout=5.0):
-            opcua_server.stop()
-            raise HTTPException(status_code=503, detail=f"OPC UA 未在 5s 内就绪: {req.opcUaHost}:{req.opcUaPort}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"OPC UA 未在 5s 内就绪: {req.opcUaHost}:{req.opcUaPort}",
+            )
 
         engine_thread = threading.Thread(
             target=_engine_thread_main,
@@ -986,18 +1040,26 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
             name=f"EngineThread-{req.runtimeName}",
         )
         engine_thread.start()
+        created["engine_thread"] = engine_thread
 
-        # 绑定到 EngineBinding
+        # 绑定到 EngineBinding（只在所有创建步骤成功后写入）
         b.engine = engine
+        created["engine"] = engine
         b.engine_holder = engine_holder  # type: ignore[attr-defined]
+        created["engine_holder"] = engine_holder
         b.shared_data = shared_data
+        created["shared_data"] = shared_data
         b.force_manager = force_manager
+        created["force_manager"] = force_manager
         b.quality_manager = quality_manager
+        created["quality_manager"] = quality_manager
         b.opcua_server = opcua_server  # type: ignore[attr-defined]
         b.engine_thread = engine_thread  # type: ignore[attr-defined]
         b.engine_stop_event = stop_event  # type: ignore[attr-defined]
+        created["engine_stop_event"] = stop_event
         # todo.md §10.1：更新 instance_name
         b.instance_name = req.runtimeName
+        created["instance_name"] = req.runtimeName
 
         with b._state_lock:
             b.runtime_state = RUNTIME_STATE_RUNNING
@@ -1010,11 +1072,12 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
             "runtimeName": req.runtimeName,
         }
     except HTTPException:
+        _cleanup_partial()
         raise
     except Exception as e:
         logger.exception("start runtime failed")
-        with b._state_lock:
-            b.runtime_state = RUNTIME_STATE_FAILED
+        _cleanup_partial()
+        # 把原始 e 包进 detail 保留
         raise HTTPException(status_code=500, detail=f"启动运行失败: {e}")
 
 
@@ -1036,14 +1099,42 @@ def api_runtime_status() -> Dict[str, Any]:
 
 @app.post("/api/runtime/stop")
 def api_runtime_stop() -> Dict[str, Any]:
-    """进程内停止 Engine + OPC UA（todo.md §10.3-§10.4）。不停止 DataFactoryService。"""
+    """进程内停止 Engine + OPC UA（todo.md §10.3-§10.4）。不停止 DataFactoryService。
+
+    幂等：
+      - STOPPED 且无残留资源 → 直接 noop 返回
+      - STOPPED 但有残留资源（之前 timeout 没清掉）→ 重新尝试清理
+      - FAILED 同上 → 必须重试，因为失败可能留下半启动资源
+      - RUNNING/STARTING/STOPPING → 正常停止流程
+    """
     b = get_binding()
+
+    def _has_running_resource() -> bool:
+        return any(
+            getattr(b, k, None) is not None
+            for k in (
+                "engine",
+                "engine_thread",
+                "engine_stop_event",
+                "opcua_server",
+            )
+        )
+
     with b._state_lock:
-        if b.runtime_state in (RUNTIME_STATE_STOPPED, RUNTIME_STATE_FAILED):
+        # 仅当已 STOPPED 且无任何残留资源时才允许完全 noop。
+        # FAILED/STOPPED 但有残留资源 → 必须重试清理。
+        if b.runtime_state == RUNTIME_STATE_STOPPED and not _has_running_resource():
             return {"ok": True, "runtimeState": b.runtime_state, "noop": True}
+        # FAILED 状态下也允许重试：尝试再次清理并把状态切到 STOPPING。
+        if b.runtime_state in (RUNTIME_STATE_STOPPED, RUNTIME_STATE_FAILED):
+            logger.warning(
+                "runtime state=%s but still has running resource; retrying stop",
+                b.runtime_state,
+            )
         b.runtime_state = RUNTIME_STATE_STOPPING
 
     # OPC UA 先停（依赖 force/quality state）；Engine 线程设置 stop_event 让循环退出
+    stop_thread_timeout = False
     try:
         opcua = getattr(b, "opcua_server", None)
         if opcua is not None:
@@ -1061,6 +1152,8 @@ def api_runtime_stop() -> Dict[str, Any]:
             thread.join(timeout=5.0)  # todo.md §10.3：增加超时时间
             # todo.md §10.3：检查线程是否真正退出
             if thread.is_alive():
+                stop_thread_timeout = True
+                # 保留 retry 能力：资源未清，但状态进入 FAILED
                 with b._state_lock:
                     b.runtime_state = RUNTIME_STATE_FAILED
                 raise HTTPException(
@@ -1096,7 +1189,7 @@ def api_runtime_stop() -> Dict[str, Any]:
     with b._state_lock:
         b.runtime_state = RUNTIME_STATE_STOPPED
 
-    return {"ok": True, "runtimeState": b.runtime_state}
+    return {"ok": True, "runtimeState": b.runtime_state, "stopThreadTimeout": stop_thread_timeout}
 
 
 # ---------------------------------------------------------------------------
