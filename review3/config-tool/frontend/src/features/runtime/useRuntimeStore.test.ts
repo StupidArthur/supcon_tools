@@ -274,7 +274,7 @@ describe('useRuntimeStore', () => {
     ])
   })
 
-  it('F: tags 请求失败时把后端错误写入 lastError', async () => {
+  it('F: tags 请求失败后 snapshot 成功不应清空 lastError', async () => {
     // /api/status 成功；/tags 返回 404
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.endsWith('/api/status')) {
@@ -303,25 +303,37 @@ describe('useRuntimeStore', () => {
           json: async () => ({ instance_name: 'real_runtime_xyz', meta: {}, statistics: {} }),
         })
       }
-      // snapshot：被 WS 调用前 connect 会一直等，先不返回也没关系
-      return new Promise(() => {})
+      // snapshot：返回合法非空快照（模拟真实路径）
+      if (url.endsWith('/snapshot')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            cycle_count: 1,
+            sim_time: 0.5,
+            'pid1.PV': 1.0,
+          }),
+        })
+      }
+      return Promise.reject(new Error('unexpected url'))
     })
     vi.stubGlobal('fetch', fetchMock)
     useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000)
     useRuntimeStore.getState().connect()
 
-    // 让状态写完。检查 lastError
+    // 等待 connect 完成到 snapshot 状态写入
     await new Promise((r) => setTimeout(r, 100))
 
     const s = useRuntimeStore.getState()
     expect(s.runtimeName).toBe('real_runtime_xyz')
     expect(s.tagCatalog).toEqual([])
-    expect(s.lastError).toBeTruthy()
-    expect(s.lastError).toMatch(/加载运行参数失败/)
-    // 必须包含 HTTP 状态码信息
+    // snapshot 已成功写入
+    expect(s.latestSnapshot).not.toBeNull()
+    // lastError 仍保留 tags 错误，未被 snapshot 成功清空
+    expect(s.lastError).toContain('加载运行参数失败')
     expect(s.lastError).toMatch(/404|status/)
 
-    // 同时确认调用的是真实 runtimeName，不是 default
+    // 调用的是真实 runtimeName，不是 default
     const calledUrls = fetchMock.mock.calls.map((c) => c[0] as string)
     expect(calledUrls.some((u) => u.includes('/instances/real_runtime_xyz/tags'))).toBe(true)
     expect(calledUrls.some((u) => u.includes('/instances/default/'))).toBe(false)
@@ -353,5 +365,54 @@ describe('useRuntimeStore', () => {
     // snapshot 必须保留（冻结最后值语义）
     expect(s.latestSnapshot).not.toBeNull()
     expect(s.rawSnapshot).not.toBeNull()
+  })
+
+  it('H: snapshot 错误恢复后可清除（tags 错误除外）', async () => {
+    // 初始状态：一个旧的普通 snapshot 错误
+    useRuntimeStore.getState()._reset()
+    act(() =>
+      useRuntimeStore.setState({
+        lastError: '500 snapshot failed',
+      }),
+    )
+
+    // mock 所有请求成功（包括 snapshot）
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/api/status')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({
+            instance_name: 'test_runtime',
+            mode: 'REALTIME', cycle_count: 0, sim_time: 0,
+            cycle_time: 0.5, safe_state: false, consecutive_failures: 0,
+          }),
+        })
+      }
+      if (url.endsWith('/meta')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ instance_name: 'test_runtime', meta: {}, statistics: {} }) })
+      }
+      if (url.endsWith('/tags')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ tags: [] }) })
+      }
+      if (url.endsWith('/snapshot')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ cycle_count: 1, sim_time: 0.5, 'pid1.PV': 1.0 }) })
+      }
+      return Promise.reject(new Error('unexpected url: ' + url))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000)
+    useRuntimeStore.getState().connect()
+
+    // 等待 connect 完成，snapshot 写入
+    await new Promise((r) => setTimeout(r, 100))
+
+    const s = useRuntimeStore.getState()
+    // 普通 snapshot 错误在恢复后清除
+    expect(s.latestSnapshot).not.toBeNull()
+    expect(s.lastError).toBeNull()
+
+    // 清理
+    useRuntimeStore.getState().disconnect()
+    vi.unstubAllGlobals()
   })
 })

@@ -209,12 +209,14 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       if (Object.keys(raw).length === 0) return
       const receivedAt = Date.now()
       const snap = mapApiSnapshot(raw, receivedAt)
-      set({
+      set((prev) => ({
         latestSnapshot: snap,
         snapshotReceivedAt: receivedAt,
         stale: false,
-        lastError: null,
-      })
+        lastError: prev.lastError?.startsWith('加载运行参数失败：')
+          ? prev.lastError
+          : null,
+      }))
     } catch (e) {
       if (signal?.aborted || get().connectGeneration !== generation) return
       const msg = e instanceof RuntimeApiError ? `${e.status} ${e.message}` : String(e)
