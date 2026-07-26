@@ -97,32 +97,32 @@ func (m *CollectorManager) newCollectorFor(cl config.ClusterConfig) *Collector {
 	client := NewClient(opts)
 	coll := NewCollector(client, m.store, opts)
 	coll.SetLimiter(m.limiter)
-	if m.alerts != nil {
-		th := m.cfg.ResolveThresholds(cl.ID)
-		clusterName := cl.DisplayName()
-		coll.SetOnAlert(func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool) {
-			m.alerts.Check(clusterID, clusterName, th, nodes, workers, staleNodes)
-		})
-	}
+	coll.SetOnAlert(m.dispatchAlert)
 	return coll
+}
+
+func (m *CollectorManager) dispatchAlert(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool) {
+	m.mu.RLock()
+	checker := m.alerts
+	thresholds := m.cfg.ResolveThresholds(clusterID)
+	clusterName := clusterID
+	for _, cl := range m.cfg.Clusters {
+		if cl.ID == clusterID {
+			clusterName = cl.DisplayName()
+			break
+		}
+	}
+	m.mu.RUnlock()
+
+	if checker != nil {
+		checker.Check(clusterID, clusterName, thresholds, nodes, workers, staleNodes)
+	}
 }
 
 func (m *CollectorManager) SetAlertChecker(a AlertChecker) {
 	m.mu.Lock()
 	m.alerts = a
 	m.mu.Unlock()
-	m.mu.RLock()
-	for _, e := range m.collectors {
-		cl := m.clusterConfig(e.coll.opts.ClusterID)
-		if cl != nil {
-			th := m.cfg.ResolveThresholds(cl.ID)
-			clusterName := cl.DisplayName()
-			e.coll.SetOnAlert(func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool) {
-				a.Check(clusterID, clusterName, th, nodes, workers, staleNodes)
-			})
-		}
-	}
-	m.mu.RUnlock()
 }
 
 func (m *CollectorManager) clusterConfig(id string) *config.ClusterConfig {
@@ -259,6 +259,90 @@ func (m *CollectorManager) ReloadAll(cfg config.Config) {
 	}
 	m.mu.Unlock()
 	logx.L().Info("all collectors reloaded", "count", len(cfg.Clusters))
+}
+
+// ApplyConfig updates the manager's complete configuration. Collector-wide
+// runtime settings require rebuilding collectors; threshold and other policy
+// changes retain the existing collectors and their snapshots.
+func (m *CollectorManager) ApplyConfig(cfg config.Config) {
+	m.mu.Lock()
+	old := m.cfg
+	rebuildAll := old.SampleEvery != cfg.SampleEvery ||
+		old.TimeoutSec != cfg.TimeoutSec ||
+		old.Concurrency != cfg.Concurrency ||
+		old.GlobalConcurrency != cfg.GlobalConcurrency
+
+	if rebuildAll {
+		started := make(map[string]bool, len(m.collectors))
+		for id, entry := range m.collectors {
+			started[id] = entry.started
+			entry.cancel()
+		}
+		gc := cfg.GlobalConcurrency
+		if gc <= 0 {
+			gc = 30
+		}
+		m.cfg = cfg
+		m.limiter = newSemaphoreLimiter(gc)
+		m.collectors = make(map[string]*collectorEntry, len(cfg.Clusters))
+		for _, cl := range cfg.Clusters {
+			if cl.ID == "" || cl.PlatformURL == "" {
+				continue
+			}
+			coll := m.newCollectorFor(cl)
+			ctx, cancel := context.WithCancel(context.Background())
+			entry := &collectorEntry{coll: coll, ctx: ctx, cancel: cancel, started: started[cl.ID]}
+			m.collectors[cl.ID] = entry
+			if entry.started {
+				go coll.Start(ctx)
+			}
+		}
+		m.mu.Unlock()
+		logx.L().Info("all collectors reloaded", "count", len(cfg.Clusters))
+		return
+	}
+
+	oldClusters := make(map[string]config.ClusterConfig, len(old.Clusters))
+	for _, cl := range old.Clusters {
+		oldClusters[cl.ID] = cl
+	}
+	newClusters := make(map[string]config.ClusterConfig, len(cfg.Clusters))
+	for _, cl := range cfg.Clusters {
+		newClusters[cl.ID] = cl
+	}
+
+	m.cfg = cfg
+	for id, entry := range m.collectors {
+		next, exists := newClusters[id]
+		previous := oldClusters[id]
+		if !exists || next.ID == "" || next.PlatformURL == "" {
+			entry.cancel()
+			delete(m.collectors, id)
+			continue
+		}
+		if previous.PlatformURL != next.PlatformURL {
+			wasStarted := entry.started
+			entry.cancel()
+			coll := m.newCollectorFor(next)
+			ctx, cancel := context.WithCancel(context.Background())
+			m.collectors[id] = &collectorEntry{coll: coll, ctx: ctx, cancel: cancel, started: wasStarted}
+			if wasStarted {
+				go coll.Start(ctx)
+			}
+		}
+	}
+	for _, cl := range cfg.Clusters {
+		if cl.ID == "" || cl.PlatformURL == "" {
+			continue
+		}
+		if _, exists := m.collectors[cl.ID]; exists {
+			continue
+		}
+		coll := m.newCollectorFor(cl)
+		ctx, cancel := context.WithCancel(context.Background())
+		m.collectors[cl.ID] = &collectorEntry{coll: coll, ctx: ctx, cancel: cancel}
+	}
+	m.mu.Unlock()
 }
 
 func (m *CollectorManager) SyncClusters(old, newCl []config.ClusterConfig) {

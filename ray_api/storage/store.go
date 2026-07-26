@@ -34,10 +34,12 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1) // 单写连接，避免 SQLite 多写连接竞争
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	s := &Store{db: db}
 	if err := s.createSchema(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	return s, nil

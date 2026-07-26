@@ -1,0 +1,33 @@
+﻿=== realtime-lifecycle-smoke ===
+port: 18510
+
+Scenario 1: Python standalone external termination and port closure
+  port closed after termination: OK
+
+Scenario 2: Python standalone crash closes port
+  port closed after crash: OK
+
+Scenario 3: binding-level stop failure and retry tests
+  TestStart_StopFailurePreservesSessionForRetry: PASS
+  TestTerminate_Retryable_RealKillAfterOverride: PASS
+
+Scenario 4: binding-level archive-before-process test
+  TestLifecycle_ShutdownOrderArchiveBeforeProcessKill: PASS
+
+ALL SCENARIOS OK
+
+covered:
+- standalone Python external termination closes port
+- standalone Python crash closes port
+- named Go recovery-state tests executed and passed
+- named Go archive-before-process test executed and passed
+
+not covered:
+- real OS kill timeout followed by retry
+- Wails application shutdown with an unkillable child
+- end-to-end UI Stop retry
+
+scenario results:
+- TestTerminate_Retryable_RealKillAfterOverride: passed
+- TestStart_StopFailurePreservesSessionForRetry: passed
+- TestLifecycle_ShutdownOrderArchiveBeforeProcessKill: passed

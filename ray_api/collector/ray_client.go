@@ -20,12 +20,14 @@ import (
 const maxResponseBytes = 64 * 1024 * 1024
 
 type Client struct {
-	baseURL string
-	http    *http.Client
-	cookie  string
+	clusterID string
+	baseURL   string
+	http      *http.Client
+	cookie    string
 
-	mu       sync.Mutex
-	lastGzip bool
+	mu          sync.Mutex
+	lastGzip    bool
+	schemaByAPI map[string]string
 }
 
 func NewClient(opts CollectorOpts) *Client {
@@ -35,12 +37,14 @@ func NewClient(opts CollectorOpts) *Client {
 	}
 	transport := &http.Transport{DisableCompression: true}
 	return &Client{
-		baseURL: strings.TrimRight(opts.PlatformURL, "/"),
+		clusterID: opts.ClusterID,
+		baseURL:   strings.TrimRight(opts.PlatformURL, "/"),
 		http: &http.Client{
 			Timeout:   time.Duration(timeout) * time.Second,
 			Transport: transport,
 		},
-		cookie: opts.Cookie,
+		cookie:      opts.Cookie,
+		schemaByAPI: map[string]string{},
 	}
 }
 
@@ -51,8 +55,10 @@ func (c *Client) LastGzipUsed() bool {
 }
 
 func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
+	started := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
+		c.logRequest(path, 0, started, nil, 0, err)
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
@@ -62,20 +68,25 @@ func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
+		c.logRequest(path, 0, started, nil, 0, err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		summary := sanitizeBody(string(body))
-		return nil, fmt.Errorf("%s: HTTP %d: %s", path, resp.StatusCode, summary)
+		err := fmt.Errorf("%s: HTTP %d: %s", path, resp.StatusCode, summary)
+		c.logRequest(path, resp.StatusCode, started, resp.Header, len(body), err)
+		return nil, err
 	}
 	var reader io.Reader = resp.Body
 	isGzip := resp.Header.Get("Content-Encoding") == "gzip"
 	if isGzip {
 		gz, gzErr := gzip.NewReader(resp.Body)
 		if gzErr != nil {
-			return nil, fmt.Errorf("gzip decode %s: %w", path, gzErr)
+			err := fmt.Errorf("gzip decode %s: %w", path, gzErr)
+			c.logRequest(path, resp.StatusCode, started, resp.Header, 0, err)
+			return nil, err
 		}
 		defer gz.Close()
 		reader = gz
@@ -85,11 +96,16 @@ func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 	c.mu.Unlock()
 	data, err := io.ReadAll(io.LimitReader(reader, maxResponseBytes+1))
 	if err != nil {
+		c.logRequest(path, resp.StatusCode, started, resp.Header, len(data), err)
 		return nil, err
 	}
 	if int64(len(data)) > maxResponseBytes {
-		return nil, fmt.Errorf("%s: response exceeds 64 MiB limit", path)
+		err := fmt.Errorf("%s: response exceeds 64 MiB limit", path)
+		c.logRequest(path, resp.StatusCode, started, resp.Header, len(data), err)
+		return nil, err
 	}
+	c.logRequest(path, resp.StatusCode, started, resp.Header, len(data), nil)
+	c.observeSchema(path, data, resp.Header)
 	return data, nil
 }
 

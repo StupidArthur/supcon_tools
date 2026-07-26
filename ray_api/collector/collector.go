@@ -48,6 +48,13 @@ type RequestLimiter interface {
 	Capacity() int
 }
 
+type AlertCallback func(
+	clusterID string,
+	nodes []model.NodeMetric,
+	workers []model.WorkerSnapshot,
+	staleNodes map[string]bool,
+)
+
 type Collector struct {
 	client  *Client
 	store   Store
@@ -72,11 +79,21 @@ type Collector struct {
 	prevCluster  model.ClusterMetric
 	prevJobsList []model.JobSnapshot
 
-	onAlert func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool)
+	alertMu sync.RWMutex
+	onAlert AlertCallback
 }
 
-func (c *Collector) SetOnAlert(fn func(clusterID string, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool)) {
+func (c *Collector) SetOnAlert(fn AlertCallback) {
+	c.alertMu.Lock()
 	c.onAlert = fn
+	c.alertMu.Unlock()
+}
+
+func (c *Collector) alertCallback() AlertCallback {
+	c.alertMu.RLock()
+	fn := c.onAlert
+	c.alertMu.RUnlock()
+	return fn
 }
 
 func NewCollector(client *Client, store Store, opts CollectorOpts) *Collector {
@@ -205,6 +222,8 @@ func (c *Collector) recordErr(stage string, err error) {
 	c.status.LastErrorStage = stage
 	c.mu.Unlock()
 	logx.L().Warn("collect failed", "stage", stage, "cluster", c.opts.ClusterID, "err", err)
+	logx.Event("error", "collection_stage_failed",
+		"cluster", c.opts.ClusterID, "stage", stage, "error", truncateErr(err, 500))
 }
 
 func (c *Collector) recordOK() {
@@ -281,9 +300,16 @@ func (c *Collector) collectSummary(ctx context.Context) {
 	c.mu.Unlock()
 
 	logx.L().Info("summary collected", "cluster", c.opts.ClusterID, "nodes", len(nodes), "ms", summaryMs)
+	logx.Event("collection", "summary_completed",
+		"cluster", c.opts.ClusterID,
+		"nodes", len(nodes),
+		"partial_nodes", countPartialNodes(nodes),
+		"duration_ms", summaryMs,
+		"storage_ok", storeErr == nil)
 
-	if c.onAlert != nil {
+	if fn := c.alertCallback(); fn != nil {
 		c.mu.RLock()
+		ns := append([]model.NodeMetric(nil), nodes...)
 		var ws []model.WorkerSnapshot
 		staleNodes := map[string]bool{}
 		if c.snap != nil {
@@ -296,7 +322,7 @@ func (c *Collector) collectSummary(ctx context.Context) {
 			}
 		}
 		c.mu.RUnlock()
-		c.onAlert(c.opts.ClusterID, nodes, ws, staleNodes)
+		fn(c.opts.ClusterID, ns, ws, staleNodes)
 	}
 }
 
@@ -599,7 +625,8 @@ func (c *Collector) collectDetail(ctx context.Context) {
 	c.health.TotalNodeCount = len(nodes)
 	c.health.FreshNodeCount = len(freshNodeSet)
 	c.health.FailedNodeCount = len(failedNodeSet)
-	c.health.StaleNodeCount = len(failedNodeSet)
+	c.health.StaleNodeCount = 0
+	c.health.MissingNodeCount = 0
 	c.health.StaleWorkerCount = staleWorkerCount
 	c.health.StaleActorCount = staleActorCount
 	c.health.ClusterDataStale = c.clusterStale
@@ -609,6 +636,11 @@ func (c *Collector) collectDetail(ctx context.Context) {
 	for _, nid := range nodes {
 		if st, ok := c.nodeState[nid]; ok && (st.CurrentStale || (!st.HasCachedData && failedNodeSet[nid])) {
 			failedNodes = append(failedNodes, *st)
+			if st.CurrentStale {
+				c.health.StaleNodeCount++
+			} else if !st.HasCachedData {
+				c.health.MissingNodeCount++
+			}
 		}
 	}
 	c.health.FailedNodes = failedNodes
@@ -678,10 +710,32 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		"jobsFresh", jobsFresh, "clusterFresh", clusterFresh,
 		"detailMs", detailMs, "maxNodeMs", maxNodeMs, "slowNodeID", slowNodeID,
 		"complete", completeSuccess, "storageOK", storageOK)
+	logx.Event("collection", "detail_completed",
+		"cluster", c.opts.ClusterID,
+		"total_nodes", len(nodes),
+		"fresh_nodes", len(freshNodeSet),
+		"failed_nodes", len(failedNodeSet),
+		"stale_nodes", c.health.StaleNodeCount,
+		"missing_nodes", c.health.MissingNodeCount,
+		"fresh_workers", len(freshWorkers),
+		"displayed_workers", len(allWorkers),
+		"reused_workers", staleWorkerCount,
+		"fresh_actors", len(freshActors),
+		"displayed_actors", len(allActors),
+		"reused_actors", staleActorCount,
+		"cluster_fresh", clusterFresh,
+		"jobs_fresh", jobsFresh,
+		"jobs_count", len(c.prevJobsList),
+		"storage_ok", storageOK,
+		"complete", completeSuccess,
+		"duration_ms", detailMs,
+		"max_node_ms", maxNodeMs,
+		"slow_node_id", slowNodeID)
 
-	if c.onAlert != nil {
+	if fn := c.alertCallback(); fn != nil {
 		c.mu.RLock()
 		var ns []model.NodeMetric
+		ws := append([]model.WorkerSnapshot(nil), freshWorkers...)
 		if c.snap != nil {
 			ns = make([]model.NodeMetric, len(c.snap.Nodes))
 			copy(ns, c.snap.Nodes)
@@ -693,8 +747,18 @@ func (c *Collector) collectDetail(ctx context.Context) {
 			}
 		}
 		c.mu.RUnlock()
-		c.onAlert(c.opts.ClusterID, ns, freshWorkers, staleNodes)
+		fn(c.opts.ClusterID, ns, ws, staleNodes)
 	}
+}
+
+func countPartialNodes(nodes []model.NodeMetric) int {
+	count := 0
+	for _, node := range nodes {
+		if node.IsPartial {
+			count++
+		}
+	}
+	return count
 }
 
 func (c *Collector) getOrCreateNodeState(nodeID string) *model.NodeCollectionState {
@@ -797,6 +861,37 @@ func (c *Collector) refreshSnapshotNodes(nodes []model.NodeMetric) {
 		}
 	}
 
+	filteredWorkers := c.snap.Workers[:0]
+	for _, worker := range c.snap.Workers {
+		if currentSet[worker.NodeID] {
+			filteredWorkers = append(filteredWorkers, worker)
+		}
+	}
+	filteredActors := c.snap.Actors[:0]
+	for _, actor := range c.snap.Actors {
+		if currentSet[actor.NodeID] {
+			filteredActors = append(filteredActors, actor)
+		}
+	}
+	filteredFailures := c.health.FailedNodes[:0]
+	staleCount := 0
+	missingCount := 0
+	staleWorkers := 0
+	staleActors := 0
+	for _, state := range c.health.FailedNodes {
+		if !currentSet[state.NodeID] {
+			continue
+		}
+		filteredFailures = append(filteredFailures, state)
+		if state.CurrentStale {
+			staleCount++
+			staleWorkers += state.ReusedWorkerCount
+			staleActors += state.ReusedActorCount
+		} else if !state.HasCachedData {
+			missingCount++
+		}
+	}
+
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Hostname != b.Hostname {
@@ -808,4 +903,16 @@ func (c *Collector) refreshSnapshotNodes(nodes []model.NodeMetric) {
 		return a.NodeID < b.NodeID
 	})
 	c.snap.Nodes = out
+	c.snap.Workers = filteredWorkers
+	c.snap.Actors = filteredActors
+	c.health.TotalNodeCount = len(out)
+	c.health.FailedNodes = filteredFailures
+	c.health.FailedNodeCount = len(filteredFailures)
+	c.health.StaleNodeCount = staleCount
+	c.health.MissingNodeCount = missingCount
+	c.health.StaleWorkerCount = staleWorkers
+	c.health.StaleActorCount = staleActors
+	c.health.CurrentIncomplete = len(filteredFailures) > 0 || c.clusterStale || c.jobsStale
+	c.status.CurrentIncomplete = c.health.CurrentIncomplete
+	c.snap.Health = c.health
 }

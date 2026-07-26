@@ -36,6 +36,15 @@ func NewManager(store Store, recoverConsecutive int) *Manager {
 	}
 }
 
+func (m *Manager) UpdateRecoverConsecutive(n int) {
+	if n <= 0 {
+		n = 3
+	}
+	m.mu.Lock()
+	m.recoverN = n
+	m.mu.Unlock()
+}
+
 func (m *Manager) Check(clusterID, clusterName string, th config.Thresholds, nodes []model.NodeMetric, workers []model.WorkerSnapshot, staleNodes map[string]bool) {
 	nodeByID := map[string]model.NodeMetric{}
 	nodeHost := map[string]string{}
@@ -98,6 +107,7 @@ func (m *Manager) checkMetric(clusterID, clusterName, nodeName, objType, objID, 
 	key := fmt.Sprintf("%s|%s|%s|%s", clusterID, objType, objID, metric)
 	m.mu.Lock()
 	cnt := m.belowCnt[key]
+	recoverN := m.recoverN
 	m.mu.Unlock()
 
 	now := model.NowMs()
@@ -154,7 +164,7 @@ func (m *Manager) checkMetric(clusterID, clusterName, nodeName, objType, objID, 
 		newCnt := m.belowCnt[key]
 		m.mu.Unlock()
 
-		if newCnt >= m.recoverN {
+		if newCnt >= recoverN {
 			existing.Recovered = true
 			existing.RecoverTs = now
 			if err := m.store.UpdateAlert(*existing); err != nil {

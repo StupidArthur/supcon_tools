@@ -578,6 +578,9 @@ func TestCollectDetailRetainsLastGoodNodeDataOnPartialFailure(t *testing.T) {
 	if snap.Health.FailedNodeCount != 1 {
 		t.Errorf("round2: FailedNodeCount want 1, got %d", snap.Health.FailedNodeCount)
 	}
+	if snap.Health.StaleNodeCount != 1 || snap.Health.MissingNodeCount != 0 {
+		t.Errorf("round2: stale/missing want 1/0, got %d/%d", snap.Health.StaleNodeCount, snap.Health.MissingNodeCount)
+	}
 
 	var bStale bool
 	for _, fn := range snap.Health.FailedNodes {
@@ -672,12 +675,74 @@ func TestCollectDetailMarksMissingNodeWithoutFabricatingData(t *testing.T) {
 	if len(snap.Workers) != 2 {
 		t.Errorf("want 2 workers (only A), got %d", len(snap.Workers))
 	}
+	if snap.Health.FailedNodeCount != 1 || snap.Health.StaleNodeCount != 0 || snap.Health.MissingNodeCount != 1 {
+		t.Errorf("failed/stale/missing want 1/0/1, got %d/%d/%d",
+			snap.Health.FailedNodeCount, snap.Health.StaleNodeCount, snap.Health.MissingNodeCount)
+	}
+	if snap.Health.StaleWorkerCount != 0 || snap.Health.StaleActorCount != 0 {
+		t.Errorf("missing node reused counts want 0/0, got %d/%d",
+			snap.Health.StaleWorkerCount, snap.Health.StaleActorCount)
+	}
 	for _, fn := range snap.Health.FailedNodes {
 		if fn.NodeID == "B" {
 			if fn.HasCachedData {
 				t.Errorf("B never succeeded, should not have cached data")
 			}
 		}
+	}
+}
+
+func TestSuccessfulSummaryImmediatelyRemovesNodeFromVisibleSnapshot(t *testing.T) {
+	col := NewCollector(nil, &fakeStore{}, CollectorOpts{ClusterID: "test"})
+	col.snap = &Snapshot{
+		Nodes: []model.NodeMetric{{NodeID: "A"}, {NodeID: "B"}},
+		Workers: []model.WorkerSnapshot{
+			{NodeID: "A", PID: 1},
+			{NodeID: "B", PID: 2},
+		},
+		Actors: []model.ActorSnapshot{
+			{NodeID: "A", ActorID: "a"},
+			{NodeID: "B", ActorID: "b"},
+		},
+	}
+	col.workersByNode["B"] = []model.WorkerSnapshot{{NodeID: "B", PID: 2}}
+	col.actorsByNode["B"] = []model.ActorSnapshot{{NodeID: "B", ActorID: "b"}}
+	col.nodeState["B"] = &model.NodeCollectionState{
+		NodeID: "B", CurrentStale: true, HasCachedData: true, ReusedWorkerCount: 1, ReusedActorCount: 1,
+	}
+	col.prevActorsByNode["B"] = map[string]model.ActorSnapshot{"b": {NodeID: "B", ActorID: "b"}}
+	col.health = model.CollectionHealth{
+		TotalNodeCount: 2, FailedNodeCount: 1, StaleNodeCount: 1,
+		StaleWorkerCount: 1, StaleActorCount: 1,
+		FailedNodes: []model.NodeCollectionState{*col.nodeState["B"]},
+	}
+	col.snap.Health = col.health
+
+	col.refreshSnapshotNodes([]model.NodeMetric{{NodeID: "A"}})
+	snap := col.Snapshot()
+	if len(snap.Nodes) != 1 || snap.Nodes[0].NodeID != "A" {
+		t.Fatalf("nodes after summary = %#v", snap.Nodes)
+	}
+	if len(snap.Workers) != 1 || snap.Workers[0].NodeID != "A" {
+		t.Fatalf("workers after summary = %#v", snap.Workers)
+	}
+	if len(snap.Actors) != 1 || snap.Actors[0].NodeID != "A" {
+		t.Fatalf("actors after summary = %#v", snap.Actors)
+	}
+	if len(snap.Health.FailedNodes) != 0 || snap.Health.FailedNodeCount != 0 {
+		t.Fatalf("removed node remains in health: %#v", snap.Health)
+	}
+	if _, ok := col.workersByNode["B"]; ok {
+		t.Fatal("workersByNode still contains B")
+	}
+	if _, ok := col.actorsByNode["B"]; ok {
+		t.Fatal("actorsByNode still contains B")
+	}
+	if _, ok := col.nodeState["B"]; ok {
+		t.Fatal("nodeState still contains B")
+	}
+	if _, ok := col.prevActorsByNode["B"]; ok {
+		t.Fatal("prevActorsByNode still contains B")
 	}
 }
 

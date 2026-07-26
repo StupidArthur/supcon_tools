@@ -1,0 +1,6 @@
+﻿# realtime-auth-smoke summary
+port: 18500
+result: ALL 12 STEPS OK
+token-rotated: true
+token-length: 32
+12/12 steps passed

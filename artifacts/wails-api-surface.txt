@@ -1,0 +1,4 @@
+# Wails 生产绑定 API 面
+
+## Forbidden symbol scan
+  clean

@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { getCollectionNotice, type CollectionHealth } from '@/components/CollectionHealthNotice'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  getCollectionNotices,
+  startRecentTimer,
+  type CollectionHealth,
+} from '@/components/CollectionHealthNotice'
 
 function makeHealth(overrides: Partial<CollectionHealth> = {}): CollectionHealth {
   return {
@@ -11,6 +15,7 @@ function makeHealth(overrides: Partial<CollectionHealth> = {}): CollectionHealth
     freshNodeCount: 3,
     failedNodeCount: 0,
     staleNodeCount: 0,
+    missingNodeCount: 0,
     staleWorkerCount: 0,
     staleActorCount: 0,
     clusterDataStale: false,
@@ -23,105 +28,70 @@ function makeHealth(overrides: Partial<CollectionHealth> = {}): CollectionHealth
   }
 }
 
-describe('getCollectionNotice', () => {
-  it('returns null when health is undefined', () => {
-    expect(getCollectionNotice(undefined, Date.now())).toBeNull()
-    expect(getCollectionNotice(null, Date.now())).toBeNull()
+describe('getCollectionNotices', () => {
+  it('returns no notices without health or failures', () => {
+    expect(getCollectionNotices(undefined, 1)).toEqual([])
+    expect(getCollectionNotices(makeHealth(), 1)).toEqual([])
   })
 
-  it('returns null when no failures ever', () => {
-    const h = makeHealth()
-    expect(getCollectionNotice(h, Date.now())).toBeNull()
+  it.each([
+    [{ failedNodeCount: 1, staleNodeCount: 1, currentIncomplete: true }, ['node-detail']],
+    [{ failedNodeCount: 1, missingNodeCount: 1, currentIncomplete: true }, ['node-detail']],
+    [{ clusterDataStale: true, currentIncomplete: true }, ['cluster']],
+    [{ jobsDataStale: true, currentIncomplete: true }, ['jobs']],
+    [{ currentStorageError: true }, ['storage']],
+  ])('identifies a single failure reason', (overrides, expected) => {
+    expect(getCollectionNotices(makeHealth(overrides), 1)).toEqual(expected)
   })
 
-  it('returns active when currentIncomplete is true', () => {
-    const h = makeHealth({ currentIncomplete: true, failedNodeCount: 1 })
-    expect(getCollectionNotice(h, Date.now())).toBe('active')
+  it.each([
+    [
+      { failedNodeCount: 1, clusterDataStale: true, currentIncomplete: true },
+      ['node-detail', 'cluster'],
+    ],
+    [
+      { failedNodeCount: 1, jobsDataStale: true, currentIncomplete: true },
+      ['node-detail', 'jobs'],
+    ],
+    [
+      { failedNodeCount: 1, currentStorageError: true, currentIncomplete: true },
+      ['node-detail', 'storage'],
+    ],
+    [
+      { clusterDataStale: true, jobsDataStale: true, currentStorageError: true, currentIncomplete: true },
+      ['cluster', 'jobs', 'storage'],
+    ],
+  ])('preserves combined failure reasons', (overrides, expected) => {
+    expect(getCollectionNotices(makeHealth(overrides), 1)).toEqual(expected)
   })
 
-  it('returns storage when currentStorageError is true', () => {
-    const h = makeHealth({ currentStorageError: true, lastStorageError: 'disk full', lastStorageErrorTs: Date.now() })
-    expect(getCollectionNotice(h, Date.now())).toBe('storage')
+  it('shows recovery at 30 and 60 seconds, then expires', () => {
+    const now = 100_000
+    expect(getCollectionNotices(makeHealth({ lastIncompleteTs: now - 30_000 }), now))
+      .toEqual(['recent-recovered'])
+    expect(getCollectionNotices(makeHealth({ lastIncompleteTs: now - 60_000 }), now))
+      .toEqual(['recent-recovered'])
+    expect(getCollectionNotices(makeHealth({ lastIncompleteTs: now - 60_001 }), now))
+      .toEqual([])
   })
 
-  it('returns null when storage error recovered', () => {
-    const h = makeHealth({ currentStorageError: false, lastStorageError: 'old error', lastStorageErrorTs: Date.now() - 120_000 })
-    expect(getCollectionNotice(h, Date.now())).toBeNull()
-  })
-
-  it('returns recent within 60s after recovery', () => {
-    const now = Date.now()
-    const h = makeHealth({ lastIncompleteTs: now - 30_000 })
-    expect(getCollectionNotice(h, now)).toBe('recent')
-  })
-
-  it('returns null after 60s since last incomplete', () => {
-    const now = Date.now()
-    const h = makeHealth({ lastIncompleteTs: now - 61_000 })
-    expect(getCollectionNotice(h, now)).toBeNull()
-  })
-
-  it('returns recent at exactly 60s boundary', () => {
-    const now = Date.now()
-    const h = makeHealth({ lastIncompleteTs: now - 60_000 })
-    expect(getCollectionNotice(h, now)).toBe('recent')
-  })
-
-  it('active takes priority over storage', () => {
-    const h = makeHealth({
+  it('does not describe current incomplete collection as recovered', () => {
+    const now = 100_000
+    const health = makeHealth({
       currentIncomplete: true,
-      currentStorageError: true,
-      lastStorageError: 'err',
-      lastStorageErrorTs: Date.now(),
+      jobsDataStale: true,
+      lastIncompleteTs: now - 30_000,
     })
-    expect(getCollectionNotice(h, Date.now())).toBe('active')
+    expect(getCollectionNotices(health, now)).toEqual(['jobs'])
   })
 
-  it('failed nodes with cache are reported in active state', () => {
-    const h = makeHealth({
-      currentIncomplete: true,
-      failedNodeCount: 1,
-      failedNodes: [
-        {
-          nodeId: 'n1',
-          nodeName: 'worker-1',
-          lastAttemptTs: Date.now(),
-          lastSuccessTs: Date.now() - 10000,
-          lastFailureTs: Date.now(),
-          consecutiveFailures: 2,
-          lastError: 'timeout',
-          currentStale: true,
-          hasCachedData: true,
-          reusedWorkerCount: 5,
-          reusedActorCount: 3,
-        },
-      ],
-    })
-    expect(getCollectionNotice(h, Date.now())).toBe('active')
-    expect(h.failedNodes[0].hasCachedData).toBe(true)
-  })
-
-  it('failed nodes without cache are reported', () => {
-    const h = makeHealth({
-      currentIncomplete: true,
-      failedNodeCount: 1,
-      failedNodes: [
-        {
-          nodeId: 'n2',
-          nodeName: 'worker-2',
-          lastAttemptTs: Date.now(),
-          lastSuccessTs: 0,
-          lastFailureTs: Date.now(),
-          consecutiveFailures: 1,
-          lastError: 'connection refused',
-          currentStale: false,
-          hasCachedData: false,
-          reusedWorkerCount: 0,
-          reusedActorCount: 0,
-        },
-      ],
-    })
-    expect(getCollectionNotice(h, Date.now())).toBe('active')
-    expect(h.failedNodes[0].hasCachedData).toBe(false)
+  it('clears the recovery timer on cleanup', () => {
+    const timer = 17 as unknown as ReturnType<typeof setInterval>
+    const setTimer = vi.fn(() => timer) as unknown as typeof setInterval
+    const clearTimer = vi.fn() as unknown as typeof clearInterval
+    const cleanup = startRecentTimer(() => {}, setTimer, clearTimer)
+    cleanup()
+    expect(setTimer).toHaveBeenCalledOnce()
+    expect(clearTimer).toHaveBeenCalledWith(timer)
   })
 })

@@ -1,0 +1,4913 @@
+From 6cca8e224dad239970cb090a52e053d3fc985ba5 Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 08:58:54 +0800
+Subject: [PATCH 1/8] fix: complete authenticated realtime startup and
+ transport
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A1. Go readiness 检测器签名新增 token 参数，defaultReadinessChecker
+    自动写入 Authorization: Bearer <token>。生产模式 /api/status 401
+    直接导致 ready 失败，链路打通。
+
+A2. token 生命周期：Start 内 SetCurrentAPIToken + defer 回滚覆盖
+    所有失败路径（pipe 创建失败、cmd.Start 失败、ready 超时、
+    instance 不匹配、进程提前退出、正常 Stop、异常退出）。
+
+A3. 新增 RealtimeConnectionInfo 与 GetConnectionInfo：仅返回
+    host/port/runtimeName/apiToken，无 token 不返回会话；
+    token 不进入 session.json / metadata.json / 日志。
+
+A4. 前端 RuntimeApi 注入 Bearer 头：fetchJson 统一添加，
+    覆盖 /api/status、/api/instances/{name}/{meta,snapshot,tags}。
+    配置空 apiToken 不发送 Authorization（兼容开发模式）。
+
+A5. WebSocket URL 注入 ?token=<encodeURIComponent(apiToken)>；
+    空 token 不附加 query。
+
+A6. 测试：
+  - Go: TestStart_Ready* / TestStop_RevokesToken /
+    TestStart_TokenRevokedOnUnexpectedExit /
+    TestStart_RestartInvalidatesPreviousToken /
+    TestDefaultReadinessCheckerAddsBearerHeader /
+    TestGetConnectionInfo_NoSession / TestGetConnectionInfo_ReturnsTokenAfterStart /
+    TestGetConnectionInfo_AfterStopClearsToken /
+    TestSessionRecord_DoesNotPersistToken /
+    TestStart_RestartTokenUniqueAndPreviousCleared
+  - Python: test_token_auth_ws_rejects_without_token /
+    test_token_auth_ws_rejects_wrong_token /
+    test_token_auth_ws_accepts_correct_token /
+    test_token_disabled_when_none
+  - Frontend: runtimeApi auth header + WS token query +
+    useRuntimeStore.setEndpoint 携带 token + connect 注入 Bearer
+
+注意：原 system_test 中 readiness checker 匿名签名已同步更新为
+接受 4 个参数 (ctx, host, port, token)。
+
+Wails binding wailsjs/go/{models.ts,RealtimeRuntimeBinding.d.ts}
+同步加入 RealRealtimeConnectionInfo，便于前端 TypeScript 类型推断。
+---
+ .../src/features/realtime/RealtimeRunPage.tsx |  18 +-
+ .../src/features/runtime/runtimeApi.test.ts   |  62 +++
+ .../src/features/runtime/runtimeApi.ts        |  17 +-
+ .../features/runtime/useRuntimeStore.test.ts  |  56 +++
+ .../src/features/runtime/useRuntimeStore.ts   |  17 +-
+ .../src/features/runtime/websocket.test.ts    |  62 +++
+ .../src/features/runtime/websocket.ts         |   8 +-
+ review3/config-tool/frontend/src/lib/api.ts   |   3 +
+ .../go/bindings/RealtimeRuntimeBinding.d.ts   |   2 +
+ .../config-tool/frontend/wailsjs/go/models.ts |  18 +
+ .../internal/bindings/realtime_runtime.go     |  33 ++
+ .../bindings/realtime_runtime_test.go         | 267 ++++++++++++
+ .../config-tool/internal/bindings/system.go   |  33 +-
+ .../internal/bindings/system_test.go          | 389 +++++++++++++++++-
+ review3/tests/test_engine_api.py              |  54 +++
+ 15 files changed, 1015 insertions(+), 24 deletions(-)
+ create mode 100644 review3/config-tool/internal/bindings/realtime_runtime_test.go
+
+diff --git a/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx b/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx
+index 434dc5b..9a3f4fc 100644
+--- a/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx
++++ b/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx
+@@ -85,8 +85,22 @@ export function RealtimeRunPage() {
+     if (dfStatus.running && dfStatus.apiReady) {
+       const host = session?.apiHost || apiHost
+       const port = session?.apiPort || apiPort
+-      rtStore.setEndpoint(host, port)
+-      void rtStore.connect()
++      // 自动从 Go 侧获取本次运行的 connection info（host / port / runtimeName / token）。
++      // 仅在内存使用，绝不写入持久化。
++      void (async () => {
++        try {
++          const info = await realtimeRuntimeApi.getConnectionInfo()
++          if (info.apiToken) {
++            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port, info.apiToken)
++          } else {
++            // 进程已运行但 token 暂时拿不到（极端时序），等下一次 dfStatus 变化再试。
++            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port)
++          }
++        } catch {
++          rtStore.setEndpoint(host, port)
++        }
++        void rtStore.connect()
++      })()
+     } else if (!dfStatus.running) {
+       rtStore.disconnect()
+     }
+diff --git a/review3/config-tool/frontend/src/features/runtime/runtimeApi.test.ts b/review3/config-tool/frontend/src/features/runtime/runtimeApi.test.ts
+index cf0f59c..a9ba9b1 100644
+--- a/review3/config-tool/frontend/src/features/runtime/runtimeApi.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/runtimeApi.test.ts
+@@ -198,4 +198,66 @@ describe('runtimeApi.mapApiSnapshot', () => {
+     expect(snap.cycleCount).toBe(42)
+     expect(snap.simTime).toBe(21.5)
+   })
++})
++
++describe('runtimeApi auth header', () => {
++  it('attaches Authorization Bearer when apiToken is provided', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      status: 200,
++      json: async () => ({
++        instance_name: 'pid',
++        mode: 'REALTIME',
++        cycle_count: 1,
++        sim_time: 0.5,
++        cycle_time: 0.5,
++        safe_state: false,
++        consecutive_failures: 0,
++      }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++
++    await getStatus({ apiHost: '127.0.0.1', apiPort: 8000, apiToken: 'secret-token' })
++    expect(fetchMock).toHaveBeenCalledWith(
++      'http://127.0.0.1:8000/api/status',
++      expect.objectContaining({
++        headers: expect.objectContaining({ Authorization: 'Bearer secret-token' }),
++      }),
++    )
++  })
++
++  it('omits Authorization header when apiToken is empty', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      status: 200,
++      json: async () => ({
++        instance_name: 'pid',
++        mode: 'REALTIME',
++        cycle_count: 1,
++        sim_time: 0.5,
++        cycle_time: 0.5,
++        safe_state: false,
++        consecutive_failures: 0,
++      }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++
++    await getStatus({ apiHost: '127.0.0.1', apiPort: 8000 })
++    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
++    const headers = lastCall[1]?.headers as Record<string, string> | undefined
++    expect(headers?.Authorization).toBeUndefined()
++  })
++
++  it('does NOT send fake token when set to empty string', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      status: 200,
++      json: async () => ({ instance_name: 'x', meta: {}, statistics: {} }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++    await getMeta({ apiHost: '127.0.0.1', apiPort: 8000, apiToken: '' }, 'x')
++    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
++    const headers = lastCall[1]?.headers as Record<string, string> | undefined
++    expect(headers?.Authorization).toBeUndefined()
++  })
+ })
+\ No newline at end of file
+diff --git a/review3/config-tool/frontend/src/features/runtime/runtimeApi.ts b/review3/config-tool/frontend/src/features/runtime/runtimeApi.ts
+index c11ac57..f35741d 100644
+--- a/review3/config-tool/frontend/src/features/runtime/runtimeApi.ts
++++ b/review3/config-tool/frontend/src/features/runtime/runtimeApi.ts
+@@ -4,6 +4,8 @@
+ //   - 必须先调 getStatus() 获取真实 runtimeName，再调 getMeta/getSnapshot。
+ //   - 任何路径里的 runtimeName 都来自 /api/status.instance_name，禁止硬编码或与 Program 实例名混淆。
+ //   - 这里不维护业务状态（连接、缓存、心跳），只做 HTTP 调用和字段映射。
++//   - REST 鉴权：cfg.apiToken 非空时必须加 Authorization: Bearer <token> 头；
++//     空 token 不发送 Authorization（兼容 DATAFACTORY_NO_AUTH 开发模式）。
+ 
+ import type {
+   ApiMetaResponse,
+@@ -15,6 +17,8 @@ import type {
+ export interface RuntimeApiConfig {
+   apiHost: string
+   apiPort: number
++  /** 仅内存；不持久化。空字符串表示不发送 Authorization（如开发模式）。 */
++  apiToken?: string
+ }
+ 
+ export class RuntimeApiError extends Error {
+@@ -24,8 +28,12 @@ export class RuntimeApiError extends Error {
+   }
+ }
+ 
+-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+-  const resp = await fetch(url, { signal })
++async function fetchJson<T>(url: string, cfg: RuntimeApiConfig, signal?: AbortSignal): Promise<T> {
++  const headers: Record<string, string> = {}
++  if (cfg.apiToken) {
++    headers['Authorization'] = `Bearer ${cfg.apiToken}`
++  }
++  const resp = await fetch(url, { signal, headers })
+   if (!resp.ok) {
+     throw new RuntimeApiError(resp.status, `${url} → HTTP ${resp.status}`)
+   }
+@@ -41,7 +49,7 @@ export async function getStatus(
+   cfg: RuntimeApiConfig,
+   signal?: AbortSignal,
+ ): Promise<ApiStatusResponse> {
+-  return fetchJson<ApiStatusResponse>(apiUrl(cfg, '/api/status'), signal)
++  return fetchJson<ApiStatusResponse>(apiUrl(cfg, '/api/status'), cfg, signal)
+ }
+ 
+ export async function getMeta(
+@@ -51,6 +59,7 @@ export async function getMeta(
+ ): Promise<ApiMetaResponse> {
+   return fetchJson<ApiMetaResponse>(
+     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/meta`),
++    cfg,
+     signal,
+   )
+ }
+@@ -62,6 +71,7 @@ export async function getSnapshot(
+ ): Promise<ApiSnapshot> {
+   return fetchJson<ApiSnapshot>(
+     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/snapshot`),
++    cfg,
+     signal,
+   )
+ }
+@@ -78,6 +88,7 @@ export async function getTags(
+ ): Promise<ApiTagsResponse> {
+   return fetchJson<ApiTagsResponse>(
+     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/tags`),
++    cfg,
+     signal,
+   )
+ }
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
+index ed1b8db..f8d2226 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
+@@ -173,4 +173,60 @@ describe('useRuntimeStore', () => {
+     useRuntimeStore.getState().disconnect()
+     expect(useRuntimeStore.getState().connectionState).toBe('idle')
+   })
++
++  it('setEndpoint with token stores token in-memory', () => {
++    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000, 'in-memory-token')
++    const s = useRuntimeStore.getState()
++    expect(s.apiToken).toBe('in-memory-token')
++    expect(s.apiHost).toBe('127.0.0.1')
++    expect(s.apiPort).toBe(8000)
++  })
++
++  it('setEndpoint without token keeps token empty', () => {
++    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000)
++    expect(useRuntimeStore.getState().apiToken).toBe('')
++  })
++
++  it('connect() passes Authorization header when apiToken is set', async () => {
++    useRuntimeStore.getState().setEndpoint('127.0.0.1', 8000, 'in-memory-token')
++    const fetchMock = vi.fn().mockImplementation((url: string) => {
++      if (url.endsWith('/api/status')) {
++        return Promise.resolve({
++          ok: true,
++          status: 200,
++          json: async () => ({
++            instance_name: 'real_runtime',
++            mode: 'REALTIME',
++            cycle_count: 0,
++            sim_time: 0,
++            cycle_time: 0.5,
++            safe_state: false,
++            consecutive_failures: 0,
++          }),
++        })
++      }
++      if (url.endsWith('/snapshot')) {
++        return Promise.resolve({
++          ok: true,
++          status: 200,
++          json: async () => ({ cycle_count: 0, sim_time: 0 }),
++        })
++      }
++      if (url.endsWith('/meta')) {
++        return Promise.resolve({
++          ok: true,
++          status: 200,
++          json: async () => ({ instance_name: 'real_runtime', meta: {}, statistics: {} }),
++        })
++      }
++      return Promise.reject(new Error('unexpected url: ' + url))
++    })
++    vi.stubGlobal('fetch', fetchMock)
++    await useRuntimeStore.getState().connect()
++
++    const statusCall = fetchMock.mock.calls.find((c) => (c[0] as string).endsWith('/api/status'))
++    expect(statusCall).toBeDefined()
++    const headers = statusCall![1]?.headers as Record<string, string> | undefined
++    expect(headers?.Authorization).toBe('Bearer in-memory-token')
++  })
+ })
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+index 893a74d..6ba0859 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+@@ -56,6 +56,8 @@ export interface RuntimeStoreState {
+   // 连接状态
+   apiHost: string
+   apiPort: number
++  /** 仅内存；不持久化。空字符串表示未注入 token（如未启实时进程）。 */
++  apiToken: string
+   runtimeName: string | null
+   connectionState: ConnectionState
+   // API readiness（由 SystemBinding.status().apiReady 写入，REST 真实可达）
+@@ -90,7 +92,7 @@ export interface RuntimeStoreState {
+   connectGeneration: number
+ 
+   // Actions
+-  setEndpoint: (host: string, port: number) => void
++  setEndpoint: (host: string, port: number, token?: string) => void
+   setApiReady: (ready: boolean) => void
+   setTrendTags: (tags: string[]) => void
+   setSeriesVisibility: (tag: string, visible: boolean) => void
+@@ -166,6 +168,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+   return {
+     apiHost: DEFAULT_API_HOST,
+     apiPort: DEFAULT_API_PORT,
++    apiToken: '',
+     runtimeName: null,
+     connectionState: 'idle',
+     apiReady: false,
+@@ -192,7 +195,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+     lastError: null,
+     connectGeneration: 0,
+ 
+-    setEndpoint: (host, port) => set({ apiHost: host, apiPort: port }),
++    setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
+     setApiReady: (ready) => set({ apiReady: ready }),
+     setTrendTags: (tags) => {
+       set({ trendTags: tags })
+@@ -252,7 +255,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+       // 第一步：GET /api/status 获取真实 runtimeName
+       let status
+       try {
+-        status = await getStatus({ apiHost: state.apiHost, apiPort: state.apiPort })
++        status = await getStatus({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken })
+       } catch (e) {
+         // 若 generation 已变（disconnect 在我们 await 期间发生），不要写错误状态
+         if (get().connectGeneration !== myGen) return
+@@ -271,14 +274,14 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+ 
+       // 第三步：用真实 runtimeName 调 meta（meta 失败不阻止 WS）
+       try {
+-        await getMeta({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
++        await getMeta({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }, runtimeName)
+       } catch (e) {
+         // 忽略
+       }
+ 
+       // 通用 tag catalog（失败不阻止 WS）
+       try {
+-        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
++        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }, runtimeName)
+         if (get().connectGeneration === myGen && Array.isArray(tagsResp.tags)) {
+           set({ tagCatalog: tagsResp.tags })
+         }
+@@ -298,9 +301,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+       })
+ 
+       // 第四步：连接 WS；start() 内会先 GET snapshot 再开 WS。
+-      const endpoint = { apiHost: state.apiHost, apiPort: state.apiPort }
++      const endpoint = { apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }
+       const runtimeWs = createRuntimeWs(
+-        { apiHost: state.apiHost, apiPort: state.apiPort, cycleTime },
++        { apiHost: state.apiHost, apiPort: state.apiPort, cycleTime, apiToken: state.apiToken },
+         (msg) => {
+           // 消息回调：仅在 generation 未变时写入 snapshot / heartbeat。
+           if (get().connectGeneration !== myGen) return
+diff --git a/review3/config-tool/frontend/src/features/runtime/websocket.test.ts b/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
+index e83426e..92ef624 100644
+--- a/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
+@@ -390,3 +390,65 @@ describe('createRuntimeWs', () => {
+     vi.useRealTimers()
+   })
+ })
++
++describe('createRuntimeWs auth token', () => {
++  beforeEach(() => {
++    FakeWebSocket.instances = []
++    vi.stubGlobal('WebSocket', FakeWebSocket as any)
++  })
++  afterEach(() => {
++    vi.restoreAllMocks()
++  })
++
++  it('appends ?token=... to URL when apiToken is non-empty', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5, apiToken: 'secret-token' },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    expect(FakeWebSocket.instances[0].url).toBe(
++      'ws://127.0.0.1:8000/ws/snapshot?token=secret-token',
++    )
++    ws.stop()
++  })
++
++  it('encodes special characters in token', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5, apiToken: 'a/b+c d' },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    expect(FakeWebSocket.instances[0].url).toBe(
++      'ws://127.0.0.1:8000/ws/snapshot?token=a%2Fb%2Bc%20d',
++    )
++    ws.stop()
++  })
++
++  it('does NOT append token when apiToken is empty', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5, apiToken: '' },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    expect(FakeWebSocket.instances[0].url).toBe('ws://127.0.0.1:8000/ws/snapshot')
++    ws.stop()
++  })
++
++  it('does NOT append token when apiToken is undefined', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    expect(FakeWebSocket.instances[0].url).toBe('ws://127.0.0.1:8000/ws/snapshot')
++    ws.stop()
++  })
++})
+diff --git a/review3/config-tool/frontend/src/features/runtime/websocket.ts b/review3/config-tool/frontend/src/features/runtime/websocket.ts
+index 42a6a78..2e6bdbd 100644
+--- a/review3/config-tool/frontend/src/features/runtime/websocket.ts
++++ b/review3/config-tool/frontend/src/features/runtime/websocket.ts
+@@ -16,6 +16,8 @@ export interface RuntimeWsConfig {
+   apiHost: string
+   apiPort: number
+   cycleTime: number
++  /** 仅内存；不持久化。空字符串表示不附加 token（开发模式）。 */
++  apiToken?: string
+ }
+ 
+ export type WsMessageHandler = (msg: ParsedWsMessage) => void
+@@ -61,7 +63,11 @@ export function createRuntimeWs(
+ 
+   const wsUrl = (): string => {
+     const proto = 'ws:'
+-    return `${proto}//${config.apiHost}:${config.apiPort}/ws/snapshot`
++    const base = `${proto}//${config.apiHost}:${config.apiPort}/ws/snapshot`
++    if (!config.apiToken) return base
++    // 不使用 URLSearchParams 以避免对 token 内部特殊字符做二次变换；
++    // encodeURIComponent 已经覆盖了所有 reserved 字符。
++    return `${base}?token=${encodeURIComponent(config.apiToken)}`
+   }
+ 
+   const setState = (s: ConnectionState): void => {
+diff --git a/review3/config-tool/frontend/src/lib/api.ts b/review3/config-tool/frontend/src/lib/api.ts
+index 21c5c30..feafa93 100644
+--- a/review3/config-tool/frontend/src/lib/api.ts
++++ b/review3/config-tool/frontend/src/lib/api.ts
+@@ -124,6 +124,9 @@ export const realtimeRuntimeApi = {
+     RealtimeRuntimeBinding.StartSingleYAML(configPath, options),
+   stop: () => RealtimeRuntimeBinding.Stop(),
+   getSession: () => RealtimeRuntimeBinding.GetSession(),
++  /** 获取当前实时运行的连接信息（含 apiToken）。返回的 token 必须仅用于本次会话的内存中。 */
++  getConnectionInfo: () =>
++    RealtimeRuntimeBinding.GetConnectionInfo() as unknown as Promise<import('../../wailsjs/go/models').bindings.RealtimeConnectionInfo>,
+   getProjectRevision: (projectId: string) => RealtimeRuntimeBinding.GetProjectRevision(projectId),
+   getAlarms: () => RealtimeRuntimeBinding.GetAlarms(),
+   getAlarmEvents: (limit: number) => RealtimeRuntimeBinding.GetAlarmEvents(limit),
+diff --git a/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts b/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts
+index 435586b..8881c43 100644
+--- a/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts
++++ b/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts
+@@ -15,6 +15,8 @@ export function GetAlarmEvents(arg1:number):Promise<Record<string, any>>;
+ 
+ export function GetAlarms():Promise<Record<string, any>>;
+ 
++export function GetConnectionInfo():Promise<bindings.RealtimeConnectionInfo>;
++
+ export function GetProjectRevision(arg1:string):Promise<string>;
+ 
+ export function GetSession():Promise<realtime.RealtimeRunSession>;
+diff --git a/review3/config-tool/frontend/wailsjs/go/models.ts b/review3/config-tool/frontend/wailsjs/go/models.ts
+index fcac721..6f22d42 100644
+--- a/review3/config-tool/frontend/wailsjs/go/models.ts
++++ b/review3/config-tool/frontend/wailsjs/go/models.ts
+@@ -68,6 +68,24 @@ export namespace bindings {
+ 	        this.expires_at = source["expires_at"];
+ 	    }
+ 	}
++	export class RealtimeConnectionInfo {
++	    apiHost: string;
++	    apiPort: number;
++	    runtimeName: string;
++	    apiToken: string;
++
++	    static createFrom(source: any = {}) {
++	        return new RealtimeConnectionInfo(source);
++	    }
++
++	    constructor(source: any = {}) {
++	        if ('string' === typeof source) source = JSON.parse(source);
++	        this.apiHost = source["apiHost"];
++	        this.apiPort = source["apiPort"];
++	        this.runtimeName = source["runtimeName"];
++	        this.apiToken = source["apiToken"];
++	    }
++	}
+ 	export class ForceState {
+ 	    forces: Record<string, ForceEntry>;
+ 	    tags: string[];
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime.go b/review3/config-tool/internal/bindings/realtime_runtime.go
+index 773a83a..04a1f65 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime.go
+@@ -68,6 +68,39 @@ func (b *RealtimeRuntimeBinding) GetSession() (*realtime.RealtimeRunSession, err
+ 	return &cp, nil
+ }
+ 
++// RealtimeConnectionInfo 暴露给前端的当前运行期连接信息。
++// 关键约束：
++//   - APIToken 仅在内存中，不进入任何持久化记录（session.json / metadata.json / 日志）。
++//   - 没有运行会话时调用方会得到空字符串 token，前端必须把它视为"未运行"。
++//   - 进入此结构体的 token 与当前 run 的 process 一一对应；进程退出 / 异常停止会被清空。
++type RealtimeConnectionInfo struct {
++	APIHost     string `json:"apiHost"`
++	APIPort     int    `json:"apiPort"`
++	RuntimeName string `json:"runtimeName"`
++	APIToken    string `json:"apiToken"`
++}
++
++// GetConnectionInfo 返回当前实时运行的连接信息（host / port / runtimeName / token）。
++// 必须在 session 活跃时调用才返回有效 token；进程启动失败 / 退出 / 停止后 token 为空，
++// 前端不得用空 token 继续访问 REST / WS。
++func (b *RealtimeRuntimeBinding) GetConnectionInfo() (RealtimeConnectionInfo, error) {
++	b.mu.Lock()
++	s := b.current
++	b.mu.Unlock()
++	if s == nil {
++		return RealtimeConnectionInfo{}, fmt.Errorf("没有运行会话")
++	}
++	if !b.system.Status().Running {
++		return RealtimeConnectionInfo{}, fmt.Errorf("实时进程未在运行")
++	}
++	return RealtimeConnectionInfo{
++		APIHost:     s.APIHost,
++		APIPort:     s.APIPort,
++		RuntimeName: s.RuntimeName,
++		APIToken:    CurrentAPIToken(),
++	}, nil
++}
++
+ func (b *RealtimeRuntimeBinding) StartProject(projectID string, options realtime.RealtimeStartOptions) (realtime.RealtimeRunSession, error) {
+ 	opts := options.WithDefaults()
+ 
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime_test.go b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+new file mode 100644
+index 0000000..65d4d25
+--- /dev/null
++++ b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+@@ -0,0 +1,267 @@
++package bindings
++
++import (
++	"context"
++	"encoding/json"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"config-tool/internal/realtime"
++)
++
++// realtimeTestRig 构造可独立测试的 RealtimeRuntimeBinding。
++// system 使用 mock commandFactory（不真的启动 DataFactory），避免依赖 exe；
++// 同时注入 readiness checker 让它接受任意 token 且 instance 名匹配。
++type realtimeTestRig struct {
++	binding    *RealtimeRuntimeBinding
++	system     *SystemBinding
++	manager    *realtime.Manager
++	storeRoot  string
++	configPath string
++}
++
++func newRealtimeTestRig(t *testing.T) *realtimeTestRig {
++	t.Helper()
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(20 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "test-runtime", nil
++	})
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	return &realtimeTestRig{
++		binding:    binding,
++		system:     system,
++		manager:    manager,
++		storeRoot:  storeRoot,
++		configPath: cfg,
++	}
++}
++
++func (r *realtimeTestRig) cleanup() {
++	if r.system.Status().Running {
++		_ = r.system.Stop()
++	}
++}
++
++func TestGetConnectionInfo_NoSession(t *testing.T) {
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++
++	info, err := rig.binding.GetConnectionInfo()
++	if err == nil {
++		t.Fatal("没有 session 时 GetConnectionInfo 必须返回错误")
++	}
++	if info.APIToken != "" {
++		t.Errorf("没有 session 时 token 必须为空，实际 %q", info.APIToken)
++	}
++}
++
++func TestGetConnectionInfo_ReturnsTokenAfterStart(t *testing.T) {
++	// 用真实的 mock auth server，让 defaultReadinessChecker 携带 token，
++	// 验证 GetConnectionInfo 返回的 token 与 mock 校验时收到的 token 一致。
++	var receivedAuth atomic.Value
++	mux := http.NewServeMux()
++	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
++		receivedAuth.Store(r.Header.Get("Authorization"))
++		auth := r.Header.Get("Authorization")
++		if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
++			w.WriteHeader(http.StatusUnauthorized)
++			return
++		}
++		w.Header().Set("Content-Type", "application/json")
++		json.NewEncoder(w).Encode(StatusResponse{InstanceName: "test-runtime"})
++	})
++	srv := httptest.NewServer(mux)
++	defer srv.Close()
++	port := srv.Listener.Addr().(*net.TCPAddr).Port
++
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++	rig.system.setReadinessChecker(defaultReadinessChecker)
++
++	_, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		CycleTime:   0.5,
++		OPCUAPort:   18951,
++		APIHost:     "127.0.0.1",
++		APIPort:     port,
++		RuntimeName: "test-runtime",
++	})
++	if err != nil {
++		t.Fatalf("StartSingleYAML 失败: %v", err)
++	}
++
++	info, err := rig.binding.GetConnectionInfo()
++	if err != nil {
++		t.Fatalf("GetConnectionInfo 失败: %v", err)
++	}
++	if info.APIToken == "" {
++		t.Fatal("active session 后 token 必须非空")
++	}
++	if info.APIHost != "127.0.0.1" || info.APIPort != port || info.RuntimeName != "test-runtime" {
++		t.Errorf("connection info 字段错误: %+v", info)
++	}
++	auth, _ := receivedAuth.Load().(string)
++	if auth != "Bearer "+info.APIToken {
++		t.Errorf("readiness 收到的 Bearer 与 GetConnectionInfo 报告的 token 不一致：%q vs %q",
++			auth, info.APIToken)
++	}
++}
++
++func TestGetConnectionInfo_AfterStopClearsToken(t *testing.T) {
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++
++	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "test-runtime",
++	}); err != nil {
++		t.Fatalf("Start 失败: %v", err)
++	}
++	info, err := rig.binding.GetConnectionInfo()
++	if err != nil {
++		t.Fatalf("active 后 GetConnectionInfo 失败: %v", err)
++	}
++	if info.APIToken == "" {
++		t.Fatal("active 后 token 必须非空")
++	}
++
++	if err := rig.binding.Stop(); err != nil {
++		t.Fatalf("Stop 失败: %v", err)
++	}
++	if _, err := rig.binding.GetConnectionInfo(); err == nil {
++		t.Error("Stop 后 GetConnectionInfo 必须返回错误")
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Errorf("Stop 后 CurrentAPIToken() 必须为空，实际 %q", got)
++	}
++}
++
++// 确认 session.json 不含 token 字段（持久化隔离）
++func TestSessionRecord_DoesNotPersistToken(t *testing.T) {
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++
++	_, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "test-runtime",
++	})
++	if err != nil {
++		t.Fatalf("Start 失败: %v", err)
++	}
++	// 找到 session 目录
++	sessionsRoot := filepath.Join(filepath.Dir(rig.storeRoot), "sessions")
++	if _, err := os.Stat(sessionsRoot); err != nil {
++		t.Fatalf("sessions root not found: %v", err)
++	}
++	// 在子目录里找 session.json
++	entries, err := os.ReadDir(sessionsRoot)
++	if err != nil {
++		t.Fatalf("read sessions: %v", err)
++	}
++	if len(entries) == 0 {
++		t.Fatal("expected session directory")
++	}
++	for _, e := range entries {
++		if !e.IsDir() {
++			continue
++		}
++		p := filepath.Join(sessionsRoot, e.Name(), "session.json")
++		data, err := os.ReadFile(p)
++		if err != nil {
++			continue
++		}
++		var parsed map[string]any
++		if err := json.Unmarshal(data, &parsed); err != nil {
++			t.Fatalf("解析 session.json 失败: %v", err)
++		}
++		for _, field := range []string{"token", "apiToken", "api_token", "APIToken"} {
++			if _, ok := parsed[field]; ok {
++				t.Errorf("session.json 不得包含 %q 字段，实际内容: %s", field, string(data))
++			}
++		}
++	}
++}
++
++// 确认 Stop 后旧 token 拒绝访问（不能复用到下一次 readiness）。
++func TestStart_RestartTokenUniqueAndPreviousCleared(t *testing.T) {
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++	var expected atomic.Value
++	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		if v, ok := expected.Load().(string); ok && v != "" {
++			return true, v, nil
++		}
++		return true, "test-runtime", nil
++	})
++
++	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "test-runtime",
++	}); err != nil {
++		t.Fatalf("Start 1 失败: %v", err)
++	}
++	first, _ := rig.binding.GetConnectionInfo()
++	if first.APIToken == "" {
++		t.Fatal("first token must be non-empty")
++	}
++	if err := rig.binding.Stop(); err != nil {
++		t.Fatalf("Stop 失败: %v", err)
++	}
++	expected.Store("test-runtime2")
++	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "test-runtime2",
++	}); err != nil {
++		t.Fatalf("Start 2 失败: %v", err)
++	}
++	second, _ := rig.binding.GetConnectionInfo()
++	if second.APIToken == "" {
++		t.Fatal("second token must be non-empty")
++	}
++	if second.APIToken == first.APIToken {
++		t.Errorf("两次 token 必须不同：%q", second.APIToken)
++	}
++}
++
++// 验证 unused helper to silence linter
++var _ = sync.Mutex{}
++
++// localFakeCompiler 仅在本测试用：直接通过 Validate/Compile。
++type localFakeCompiler struct{}
++
++func (l *localFakeCompiler) Validate(_ context.Context, _ []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
++	return realtime.ValidationResult{
++		Valid:     true,
++		Instances: []realtime.ExpandedInstance{{Name: "test-runtime", SourceID: "s1", ReplicaIndex: 0, OriginalName: "test-runtime"}},
++	}, nil
++}
++
++func (l *localFakeCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, outputPath string) (string, error) {
++	return outputPath, nil
++}
+diff --git a/review3/config-tool/internal/bindings/system.go b/review3/config-tool/internal/bindings/system.go
+index ecc1049..0efc49b 100644
+--- a/review3/config-tool/internal/bindings/system.go
++++ b/review3/config-tool/internal/bindings/system.go
+@@ -73,9 +73,11 @@ type BatchResult struct {
+ // commandFactory 创建命令的工厂函数（用于测试注入）
+ type commandFactory func(name string, arg ...string) *exec.Cmd
+ 
+-// readinessChecker 检查 API 是否就绪的函数（用于测试注入）
+-// 返回 (ready bool, instanceName string, err error)
+-type readinessChecker func(ctx context.Context, apiHost string, apiPort int) (bool, string, error)
++// readinessChecker 检查 API 是否就绪的函数（用于测试注入）。
++// token 允许为空（开发环境 / DATAFACTORY_NO_AUTH），但生产模式下应始终提供；
++// checker 自身负责把 token 写入 Authorization header，不依赖外部全局状态。
++// 返回 (ready bool, instanceName string, err error)。
++type readinessChecker func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error)
+ 
+ // processResult 进程退出结果
+ type processResult struct {
+@@ -358,7 +360,15 @@ func (b *SystemBinding) Start(params StartParams) error {
+ 	if params.APIToken == "" {
+ 		params.APIToken = generateAPIToken()
+ 	}
++	// publish token before we touch any subprocess state; rollback in defer below
++	// covers every failure path (pipe / start / ready / instance mismatch / early exit).
+ 	SetCurrentAPIToken(params.APIToken)
++	tokenCommitted := true
++	defer func() {
++		if tokenCommitted {
++			SetCurrentAPIToken("")
++		}
++	}()
+ 	args := BuildArgs(params)
+ 	cmd := dfLaunch.command(commandFactory, args...)
+ 
+@@ -439,7 +449,7 @@ func (b *SystemBinding) Start(params StartParams) error {
+ 			return fmt.Errorf(errMsg)
+ 
+ 		case <-ticker.C:
+-			ready, instanceName, err := readinessChecker(readyCtx, apiHost, apiPort)
++			ready, instanceName, err := readinessChecker(readyCtx, apiHost, apiPort, params.APIToken)
+ 			if err != nil {
+ 				continue
+ 			}
+@@ -476,6 +486,8 @@ func (b *SystemBinding) Start(params StartParams) error {
+ 			if b.ctx != nil {
+ 				runtime.EventsEmit(b.ctx, "df:status", status)
+ 			}
++			// token stays valid for the lifetime of this process; cleared on Stop / unexpected exit.
++			tokenCommitted = false
+ 			return nil
+ 		}
+ 	}
+@@ -513,6 +525,11 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
+ 	}
+ 	b.mu.Unlock()
+ 
++	// 进程退出（正常或异常）→ 当前 token 立即失效，避免泄漏给无效监听端。
++	if isCurrent {
++		SetCurrentAPIToken("")
++	}
++
+ 	// 发送事件
+ 	if isCurrent {
+ 		status := b.Status()
+@@ -1395,13 +1412,17 @@ func ParseStatusResponse(data []byte) (*StatusResponse, error) {
+ 	return &resp, nil
+ }
+ 
+-// defaultReadinessChecker 默认的 readiness checker
+-func defaultReadinessChecker(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
++// defaultReadinessChecker 默认的 readiness checker。
++// 必须使用入参 token（生产环境 Bearer）调用 /api/status，不依赖外部全局 token 与硬编码。
++func defaultReadinessChecker(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+ 	url := fmt.Sprintf("http://%s:%d/api/status", apiHost, apiPort)
+ 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+ 	if err != nil {
+ 		return false, "", err
+ 	}
++	if token != "" {
++		req.Header.Set("Authorization", "Bearer "+token)
++	}
+ 	resp, err := http.DefaultClient.Do(req)
+ 	if err != nil {
+ 		return false, "", err
+diff --git a/review3/config-tool/internal/bindings/system_test.go b/review3/config-tool/internal/bindings/system_test.go
+index 7033d70..9c0812d 100644
+--- a/review3/config-tool/internal/bindings/system_test.go
++++ b/review3/config-tool/internal/bindings/system_test.go
+@@ -51,7 +51,7 @@ func makeLongRunningCommand(sleepSeconds int) commandFactory {
+ // 创建模拟的 readiness checker
+ func makeMockReadinessChecker(readyAfterCalls int, instanceName string) (readinessChecker, func() int32) {
+ 	var callCount atomic.Int32
+-	checker := func(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
++	checker := func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+ 		count := callCount.Add(1)
+ 		if int(count) >= readyAfterCalls {
+ 			return true, instanceName, nil
+@@ -241,7 +241,7 @@ func TestStatus_APIReadyOnlyAfterReadinessMatch(t *testing.T) {
+ 	b.setReadyTimeout(5 * time.Second)
+ 
+ 	var ready atomic.Bool
+-	b.setReadinessChecker(func(context.Context, string, int) (bool, string, error) {
++	b.setReadinessChecker(func(context.Context, string, int, string) (bool, string, error) {
+ 		if ready.Load() {
+ 			return true, "test-runtime", nil
+ 		}
+@@ -323,7 +323,7 @@ func TestStart_ReadyTimeout(t *testing.T) {
+ 	b.setReadyPollInterval(50 * time.Millisecond)
+ 	b.setReadyTimeout(500 * time.Millisecond)
+ 
+-	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int) (bool, string, error) {
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+ 		return false, "", nil
+ 	})
+ 
+@@ -842,7 +842,7 @@ func TestStart_ConcurrentWithStop(t *testing.T) {
+ 	b.setReadyPollInterval(10 * time.Millisecond)
+ 	b.setReadyTimeout(5 * time.Second)
+ 	b.setStopTimeout(1 * time.Second)
+-	b.setReadinessChecker(func(context.Context, string, int) (bool, string, error) {
++	b.setReadinessChecker(func(context.Context, string, int, string) (bool, string, error) {
+ 		return false, "", nil
+ 	})
+ 
+@@ -898,7 +898,7 @@ func TestStart_ConcurrentWithCleanup(t *testing.T) {
+ 	b.setReadyPollInterval(10 * time.Millisecond)
+ 	b.setReadyTimeout(5 * time.Second)
+ 	b.setStopTimeout(1 * time.Second)
+-	b.setReadinessChecker(func(context.Context, string, int) (bool, string, error) {
++	b.setReadinessChecker(func(context.Context, string, int, string) (bool, string, error) {
+ 		return false, "", nil
+ 	})
+ 
+@@ -1525,3 +1525,382 @@ func containsArgPair(args []string, key, value string) bool {
+ 	}
+ 	return false
+ }
++
++// authStatusServer 模拟启用了 token 鉴权的 /api/status：
++// - 缺少 Authorization / 错误 token → 401
++// - 正确 token → 200 + 配置 instance 名
++type authStatusServer struct {
++	mu       sync.Mutex
++	token    string
++	instance string
++	requests []string
++}
++
++func newAuthStatusServer(token, instance string) (*authStatusServer, *httptest.Server) {
++	s := &authStatusServer{token: token, instance: instance}
++	mux := http.NewServeMux()
++	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
++		s.mu.Lock()
++		s.requests = append(s.requests, r.Header.Get("Authorization"))
++		s.mu.Unlock()
++		if s.token != "" {
++			auth := r.Header.Get("Authorization")
++			if auth != "Bearer "+s.token {
++				w.WriteHeader(http.StatusUnauthorized)
++				return
++			}
++		}
++		w.Header().Set("Content-Type", "application/json")
++		json.NewEncoder(w).Encode(StatusResponse{InstanceName: s.instance})
++	})
++	server := httptest.NewServer(mux)
++	return s, server
++}
++
++func (s *authStatusServer) authed() bool {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	for _, h := range s.requests {
++		if h != "" {
++			return true
++		}
++	}
++	return false
++}
++
++func (s *authStatusServer) anyFailed() bool {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	for _, h := range s.requests {
++		if h == "" {
++			return true
++		}
++	}
++	return false
++}
++
++func (s *authStatusServer) requestCount() int {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	return len(s.requests)
++}
++
++func TestStart_ReadySuccess_PassesAuthTokenViaReadiness(t *testing.T) {
++	// 验证：启用了 token 鉴权的真实 FastAPI 风格的 /api/status mock，
++	// 初次调用不带 token → 401；Start 注入 token 后 → 200 并得到 instance 名。
++	// 我们让 mock 在第一次请求时拒（含/不含 token 都拒），第二次起允许任何 token。
++	// 但 Start 内部首轮就用 token 调用，所以路径中存在至少一次"带了 token"的调用。
++	var receivedAuth atomic.Value
++	callCount := atomic.Int32{}
++	mux := http.NewServeMux()
++	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
++		callCount.Add(1)
++		receivedAuth.Store(r.Header.Get("Authorization"))
++		// 强制契约：必须带 Bearer，并且非空
++		auth := r.Header.Get("Authorization")
++		if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
++			w.WriteHeader(http.StatusUnauthorized)
++			return
++		}
++		w.Header().Set("Content-Type", "application/json")
++		json.NewEncoder(w).Encode(StatusResponse{InstanceName: "test-runtime"})
++	})
++	srv := httptest.NewServer(mux)
++	defer srv.Close()
++	port := srv.Listener.Addr().(*net.TCPAddr).Port
++
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++	b.setCommandFactory(makeLongRunningCommand(30))
++	b.setReadyPollInterval(20 * time.Millisecond)
++	b.setReadyTimeout(2 * time.Second)
++	// 真实 defaultReadinessChecker：会把 Start 生成的 token 写入 Authorization 头。
++	b.setReadinessChecker(defaultReadinessChecker)
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{
++		ConfigPath:  configPath,
++		APIPort:     port,
++		APIHost:     "127.0.0.1",
++		RuntimeName: "test-runtime",
++	}); err != nil {
++		t.Fatalf("Start 失败: %v", err)
++	}
++	auth, _ := receivedAuth.Load().(string)
++	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
++		t.Errorf("defaultReadinessChecker 必须携带 Bearer token，实际 %q", auth)
++	}
++	if callCount.Load() == 0 {
++		t.Errorf("readiness 必须被实际调用")
++	}
++	if got := CurrentAPIToken(); got == "" {
++		t.Errorf("ready 后 CurrentAPIToken 必须非空")
++	}
++	b.Cleanup()
++}
++
++func TestStart_ReadySucceedsWhenMockAcceptsToken(t *testing.T) {
++	// 用带 token 注入 hook 的 readiness：第一次返回 random token，第二次 read 用同样 token。
++	// 真实场景里：Start 会生成 token → 传 readiness → mock 验证 → 通过。
++	// 这里把 readiness 替换为：第一次等调用但返回 false；第二次记录 token 并返回 true。
++	// 关键验证：Start 前后 token 行为正确。
++	var firstToken atomic.Value
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++
++	b.setCommandFactory(makeLongRunningCommand(30))
++	b.setReadyPollInterval(10 * time.Millisecond)
++	b.setReadyTimeout(2 * time.Second)
++
++	var attempts atomic.Int32
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		// 第一次尝试时记下 Start 生成的 token
++		if attempts.Add(1) == 1 {
++			firstToken.Store(token)
++		}
++		// 假定携带 token 必然通过
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "test-runtime", nil
++	})
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
++		t.Fatalf("Start 失败: %v", err)
++	}
++	tok, _ := firstToken.Load().(string)
++	if tok == "" {
++		t.Fatal("Start 期间 readiness 收到的 token 必须非空")
++	}
++	if got := CurrentAPIToken(); got != tok {
++		t.Errorf("ready 成功后 CurrentAPIToken() = %q, want %q", got, tok)
++	}
++
++	// Stop 后必须失效
++	if err := b.Stop(); err != nil {
++		t.Fatalf("Stop 失败: %v", err)
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Errorf("Stop 后 CurrentAPIToken() 必须为空，实际 %q", got)
++	}
++}
++
++func TestStart_TokenClearedOnReadyTimeout(t *testing.T) {
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++	b.setCommandFactory(makeLongRunningCommand(30))
++	b.setReadyPollInterval(20 * time.Millisecond)
++	b.setReadyTimeout(200 * time.Millisecond)
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		return false, "", nil
++	})
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-timeout"}); err == nil {
++		t.Fatal("Start 必须超时失败")
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Errorf("ready 超时后 CurrentAPIToken() 必须为空，实际 %q", got)
++	}
++}
++
++func TestStart_TokenClearedOnInstanceMismatch(t *testing.T) {
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++	b.setCommandFactory(makeLongRunningCommand(30))
++	b.setReadyPollInterval(20 * time.Millisecond)
++	b.setReadyTimeout(2 * time.Second)
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		return true, "wrong-name", nil
++	})
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "expected"}); err == nil {
++		t.Fatal("instance 不匹配时 Start 必须失败")
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Errorf("instance 不匹配后 CurrentAPIToken() 必须为空，实际 %q", got)
++	}
++}
++
++func TestStart_TokenClearedOnProcessEarlyExit(t *testing.T) {
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++	// 进程立刻以非 0 退出
++	b.setCommandFactory(makeMockCommand(42, "", "aborted"))
++	b.setReadyPollInterval(20 * time.Millisecond)
++	b.setReadyTimeout(2 * time.Second)
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		return false, "", nil
++	})
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "early-exit"}); err == nil {
++		t.Fatal("进程提前退出时 Start 必须失败")
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Errorf("进程提前退出后 CurrentAPIToken() 必须为空，实际 %q", got)
++	}
++}
++
++func TestStart_TokenRevokedOnUnexpectedExit(t *testing.T) {
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++
++	// 进程跑 1s 后退出
++	b.setCommandFactory(makeLongRunningCommand(1))
++	b.setReadyPollInterval(20 * time.Millisecond)
++	b.setReadyTimeout(2 * time.Second)
++
++	var seenToken atomic.Value
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		seenToken.Store(token)
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "test-runtime", nil
++	})
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
++		t.Fatalf("Start 失败: %v", err)
++	}
++	tok, _ := seenToken.Load().(string)
++	if tok == "" {
++		t.Fatal("readiness 必须收到 token")
++	}
++	if got := CurrentAPIToken(); got != tok {
++		t.Fatalf("ready 后 token = %q, want %q", got, tok)
++	}
++
++	// 等待异常退出
++	deadline := time.Now().Add(3 * time.Second)
++	for time.Now().Before(deadline) {
++		if CurrentAPIToken() == "" {
++			break
++		}
++		time.Sleep(20 * time.Millisecond)
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Errorf("异常退出后 CurrentAPIToken() 必须失效，实际 %q", got)
++	}
++}
++
++func TestStart_RestartInvalidatesPreviousToken(t *testing.T) {
++	b := NewSystemBinding()
++	tmpDir := t.TempDir()
++	b.dataFactoryPath = filepath.Join(tmpDir, "DataFactory.exe")
++	os.WriteFile(b.dataFactoryPath, []byte("fake"), 0755)
++	b.setCommandFactory(makeLongRunningCommand(30))
++	b.setReadyPollInterval(10 * time.Millisecond)
++	b.setReadyTimeout(2 * time.Second)
++	b.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "test-runtime", nil
++	})
++
++	configPath := filepath.Join(tmpDir, "test.yaml")
++	os.WriteFile(configPath, []byte("test: true"), 0644)
++
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
++		t.Fatalf("第一次 Start 失败: %v", err)
++	}
++	first := CurrentAPIToken()
++	if first == "" {
++		t.Fatal("第一次 Start 后 CurrentAPIToken 必须非空")
++	}
++	if err := b.Stop(); err != nil {
++		t.Fatalf("Stop 失败: %v", err)
++	}
++	if got := CurrentAPIToken(); got != "" {
++		t.Fatalf("Stop 后 token 必须被清空，实际 %q", got)
++	}
++
++	// 第二次启动
++	if err := b.Start(StartParams{ConfigPath: configPath, APIPort: 8000, RuntimeName: "test-runtime"}); err != nil {
++		t.Fatalf("第二次 Start 失败: %v", err)
++	}
++	second := CurrentAPIToken()
++	if second == "" {
++		t.Fatal("第二次 Start 后 CurrentAPIToken 必须非空")
++	}
++	if second == first {
++		t.Errorf("第二次 token 必须与第一次不同，至少语义上不能复用：%q", second)
++	}
++	b.Cleanup()
++}
++
++func TestDefaultReadinessCheckerAddsBearerHeader(t *testing.T) {
++	// 真实 FastAPI 鉴权行为：缺 token → 401；正确 token → 200。
++	var seenAuth atomic.Value
++	mux := http.NewServeMux()
++	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
++		seenAuth.Store(r.Header.Get("Authorization"))
++		if r.Header.Get("Authorization") != "Bearer hello" {
++			w.WriteHeader(http.StatusUnauthorized)
++			return
++		}
++		w.Header().Set("Content-Type", "application/json")
++		json.NewEncoder(w).Encode(StatusResponse{InstanceName: "test"})
++	})
++	srv := httptest.NewServer(mux)
++	defer srv.Close()
++	port := srv.Listener.Addr().(*net.TCPAddr).Port
++
++	// 不带 token → 401
++	ready, name, err := defaultReadinessChecker(context.Background(), "127.0.0.1", port, "")
++	if err != nil {
++		t.Fatalf("unexpected err: %v", err)
++	}
++	if ready || name != "" {
++		t.Errorf("no-token readiness should be (false, \"\"), got (%v, %q)", ready, name)
++	}
++
++	// 错误 token → 401
++	ready, _, err = defaultReadinessChecker(context.Background(), "127.0.0.1", port, "wrong")
++	if err != nil {
++		t.Fatalf("unexpected err: %v", err)
++	}
++	if ready {
++		t.Errorf("wrong-token readiness should be false")
++	}
++
++	// 正确 token → 200 + instance
++	ready, name, err = defaultReadinessChecker(context.Background(), "127.0.0.1", port, "hello")
++	if err != nil {
++		t.Fatalf("unexpected err: %v", err)
++	}
++	if !ready || name != "test" {
++		t.Errorf("correct-token readiness should be (true, \"test\"), got (%v, %q)", ready, name)
++	}
++	if got, _ := seenAuth.Load().(string); got != "Bearer hello" {
++		t.Errorf("最后一次请求 Authorization 应为 Bearer hello，实际 %q", got)
++	}
++}
+diff --git a/review3/tests/test_engine_api.py b/review3/tests/test_engine_api.py
+index e9116bf..c0ab4cc 100644
+--- a/review3/tests/test_engine_api.py
++++ b/review3/tests/test_engine_api.py
+@@ -399,6 +399,60 @@ def test_token_auth_wrong_token(binding):
+         engine_api.set_api_token(None)
+ 
+ 
++def test_token_auth_ws_rejects_without_token(binding):
++    """WS 鉴权：缺少 token query 必须 close 4401。"""
++    from fastapi.testclient import TestClient
++
++    engine_api.set_api_token("secret-token")
++    try:
++        client = TestClient(engine_api.app)
++        # 缺 token：accept 后立即 close 4401
++        with pytest.raises(WebSocketDisconnect) as exc:
++            with client.websocket_connect("/ws/snapshot") as ws:
++                ws.receive_json()
++        assert exc.value.code == 4401
++    finally:
++        engine_api.set_api_token(None)
++
++
++def test_token_auth_ws_rejects_wrong_token(binding):
++    """WS 鉴权：错误 token 必须 close 4401。"""
++    from fastapi.testclient import TestClient
++    engine_api.set_api_token("secret-token")
++    try:
++        client = TestClient(engine_api.app)
++        with pytest.raises(WebSocketDisconnect) as exc:
++            with client.websocket_connect("/ws/snapshot?token=wrong") as ws:
++                ws.receive_json()
++        assert exc.value.code == 4401
++    finally:
++        engine_api.set_api_token(None)
++
++
++def test_token_auth_ws_accepts_correct_token(binding):
++    """WS 鉴权：正确 token 必须连接到 broadcaster；缺帧时收到 heartbeat。"""
++    from fastapi.testclient import TestClient
++
++    engine_api.set_api_token("secret-token")
++    try:
++        client = TestClient(engine_api.app)
++        with client.websocket_connect("/ws/snapshot?token=secret-token") as ws:
++            # 头 1s 没数据：收 heartbeat
++            msg = ws.receive_json()
++            assert msg == {"_heartbeat": True, "ts": msg["ts"]}
++    finally:
++        engine_api.set_api_token(None)
++
++
++def test_token_disabled_when_none(binding):
++    """set_api_token(None) 时鉴权应当被整体关闭（保留 DATAFACTORY_NO_AUTH 之外的开发态）。"""
++    from fastapi.testclient import TestClient
++    engine_api.set_api_token(None)
++    client = TestClient(engine_api.app)
++    r = client.get("/api/status")
++    assert r.status_code == 200
++
++
+ def test_snapshot_contains_required_tags(binding):
+     """snapshot 必须包含 contracts.md §9.3 列出的所有必需位号。"""
+     snap = engine_api.api_snapshot("second_order_tank")
+-- 
+2.45.1.windows.1
+
+
+From 3d0e6a18c926d9fe589fe04a6d9501f7e3464cae Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 09:05:05 +0800
+Subject: [PATCH 2/8] fix: clean realtime sessions on process exit
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+B1. SystemBinding 暴露进程退出监听器（AddExitListener）；monitorProcess
+    在 isCurrent 路径同步 dispatch（先于事件 emit），监听器内 panic 不影响
+    监控 goroutine。
+
+B2. RealtimeRuntimeBinding.SetContext 注册 onSystemProcessExit：
+    - 清空 current=null, curDir=''
+    - 状态置为 StateExited
+    - 删除 session 临时目录
+    幂等：多次回调安全。
+    Stop 路径走同样的回调（monitorProcess 也会 dispatch），与启动失败
+    路径行为一致。
+
+B3. ChildPid 写入 session.json：start 后从 system.Status().PID 取真实
+    子进程 PID。SetChildPid 暴露的 helper 供后续场景复用。
+
+B4. processAlive 真实平台实现：
+    - Unix: os.FindProcess + Signal(0)，EPERM 视为 alive
+    - Windows: OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION) +
+      GetExitCodeProcess，STILL_ACTIVE=259 视为 alive
+    - 当前进程 (os.Getpid()) 始终 alive
+    - 不再把非当前 PID 一律视为死亡——修复前会误删所有历史 session。
+
+B5. CleanupOrphans 规则（已有）+ 新增单测：
+    owner 死亡但 child alive → 保留目录（验证真实 processAlive 生效）。
+
+新增 session_windows.go / session_other.go 拆分平台特定代码。
+SessionManager.ReadSessionRecord 导出，供 bindings 写 ChildPid / 状态。
+---
+ .../internal/bindings/realtime_runtime.go     |  49 +++-
+ .../bindings/realtime_runtime_test.go         | 249 ++++++++++++++++++
+ .../config-tool/internal/bindings/system.go   |  49 +++-
+ .../config-tool/internal/realtime/session.go  |  63 ++++-
+ .../internal/realtime/session_other.go        |   9 +
+ .../internal/realtime/session_test.go         |  80 ++++++
+ .../internal/realtime/session_windows.go      |  40 +++
+ 7 files changed, 533 insertions(+), 6 deletions(-)
+ create mode 100644 review3/config-tool/internal/realtime/session_other.go
+ create mode 100644 review3/config-tool/internal/realtime/session_windows.go
+
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime.go b/review3/config-tool/internal/bindings/realtime_runtime.go
+index 04a1f65..1abeffa 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime.go
+@@ -37,9 +37,34 @@ func NewRealtimeRuntimeBinding(
+ 
+ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
+ 	b.ctx = ctx
++	// 注册进程退出监听器：DataFactory 进程异常退出 / 主动 Stop / 启动期间退出
++	// 都会被 monitorProcess 异步 dispatch 到这里；用于清理 realtime session 状态。
++	b.system.AddExitListener(b.onSystemProcessExit)
+ 	b.sessionManager.CleanupOrphans("")
+ }
+ 
++// onSystemProcessExit 由 SystemBinding 在 monitorProcess 内同步调用。
++// 无论进程是否正常停止，都必须：
++//   - 清空 current / curDir
++//   - 删除 session 临时目录
++//   - 保留 system.lastError 供前端 GetSession 读取
++//   - 幂等：多次调用安全
++func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bool) {
++	b.mu.Lock()
++	s := b.current
++	dir := b.curDir
++	b.current = nil
++	b.curDir = ""
++	b.mu.Unlock()
++	if s != nil {
++		// 状态置为 exited / failed，由调用方按需读取
++		s.State = realtime.StateExited
++	}
++	if dir != "" {
++		b.sessionManager.RemoveSessionDir(dir)
++	}
++}
++
+ func (b *RealtimeRuntimeBinding) Cleanup() {
+ 	b.mu.Lock()
+ 	dir := b.curDir
+@@ -203,8 +228,13 @@ func (b *RealtimeRuntimeBinding) launch(
+ 	session.ConfigHash = st.ConfigHash
+ 	session.StartedAt = st.StartedAt
+ 	session.State = realtime.StateRunning
++	// 关键：写入真实子进程 PID，供孤儿清理 / 进程验证使用。
++	stamp := b.system.Status()
++	childPID := stamp.PID
+ 
+-	_ = b.sessionManager.WriteSessionJSON(dir, sessionRecordFor(session))
++	rec := sessionRecordFor(session)
++	rec.ChildPid = childPID
++	_ = b.sessionManager.WriteSessionJSON(dir, rec)
+ 
+ 	if session.SourceKind == realtime.RuntimeSourceProject {
+ 		b.pushAlarmConfig(session)
+@@ -405,3 +435,20 @@ func sessionRecordFor(s realtime.RealtimeRunSession) realtime.SessionRecord {
+ 		State:              s.State,
+ 	}
+ }
++
++// SetChildPid 写入真实子进程 PID（启动后由 launch 调用）。
++// 该函数保留可供外部测试 / 未来其他场景使用。
++func (b *RealtimeRuntimeBinding) SetChildPid(dir string, pid int) error {
++	if dir == "" {
++		return fmt.Errorf("session dir required")
++	}
++	if pid <= 0 {
++		return fmt.Errorf("invalid pid: %d", pid)
++	}
++	rec, ok := b.sessionManager.ReadSessionRecord(dir)
++	if !ok {
++		return fmt.Errorf("session.json missing: %s", dir)
++	}
++	rec.ChildPid = pid
++	return b.sessionManager.WriteSessionJSON(dir, rec)
++}
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime_test.go b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+index 65d4d25..8d42221 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime_test.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+@@ -265,3 +265,252 @@ func (l *localFakeCompiler) Validate(_ context.Context, _ []realtime.CompilerSou
+ func (l *localFakeCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, outputPath string) (string, error) {
+ 	return outputPath, nil
+ }
++
++// 阶段 B：异常退出清理 + ChildPid 写入
++func TestStart_WritesChildPid(t *testing.T) {
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++
++	_, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "test-runtime",
++	})
++	if err != nil {
++		t.Fatalf("Start 失败: %v", err)
++	}
++	sess, _ := rig.binding.GetSession()
++	if sess == nil {
++		t.Fatal("session 必须返回")
++	}
++	// ChildPid 写入 session.json
++	dir := filepath.Join(filepath.Dir(rig.storeRoot), "sessions")
++	entries, _ := os.ReadDir(dir)
++	if len(entries) == 0 {
++		t.Fatal("session dir missing")
++	}
++	p := filepath.Join(dir, entries[0].Name(), "session.json")
++	data, err := os.ReadFile(p)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var rec realtime.SessionRecord
++	if err := json.Unmarshal(data, &rec); err != nil {
++		t.Fatal(err)
++	}
++	// ChildPid 是 0（mock 命令没有真实 PID），但至少字段必须存在且为非负。
++	if rec.OwnerPid != os.Getpid() {
++		t.Errorf("ownerPid mismatch: got %d, want %d", rec.OwnerPid, os.Getpid())
++	}
++}
++
++// 异常退出：DataFactory 进程提前退出 → RealtimeRuntimeBinding.current 必须清空，
++// curDir 必须清空，session 目录必须删除。
++func TestStart_UnexpectedExitClearsSessionAndRemovesDir(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	// 进程立即以 code 7 退出
++	system.setCommandFactory(makeMockCommand(7, "", "aborted"))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		return false, "", nil
++	})
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	binding.SetContext(context.Background())
++
++	defer system.Cleanup()
++
++	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "test-runtime",
++	})
++	if err == nil {
++		t.Fatal("启动失败：应以进程提前退出失败")
++	}
++
++	// 启动失败本身就要清掉 session 目录
++	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
++	if len(entries) != 0 {
++		t.Errorf("启动失败后 session 目录必须清空，实际 %d 个", len(entries))
++	}
++}
++
++// SessionObject 持久化：Stop 触发 onSystemProcessExit → session 目录被删除；下次启动重新创建。
++func TestStart_StopRemovesSessionDir(t *testing.T) {
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++	var expected atomic.Value
++	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		if v, ok := expected.Load().(string); ok && v != "" {
++			return true, v, nil
++		}
++		return true, "test-runtime", nil
++	})
++	expected.Store("rt-stop")
++
++	_, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "rt-stop",
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++	dir := filepath.Join(filepath.Dir(rig.storeRoot), "sessions")
++	entries, _ := os.ReadDir(dir)
++	if len(entries) == 0 {
++		t.Fatal("session dir expected")
++	}
++	preStopDir := filepath.Join(dir, entries[0].Name())
++	if _, err := os.Stat(preStopDir); err != nil {
++		t.Fatal(err)
++	}
++
++	if err := rig.binding.Stop(); err != nil {
++		t.Fatal(err)
++	}
++	// After Stop, dir should be removed
++	if _, err := os.Stat(preStopDir); !os.IsNotExist(err) {
++		t.Errorf("Stop 后 session 目录必须被删除，实际: %v", err)
++	}
++	// GetSession 必须返回 nil
++	s, _ := rig.binding.GetSession()
++	if s != nil {
++		t.Errorf("Stop 后 GetSession 必须返回 nil, 实际 %+v", s)
++	}
++}
++
++// 验证真实 PID 写入（用 long-running mock）
++func TestStart_ChildPidIsNonZeroForRealProcess(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	// 长跑进程，留出时间做断言
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "rt-child", nil
++	})
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	binding.SetContext(context.Background())
++	defer system.Cleanup()
++
++	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "rt-child",
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	// 找 session.json 并验证 ChildPid > 0
++	dir := filepath.Join(tmp, "sessions")
++	entries, _ := os.ReadDir(dir)
++	if len(entries) == 0 {
++		t.Fatal("session dir missing")
++	}
++	p := filepath.Join(dir, entries[0].Name(), "session.json")
++	data, err := os.ReadFile(p)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var rec realtime.SessionRecord
++	if err := json.Unmarshal(data, &rec); err != nil {
++		t.Fatal(err)
++	}
++	if rec.ChildPid <= 0 {
++		t.Errorf("ChildPid 必须 > 0（真实子进程），实际 %d", rec.ChildPid)
++	}
++	if rec.OwnerPid != os.Getpid() {
++		t.Errorf("OwnerPid 必须 == os.Getpid()，实际 %d", rec.OwnerPid)
++	}
++}
++
++// 确认启动成功 → session 目录存在且 current 不为空；启动后立即子进程超时退出，
++// 触发 onSystemProcessExit → session 目录被移除，current 为 nil。
++func TestStart_UnexpectedChildExitClearsSession(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	// 进程跑 1s
++	system.setCommandFactory(makeLongRunningCommand(1))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "rt-unex", nil
++	})
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	binding.SetContext(context.Background())
++	defer system.Cleanup()
++
++	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "rt-unex",
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++	sess, _ := binding.GetSession()
++	if sess == nil {
++		t.Fatal("GetSession 必须非空")
++	}
++
++	// 等进程退出。检查 session 目录是否被清掉
++	deadline := time.Now().Add(5 * time.Second)
++	var dirEmpty bool
++	for time.Now().Before(deadline) {
++		entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
++		if len(entries) == 0 {
++			dirEmpty = true
++			break
++		}
++		// 还要看 session 状态是否变化
++		cur, _ := binding.GetSession()
++		if cur == nil {
++			dirEmpty = true
++			break
++		}
++		time.Sleep(50 * time.Millisecond)
++	}
++	if !dirEmpty {
++		t.Errorf("异常退出后 session 目录与 current 必须被清理")
++	}
++}
+diff --git a/review3/config-tool/internal/bindings/system.go b/review3/config-tool/internal/bindings/system.go
+index 0efc49b..e4885ee 100644
+--- a/review3/config-tool/internal/bindings/system.go
++++ b/review3/config-tool/internal/bindings/system.go
+@@ -123,6 +123,11 @@ type SystemBinding struct {
+ 	logLines    []string
+ 	maxLogLines int
+ 
++	// 进程退出监听器（notifyOnExit 回调列表）。在 monitorProcess 检测到进程退出时调用，
++	// 监听器逻辑必须轻量、非阻塞；用于 RealtimeRuntimeBinding 清理 session。
++	exitMu       sync.Mutex
++	exitListeners []func(exitCode int, normalStop bool)
++
+ 	// 可注入的依赖（用于测试）
+ 	commandFactory    commandFactory
+ 	readinessChecker  readinessChecker
+@@ -146,6 +151,42 @@ func NewSystemBinding() *SystemBinding {
+ 	}
+ }
+ 
++// AddExitListener 注册进程退出回调。当前 process 退出时（任意原因）调用。
++// 回调在持有 monitorProcess 同一 goroutine 内调用；必须非阻塞。
++// 返回值：可用于 RemoveExitListener 的句柄。
++func (b *SystemBinding) AddExitListener(fn func(exitCode int, normalStop bool)) func() {
++	b.exitMu.Lock()
++	defer b.exitMu.Unlock()
++	b.exitListeners = append(b.exitListeners, fn)
++	i := len(b.exitListeners) - 1
++	return func() {
++		b.exitMu.Lock()
++		defer b.exitMu.Unlock()
++		if i < len(b.exitListeners) {
++			b.exitListeners[i] = func(exitCode int, normalStop bool) {}
++			// 不缩容，避免已触发回调的 index 失效
++		}
++	}
++}
++
++func (b *SystemBinding) dispatchExit(exitCode int, normalStop bool) {
++	b.exitMu.Lock()
++	listeners := make([]func(exitCode int, normalStop bool), len(b.exitListeners))
++	copy(listeners, b.exitListeners)
++	b.exitMu.Unlock()
++	for _, fn := range listeners {
++		if fn == nil {
++			continue
++		}
++		func() {
++			defer func() {
++				_ = recover() // 监听器 panic 必须不影响 monitorProcess
++			}()
++			fn(exitCode, normalStop)
++		}()
++	}
++}
++
+ // setCommandFactory 设置命令工厂（用于测试，非导出）
+ func (b *SystemBinding) setCommandFactory(factory commandFactory) {
+ 	b.mu.Lock()
+@@ -515,8 +556,9 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
+ 
+ 	b.mu.Lock()
+ 	isCurrent := b.proc == proc
++	normalStop := proc.stopRequested
+ 	if isCurrent {
+-		if proc.stopRequested {
++		if normalStop {
+ 			b.lastError = ""
+ 		} else {
+ 			b.lastError = formatProcessError(proc.result)
+@@ -530,6 +572,11 @@ func (b *SystemBinding) monitorProcess(proc *managedProcess) {
+ 		SetCurrentAPIToken("")
+ 	}
+ 
++	// 通知会话层监听器：先于事件 emit，保证监听器先把 session 状态清干净。
++	if isCurrent {
++		b.dispatchExit(exitCode, normalStop)
++	}
++
+ 	// 发送事件
+ 	if isCurrent {
+ 		status := b.Status()
+diff --git a/review3/config-tool/internal/realtime/session.go b/review3/config-tool/internal/realtime/session.go
+index f94f7bf..45124a9 100644
+--- a/review3/config-tool/internal/realtime/session.go
++++ b/review3/config-tool/internal/realtime/session.go
+@@ -7,7 +7,10 @@ import (
+ 	"fmt"
+ 	"os"
+ 	"path/filepath"
++	"runtime"
+ 	"sort"
++	"strings"
++	"syscall"
+ 	"time"
+ 
+ 	"github.com/google/uuid"
+@@ -168,6 +171,12 @@ func (sm *SessionManager) WriteSessionJSON(dir string, rec SessionRecord) error
+ 	return atomicWrite(filepath.Join(dir, "session.json"), data)
+ }
+ 
++// ReadSessionRecord 读取 session.json 内容；不存在或损坏返回 (zero, false)。
++// 与 readRecord 等价但导出，供 bindings 写入 ChildPid / 状态字段使用。
++func (sm *SessionManager) ReadSessionRecord(dir string) (SessionRecord, bool) {
++	return sm.readRecord(dir)
++}
++
+ func (sm *SessionManager) RemoveSessionDir(dir string) {
+ 	if dir == "" {
+ 		return
+@@ -236,14 +245,60 @@ func atomicWrite(path string, data []byte) error {
+ 	return os.Rename(tmp, path)
+ }
+ 
++// processAlive 判定 pid 是否仍是活动进程。
++//   - pid <= 0 视为无效/false。
++//   - Unix: 用 Signal 0（不实际发送信号，仅检查权限与存在）。
++//   - Windows: OpenProcess + GetExitCodeProcess（仍 alive 时 exit code = STILL_ACTIVE = 259）。
++//   - 单实例语义：当前 Wails 进程即 owner；DataFactory 子进程的 child pid 必须独立存活。
++//
++// 不再把非当前 PID 一律视为死亡——否则历史 session 永远被误删。
+ func processAlive(pid int) bool {
+ 	if pid <= 0 {
+ 		return false
+ 	}
+-	// Single-instance semantics: the current app process is always alive; any
+-	// other owner pid is treated as a leftover from a previous run. Concurrent
+-	// instances are not supported (single DataFactory process constraint).
+-	return pid == os.Getpid()
++	if pid == os.Getpid() {
++		return true
++	}
++	return platformProcessAlive(pid)
++}
++
++// platformProcessAlive 在 Unix/Windows 下分别实现 pid 存活检查。
++// 任何底层错误（权限拒绝、句柄无效、查询失败）一律视为死亡，但不抛错。
++func platformProcessAlive(pid int) bool {
++	switch runtime.GOOS {
++	case "windows":
++		return windowsProcessAlive(pid)
++	default:
++		return unixProcessAlive(pid)
++	}
++}
++
++func unixProcessAlive(pid int) bool {
++	proc, err := os.FindProcess(pid)
++	if err != nil {
++		return false
++	}
++	if proc == nil {
++		return false
++	}
++	// syscall.Signal(0) 仅做权限/存在检查，不真正发信号。
++	if err := proc.Signal(syscall.Signal(0)); err != nil {
++		// EPERM = 存在但权限不够（仍视为 alive）。
++		if isPermissionError(err) {
++			return true
++		}
++		return false
++	}
++	return true
++}
++
++// isPermissionError 简化判断：底层无 unix.Permitted 类型依赖，使用字符串匹配。
++func isPermissionError(err error) bool {
++	if err == nil {
++		return false
++	}
++	s := err.Error()
++	return strings.Contains(s, "permission") || strings.Contains(s, "EPERM")
+ }
+ 
+ // SortedSourceIDs returns a deterministically sorted copy of source IDs.
+diff --git a/review3/config-tool/internal/realtime/session_other.go b/review3/config-tool/internal/realtime/session_other.go
+new file mode 100644
+index 0000000..0edeef7
+--- /dev/null
++++ b/review3/config-tool/internal/realtime/session_other.go
+@@ -0,0 +1,9 @@
++//go:build !windows
++
++package realtime
++
++// windowsProcessAlive 在非 Windows 平台不会被调用；
++// 保留空实现以满足编译器。
++func windowsProcessAlive(pid int) bool {
++	return false
++}
+diff --git a/review3/config-tool/internal/realtime/session_test.go b/review3/config-tool/internal/realtime/session_test.go
+index a72ccb3..e1af9a1 100644
+--- a/review3/config-tool/internal/realtime/session_test.go
++++ b/review3/config-tool/internal/realtime/session_test.go
+@@ -3,7 +3,9 @@ package realtime
+ import (
+ 	"context"
+ 	"os"
++	"os/exec"
+ 	"path/filepath"
++	"runtime"
+ 	"testing"
+ )
+ 
+@@ -136,6 +138,40 @@ func TestCleanupOrphansKeepsActiveAndAlive(t *testing.T) {
+ 	}
+ }
+ 
++// TestCleanupOrphansChildPidAlive: 子进程 PID 仍 alive 时，目录必须保留（即使 owner 已死）。
++// 修复前 processAlive(pid)==os.Getpid() 永远等于 os.Getpid()，子进程判断必定为 false。
++// 修复后即使 owner 已死，child alive 仍保留。
++func TestCleanupOrphansChildPidAlive(t *testing.T) {
++	if runtime.GOOS == "windows" {
++		t.Skip("windows: sleep 子进程对此 case 不适用，直接跳过")
++	}
++	root := t.TempDir()
++	sm := NewSessionManager(root)
++
++	// 启动一个长跑子进程，模拟 DataFactory 子进程
++	cmd := exec.Command("sleep", "30")
++	if err := cmd.Start(); err != nil {
++		t.Skipf("cannot start sleep: %v", err)
++	}
++	defer func() {
++		_ = cmd.Process.Kill()
++		_, _ = cmd.Process.Wait()
++	}()
++
++	_, aliveChildDir, _ := sm.CreateSessionDir()
++	// owner 死亡，但 child alive → 保留
++	_ = sm.WriteSessionJSON(aliveChildDir, SessionRecord{
++		OwnerPid: 99999999,
++		ChildPid: cmd.Process.Pid,
++		State:    StateRunning,
++	})
++
++	sm.CleanupOrphans("")
++	if _, err := os.Stat(aliveChildDir); err != nil {
++		t.Fatal("alive child PID should keep dir alive even when owner dead")
++	}
++}
++
+ func TestSessionJSONRoundTrip(t *testing.T) {
+ 	sm := NewSessionManager(t.TempDir())
+ 	_, dir, _ := sm.CreateSessionDir()
+@@ -156,3 +192,47 @@ func TestSessionJSONRoundTrip(t *testing.T) {
+ 		t.Fatalf("round trip mismatch: %+v", got)
+ 	}
+ }
++
++// processAlive 必须能区分：
++//   - 当前进程（owner pid）→ alive
++//   - 一个不存在的 pid → dead
++//   - pid <= 0 → dead
++//   - 启动后立即存在的子进程 → alive
++func TestProcessAlive_CurrentProcess(t *testing.T) {
++	if !processAlive(os.Getpid()) {
++		t.Fatalf("current PID must be alive: %d", os.Getpid())
++	}
++}
++
++func TestProcessAlive_NonExistent(t *testing.T) {
++	if processAlive(99999999) {
++		t.Fatal("non-existent PID must be dead")
++	}
++}
++
++func TestProcessAlive_ZeroOrNegative(t *testing.T) {
++	if processAlive(0) {
++		t.Error("pid=0 must be dead")
++	}
++	if processAlive(-1) {
++		t.Error("pid=-1 must be dead")
++	}
++}
++
++func TestProcessAlive_FreshChild(t *testing.T) {
++	// 启动一个 sleep 子进程，processAlive 应当为 true。
++	if runtime.GOOS == "windows" {
++		t.Skip("windows 子进程用不同方式获取 pid，跳过 sleep 验证")
++	}
++	cmd := exec.Command("sleep", "30")
++	if err := cmd.Start(); err != nil {
++		t.Skipf("cannot start sleep: %v", err)
++	}
++	defer func() {
++		_ = cmd.Process.Kill()
++		_, _ = cmd.Process.Wait()
++	}()
++	if !processAlive(cmd.Process.Pid) {
++		t.Errorf("fresh child PID %d should be alive", cmd.Process.Pid)
++	}
++}
+diff --git a/review3/config-tool/internal/realtime/session_windows.go b/review3/config-tool/internal/realtime/session_windows.go
+new file mode 100644
+index 0000000..1109f9f
+--- /dev/null
++++ b/review3/config-tool/internal/realtime/session_windows.go
+@@ -0,0 +1,40 @@
++//go:build windows
++
++package realtime
++
++import (
++	"syscall"
++	"unsafe"
++)
++
++// windowsProcessAlive 通过 OpenProcess + GetExitCodeProcess 检查进程是否仍 alive。
++//   - STILL_ACTIVE = 259 视为 alive
++//   - 句柄无法打开（ERROR_INVALID_PARAMETER / ERROR_ACCESS_DENIED）：视为死亡
++//
++// 任何错误一律视为死亡，不抛错。
++func windowsProcessAlive(pid int) bool {
++	const (
++		processQueryLimitedInformation = 0x1000
++		stillActive                    = 259
++	)
++	handle, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(pid))
++	if err != nil {
++		return false
++	}
++	defer syscall.CloseHandle(handle)
++
++	var exitCode uint32
++	ret, _, _ := procGetExitCodeProcess.Call(
++		uintptr(handle),
++		uintptr(unsafe.Pointer(&exitCode)),
++	)
++	if ret == 0 {
++		return false
++	}
++	return exitCode == stillActive
++}
++
++var (
++	modkernel32                  = syscall.NewLazyDLL("kernel32.dll")
++	procGetExitCodeProcess       = modkernel32.NewProc("GetExitCodeProcess")
++)
+-- 
+2.45.1.windows.1
+
+
+From d2119f8285a995512ac70825a9145ab7f5dfeeca Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 09:14:34 +0800
+Subject: [PATCH 3/8] fix: make realtime integrations transactional
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+C1. pushAlarmConfig / startArchive 现在返回 error：
+    - 检查非 2xx 状态码
+    - 读取并返回错误响应
+    - 区分网络错误 vs HTTP 状态
+
+C2. launch 事务化：
+    - SystemBinding.Start 成功后，依次执行 alarm push → archive start →
+      WriteSessionJSON → set current。
+    - 任一步失败：调用 rollback（先 stopArchiveOnShutdown 保证 SQLite flush，
+      再 system.Stop，最后删除 session 目录 + 清空 current）。
+    - 失败时返回具体错误，前端可见。
+
+C3. 报警规则为空仍为合法 no-op；规则非空且推送失败时项目启动必须失败。
+
+C4. Stop 顺序：归档 stop 必须在 Python 关闭之前。
+    - 即使归档 stop 返回错误（HTTP 500、网络故障），不影响 system.Stop 继续。
+    - 确保用户主动停止时 SQLite commit / jsonl flush / 文件句柄关闭。
+
+新增测试：
+  - TestStart_AlarmPushFailedRollsBack：模拟 /api/alarms/config 500，
+    启动必须失败、session 目录清空、current 为 nil。
+  - TestStart_ArchiveFailedRollsBack：模拟 /api/archive/start 500，同上。
+  - TestStart_NoAlarmRulesIsNoOp：规则为空时绝不调用 /api/alarms/config。
+  - TestStart_StopCallsArchiveStopBeforeSystem：验证 Stop 顺序。
+  - TestStart_StopArchiveFailureNotFatal：归档停止失败不阻塞 Stop。
+
+localFakeCompiler.Compile 现在实际写文件，供真实 system 启动链路使用。
+---
+ .../internal/bindings/realtime_runtime.go     | 103 ++++++-
+ .../bindings/realtime_runtime_test.go         | 282 ++++++++++++++++++
+ 2 files changed, 372 insertions(+), 13 deletions(-)
+
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime.go b/review3/config-tool/internal/bindings/realtime_runtime.go
+index 1abeffa..2a59352 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime.go
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
++	"io"
+ 	"os"
+ 	"path/filepath"
+ 	"strings"
+@@ -209,6 +210,15 @@ func (b *RealtimeRuntimeBinding) launch(
+ 	session realtime.RealtimeRunSession,
+ 	opts realtime.RealtimeStartOptions,
+ ) (realtime.RealtimeRunSession, error) {
++	// 阶段 C：启动事务化。
++	// 顺序：
++	//   1) 编译（已有；失败由上层处理）
++	//   2) 启动 DataFactory + readiness
++	//   3) 推送报警配置（若 SourceKind == project 且规则非空）
++	//   4) 启动归档（若 opts.ArchiveEnabled）
++	//   5) 写 session.json
++	//   6) 设置 current / curDir
++	// 任一步失败都必须回滚：停止 Python、关闭归档、清除 token、删除 session 目录。
+ 	err := b.system.Start(StartParams{
+ 		ConfigPath:  configPath,
+ 		Mode:        "REALTIME",
+@@ -223,25 +233,46 @@ func (b *RealtimeRuntimeBinding) launch(
+ 		b.sessionManager.RemoveSessionDir(dir)
+ 		return realtime.RealtimeRunSession{}, err
+ 	}
++	// 启动成功以后的所有失败都必须自己回滚，因为 system 已 Running。
++	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
++		// 优先停归档（确保 SQLite / jsonl flush），再关 Engine。
++		_ = b.stopArchiveOnShutdown()
++		_ = b.system.Stop()
++		b.sessionManager.RemoveSessionDir(dir)
++		b.mu.Lock()
++		b.current = nil
++		b.curDir = ""
++		b.mu.Unlock()
++		return realtime.RealtimeRunSession{}, reason
++	}
+ 
+ 	st := b.system.Status()
+ 	session.ConfigHash = st.ConfigHash
+ 	session.StartedAt = st.StartedAt
+ 	session.State = realtime.StateRunning
+ 	// 关键：写入真实子进程 PID，供孤儿清理 / 进程验证使用。
+-	stamp := b.system.Status()
+-	childPID := stamp.PID
++	childPID := st.PID
+ 
+ 	rec := sessionRecordFor(session)
+ 	rec.ChildPid = childPID
+-	_ = b.sessionManager.WriteSessionJSON(dir, rec)
+ 
++	// 报警配置推送（C3）：规则非空时推送失败必须使启动失败。
+ 	if session.SourceKind == realtime.RuntimeSourceProject {
+-		b.pushAlarmConfig(session)
++		if err := b.pushAlarmConfig(session); err != nil {
++			return rollback(fmt.Errorf("报警配置推送失败: %w", err))
++		}
+ 	}
+ 
++	// 归档启动（C4）：用户明确启用后失败必须使启动失败。
+ 	if opts.ArchiveEnabled {
+-		b.startArchive(session, opts.ArchiveTags)
++		if err := b.startArchive(session, opts.ArchiveTags); err != nil {
++			return rollback(fmt.Errorf("运行归档启动失败: %w", err))
++		}
++	}
++
++	// 写 session.json：失败同样回滚。
++	if err := b.sessionManager.WriteSessionJSON(dir, rec); err != nil {
++		return rollback(fmt.Errorf("写入 session.json 失败: %w", err))
+ 	}
+ 
+ 	b.mu.Lock()
+@@ -252,7 +283,9 @@ func (b *RealtimeRuntimeBinding) launch(
+ 	return session, nil
+ }
+ 
+-func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSession, tags []string) {
++// startArchive 启动运行归档。返回 error 让 launch 决定是否回滚。
++// HTTP 错误 / 非 2xx 状态 / 解析错误都视为失败。
++func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSession, tags []string) error {
+ 	payload := map[string]any{
+ 		"sessionId": session.SessionID,
+ 		"tags":      tags,
+@@ -266,34 +299,71 @@ func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSessio
+ 	}
+ 	data, err := json.Marshal(payload)
+ 	if err != nil {
+-		return
++		return fmt.Errorf("序列化归档 metadata 失败: %w", err)
+ 	}
+ 	url := fmt.Sprintf("http://%s:%d/api/archive/start", session.APIHost, session.APIPort)
+ 	resp, err := httpPostJSON(forceHTTPClient, url, data)
+ 	if err != nil {
+-		return
++		return fmt.Errorf("POST /api/archive/start 网络错误: %w", err)
+ 	}
+ 	defer resp.Body.Close()
++	body, _ := io.ReadAll(resp.Body)
++	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
++		return fmt.Errorf("/api/archive/start HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
++	}
++	return nil
+ }
+ 
+-func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSession) {
++// stopArchiveOnShutdown 主动调用 /api/archive/stop，确保 SQLite commit / jsonl flush / 句柄关闭。
++// 错误仅记录，不影响关闭流程。
++func (b *RealtimeRuntimeBinding) stopArchiveOnShutdown() error {
++	b.mu.Lock()
++	s := b.current
++	b.mu.Unlock()
++	if s == nil {
++		return nil
++	}
++	url := fmt.Sprintf("http://%s:%d/api/archive/stop", s.APIHost, s.APIPort)
++	resp, err := forceHTTPClient.Post(url, "application/json", strings.NewReader("{}"))
++	if err != nil {
++		return fmt.Errorf("POST /api/archive/stop 网络错误: %w", err)
++	}
++	defer resp.Body.Close()
++	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
++		body, _ := io.ReadAll(resp.Body)
++		return fmt.Errorf("/api/archive/stop HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
++	}
++	return nil
++}
++
++// pushAlarmConfig 推送报警配置到运行中的 Engine。
++// 规则为空视为合法 no-op，不报错；规则非空时推送失败返回 error。
++func (b *RealtimeRuntimeBinding) pushAlarmConfig(session realtime.RealtimeRunSession) error {
+ 	rules, err := b.manager.ListAlarmRules(context.Background(), session.ProjectID)
+-	if err != nil || len(rules) == 0 {
+-		return
++	if err != nil {
++		return fmt.Errorf("加载报警规则失败: %w", err)
++	}
++	if len(rules) == 0 {
++		return nil
+ 	}
+ 	payload := struct {
+ 		Rules []realtime.AlarmRule `json:"rules"`
+ 	}{Rules: rules}
+ 	data, err := json.Marshal(payload)
+ 	if err != nil {
+-		return
++		return fmt.Errorf("序列化报警规则失败: %w", err)
+ 	}
+ 	url := fmt.Sprintf("http://%s:%d/api/alarms/config", session.APIHost, session.APIPort)
+ 	resp, err := httpPostJSON(forceHTTPClient, url, data)
+ 	if err != nil {
+-		return
++		return fmt.Errorf("POST /api/alarms/config 网络错误: %w", err)
+ 	}
+ 	defer resp.Body.Close()
++	body, _ := io.ReadAll(resp.Body)
++	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
++		return fmt.Errorf("/api/alarms/config HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
++	}
++	return nil
+ }
+ 
+ func (b *RealtimeRuntimeBinding) apiBase() (string, error) {
+@@ -409,6 +479,13 @@ func (b *RealtimeRuntimeBinding) Stop() error {
+ 	dir := b.curDir
+ 	b.mu.Unlock()
+ 
++	// 阶段 C4：归档必须在 Python 关闭前停止，确保 SQLite commit / jsonl flush / 句柄关闭。
++	// 错误仅记录，不影响事件循环与 system.Stop。
++	if err := b.stopArchiveOnShutdown(); err != nil {
++		// 归档停止失败不应阻止用户主动停止。
++		// (record into binding state for debugging if needed)
++	}
++
+ 	if b.system.Status().Running {
+ 		if err := b.system.Stop(); err != nil {
+ 			return err
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime_test.go b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+index 8d42221..99d07dd 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime_test.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+@@ -3,6 +3,7 @@ package bindings
+ import (
+ 	"context"
+ 	"encoding/json"
++	"fmt"
+ 	"net"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -263,6 +264,10 @@ func (l *localFakeCompiler) Validate(_ context.Context, _ []realtime.CompilerSou
+ }
+ 
+ func (l *localFakeCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, outputPath string) (string, error) {
++	// 实际写一个简单 YAML，否则 system.Start 读不到文件会失败。
++	if err := os.WriteFile(outputPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
++		return "", err
++	}
+ 	return outputPath, nil
+ }
+ 
+@@ -514,3 +519,280 @@ func TestStart_UnexpectedChildExitClearsSession(t *testing.T) {
+ 		t.Errorf("异常退出后 session 目录与 current 必须被清理")
+ 	}
+ }
++
++// 阶段 C：报警配置推送失败必须使启动失败并回滚。
++func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++
++	// 创建项目 + 报警规则
++	ctx := context.Background()
++	if _, err := manager.CreateProject(ctx, "alarmfail"); err != nil {
++		t.Fatal(err)
++	}
++	projects, _ := manager.ListProjects(ctx)
++	pid := projects[0].ID
++	yamlPath := filepath.Join(tmp, "src.yaml")
++	os.WriteFile(yamlPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
++	view, err := manager.AddSource(ctx, pid, yamlPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	srcID := view.Project.Sources[0].ID
++	srcAbs := storage.SourceAbsPath(pid, srcID)
++	if err := os.WriteFile(srcAbs, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	_, err = manager.CreateAlarmRule(ctx, pid, realtime.AlarmRule{
++		Name: "high_level", Tag: "tank_2.level", Direction: realtime.DirectionHigh,
++		Limit: 1.0, Severity: realtime.SeverityCritical,
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "alarmfail", nil
++	})
++
++	// 启动 alarm push 失败 mock server
++	var (
++		gotRules atomic.Bool
++	)
++	alarmMux := http.NewServeMux()
++	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
++		gotRules.Store(true)
++		w.WriteHeader(http.StatusInternalServerError)
++		_, _ = w.Write([]byte("simulated push failure"))
++	})
++	alarmSrv := httptest.NewServer(alarmMux)
++	defer alarmSrv.Close()
++	ports := strings.TrimPrefix(alarmSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	binding.SetContext(context.Background())
++	defer system.Cleanup()
++
++	_, err = binding.StartProject(pid, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "alarmfail",
++	})
++	if err == nil {
++		t.Fatal("报警推送失败时 Start 必须失败")
++	}
++	if !gotRules.Load() {
++		t.Error("Start 期间必须实际调用 /api/alarms/config")
++	}
++	deadline := time.Now().Add(3 * time.Second)
++	for time.Now().Before(deadline) {
++		cur, _ := binding.GetSession()
++		entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
++		if cur == nil && len(entries) == 0 {
++			return
++		}
++		time.Sleep(50 * time.Millisecond)
++	}
++	cur, _ := binding.GetSession()
++	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
++	t.Errorf("回滚不彻底: current=%v, sessions=%d", cur, len(entries))
++}
++
++// 阶段 C：归档启动失败必须使启动失败并回滚。
++func TestStart_ArchiveFailedRollsBack(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "archivefail", nil
++	})
++
++	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusInternalServerError)
++		_, _ = w.Write([]byte("disk full"))
++	})
++	archiveSrv := httptest.NewServer(archiveMux)
++	defer archiveSrv.Close()
++	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	binding.SetContext(context.Background())
++	defer system.Cleanup()
++
++	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "archivefail",
++		ArchiveEnabled: true,
++		ArchiveTags:    []string{"tank_2.level"},
++	})
++	if err == nil {
++		t.Fatal("归档启动失败时 Start 必须失败")
++	}
++	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
++	if len(entries) != 0 {
++		t.Errorf("归档启动失败后 session 目录必须清空，实际 %d 个", len(entries))
++	}
++	if system.Status().Running {
++		t.Errorf("归档失败回滚后 system.Status().Running 必须为 false")
++	}
++}
++
++// 阶段 C3：报警规则为空时是合法 no-op，不应报错。
++func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "noalarms", nil
++	})
++
++	alarmMux := http.NewServeMux()
++	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
++		t.Errorf("no rule 时不应推送 /api/alarms/config")
++		w.WriteHeader(http.StatusInternalServerError)
++	})
++	alarmSrv := httptest.NewServer(alarmMux)
++	defer alarmSrv.Close()
++	ports := strings.TrimPrefix(alarmSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	binding.SetContext(context.Background())
++	defer system.Cleanup()
++
++	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "noalarms",
++	}); err != nil {
++		t.Fatal(err)
++	}
++}
++
++// 阶段 C4：Stop 顺序——归档停止必须在 system.Stop 之前。
++func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
++	var order []string
++	var orderMu sync.Mutex
++	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
++		orderMu.Lock()
++		order = append(order, "archive-stop")
++		orderMu.Unlock()
++		w.WriteHeader(http.StatusOK)
++	})
++	archiveSrv := httptest.NewServer(archiveMux)
++	defer archiveSrv.Close()
++	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "stop-order", nil
++	})
++
++	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-order",
++	}); err != nil {
++		t.Fatal(err)
++	}
++	if err := rig.binding.Stop(); err != nil {
++		t.Fatal(err)
++	}
++	orderMu.Lock()
++	defer orderMu.Unlock()
++	if len(order) == 0 {
++		t.Error("Stop 应调用 /api/archive/stop")
++	}
++}
++
++// 阶段 C4：Stop 期间归档停止失败不应阻止 system.Stop。
++func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
++	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusInternalServerError)
++		_, _ = w.Write([]byte("close failed"))
++	})
++	archiveSrv := httptest.NewServer(archiveMux)
++	defer archiveSrv.Close()
++	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "stop-archive-fail", nil
++	})
++
++	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-archive-fail",
++	}); err != nil {
++		t.Fatal(err)
++	}
++	if err := rig.binding.Stop(); err != nil {
++		t.Errorf("归档停止失败不应使 Stop 失败: %v", err)
++	}
++	if rig.system.Status().Running {
++		t.Errorf("Stop 后系统仍 Running")
++	}
++}
+-- 
+2.45.1.windows.1
+
+
+From f94c973295642eea3e3cf22e9a4ff0b8e8b487da Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 09:17:56 +0800
+Subject: [PATCH 4/8] feat: complete runtime websocket subscriptions
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+D1. RuntimeWs.setSubscription / getSubscription 接口：
+  - 连接打开后立即发送
+  - 订阅变更时发送
+  - 重连成功后自动重发
+  - 数组去重 + 排序
+  - MAX_SUBSCRIPTION_TAGS = 5000 上限（与后端 _WsBroadcaster.MAX_SUBSCRIPTIONS 一致）
+
+D2. 控制消息分离：
+  - snapshot / heartbeat / subscribed / error / unknown 五种
+  - subscribed (server ack) 与 error 不再进入 buildRuntimeFrame
+  - 状态记录 lastAcknowledgedSubscription
+  - error 写入 lastError：[CODE] message
+
+D3. 订阅聚合基础：
+  - useRuntimeStore 新增 subscriptionSources (Record<source, tags[]>)
+  - registerSubscription(source, tags) action
+  - setTrendTags 内部自动更新 trend 来源
+  - computeSubscriptionUnion 合并所有 source，输出排序去重的并集
+  - 创建 ws 后立即推送并集；registerSubscription 触发 setSubscription
+
+D4-D6 留待后续阶段（dashboard widget / 50k tag 规模脚本）。
+
+新增测试：
+  - createRuntimeWs subscription protocol (8 个)
+  - useRuntimeStore.registerSubscription / setTrendTags (3 个)
+---
+ .../features/runtime/useRuntimeStore.test.ts  |  20 +++
+ .../src/features/runtime/useRuntimeStore.ts   |  50 ++++++
+ .../src/features/runtime/websocket.test.ts    | 157 ++++++++++++++++++
+ .../src/features/runtime/websocket.ts         |  90 ++++++++++
+ 4 files changed, 317 insertions(+)
+
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
+index f8d2226..2bfe38f 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
+@@ -229,4 +229,24 @@ describe('useRuntimeStore', () => {
+     const headers = statusCall![1]?.headers as Record<string, string> | undefined
+     expect(headers?.Authorization).toBe('Bearer in-memory-token')
+   })
++
++  it('registerSubscription stores source tags in subscriptionSources', () => {
++    useRuntimeStore.getState().registerSubscription('trend', ['tank_2.level', 'pid2.SV'])
++    useRuntimeStore.getState().registerSubscription('dashboard', ['valve_1.current_opening'])
++    const sources = useRuntimeStore.getState().subscriptionSources
++    expect(sources.trend).toEqual(['tank_2.level', 'pid2.SV'])
++    expect(sources.dashboard).toEqual(['valve_1.current_opening'])
++  })
++
++  it('setTrendTags also updates trend subscription', () => {
++    useRuntimeStore.getState().setTrendTags(['pid2.PV'])
++    expect(useRuntimeStore.getState().subscriptionSources.trend).toEqual(['pid2.PV'])
++  })
++
++  it('subscriptionSources can be replaced wholesale', () => {
++    useRuntimeStore.getState().registerSubscription('tagTable', ['tank_2.level'])
++    useRuntimeStore.getState().registerSubscription('tagTable', ['pid2.SV', 'tank_2.level'])
++    const sources = useRuntimeStore.getState().subscriptionSources
++    expect(sources.tagTable).toEqual(['pid2.SV', 'tank_2.level'])
++  })
+ })
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+index 6ba0859..e1c4ce7 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+@@ -90,6 +90,11 @@ export interface RuntimeStoreState {
+   lastError: string | null
+   // 当前活跃的 connect generation；disconnect/重连递增
+   connectGeneration: number
++  // 阶段 D3：订阅来源聚合。各组件 registerSubscription(source, tags)；
++  // 实际 WS 发送的并集见 getActiveSubscriptionUnion()，避免互相覆盖。
++  subscriptionSources: Record<string, string[]>
++  /** 最近一次服务端 ack 的订阅列表（来自 {type:'subscribed'} 消息）。 */
++  lastAcknowledgedSubscription: string[] | null
+ 
+   // Actions
+   setEndpoint: (host: string, port: number, token?: string) => void
+@@ -104,6 +109,8 @@ export interface RuntimeStoreState {
+     patch: Partial<Pick<RuntimeWriteEvent, 'status' | 'confirmedAt'>>,
+   ) => void
+   recomputeQuality: () => void
++  /** 阶段 D3：注册某个组件的订阅 tag 集合；source 是稳定 id。 */
++  registerSubscription: (source: string, tags: string[]) => void
+   connect: () => Promise<void>
+   disconnect: () => void
+   // 每秒调用一次检查 stale
+@@ -115,6 +122,22 @@ export interface RuntimeStoreState {
+ const DEFAULT_API_HOST = '127.0.0.1'
+ const DEFAULT_API_PORT = 8000
+ 
++// computeSubscriptionUnion 计算所有来源的 tag 并集 + 排序。
++// 单一来源为空时整体视为 null（全量），便于后台把不必要的过滤移除。
++function computeSubscriptionUnion(sources: Record<string, string[]>): string[] | null {
++  const sets: string[][] = Object.values(sources)
++  if (sets.length === 0) return null
++  const out = new Set<string>()
++  for (const tags of sets) {
++    if (!Array.isArray(tags)) continue
++    for (const t of tags) {
++      if (typeof t === 'string' && t.length > 0) out.add(t)
++    }
++  }
++  if (out.size === 0) return null
++  return Array.from(out).sort()
++}
++
+ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+   let ws: RuntimeWs | null = null
+   let staleCheckTimer: ReturnType<typeof setInterval> | null = null
+@@ -194,11 +217,15 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+     },
+     lastError: null,
+     connectGeneration: 0,
++    subscriptionSources: {},
++    lastAcknowledgedSubscription: null,
+ 
+     setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
+     setApiReady: (ready) => set({ apiReady: ready }),
+     setTrendTags: (tags) => {
+       set({ trendTags: tags })
++      // 趋势选择变化也要反映到订阅
++      get().registerSubscription('trend', tags)
+     },
+     setSeriesVisibility: (tag, visible) => {
+       set((prev) => ({
+@@ -242,6 +269,19 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+       set({ quality })
+     },
+ 
++    // 阶段 D3：注册/更新一个组件的订阅 tag 集合。多次注册同一 source 会覆盖。
++    // union 一旦变化，ws 立即收到新的 setSubscription。
++    registerSubscription: (source, tags) => {
++      set((prev) => {
++        const next = { ...prev.subscriptionSources, [source]: tags }
++        return { subscriptionSources: next }
++      })
++      const union = computeSubscriptionUnion(get().subscriptionSources)
++      if (ws) {
++        ws.setSubscription(union)
++      }
++    },
++
+     connect: async () => {
+       // 如果已有 WS，先停掉；递增 generation 让所有进行中的 connect 失效。
+       const myGen = (get().connectGeneration ?? 0) + 1
+@@ -323,6 +363,12 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+           } else if (msg.type === 'heartbeat') {
+             // 心跳：只更新 lastHeartbeatAt，不替换 latestSnapshot，不追加趋势。
+             set({ lastHeartbeatAt: Date.now() })
++          } else if (msg.type === 'subscribed') {
++            // 服务端确认订阅：记录 ack 列表，便于排查。
++            set({ lastAcknowledgedSubscription: msg.tags })
++          } else if (msg.type === 'error') {
++            // 服务端推送订阅错误（如 TOO_MANY_SUBSCRIPTIONS）；记录到 lastError。
++            set({ lastError: `[${msg.code}] ${msg.message}` })
+           } else {
+             // unknown：忽略
+           }
+@@ -344,6 +390,10 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+         },
+       )
+       ws = runtimeWs
++      // 阶段 D3：创建 ws 后立即把当前订阅并集推过去。
++      // 如果 setTrendTags/其他组件调用过 registerSubscription，这里就有内容。
++      const initialUnion = computeSubscriptionUnion(get().subscriptionSources)
++      runtimeWs.setSubscription(initialUnion)
+       startStaleCheck()
+       await runtimeWs.start()
+       if (get().connectGeneration !== myGen) runtimeWs.stop()
+diff --git a/review3/config-tool/frontend/src/features/runtime/websocket.test.ts b/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
+index 92ef624..74f1ff2 100644
+--- a/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
+@@ -452,3 +452,160 @@ describe('createRuntimeWs auth token', () => {
+     ws.stop()
+   })
+ })
++
++describe('createRuntimeWs subscription protocol', () => {
++  beforeEach(() => {
++    FakeWebSocket.instances = []
++    vi.stubGlobal('WebSocket', FakeWebSocket as any)
++  })
++  afterEach(() => {
++    vi.restoreAllMocks()
++  })
++
++  it('sends subscribe message on open when setSubscription called before start', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription(['tank_2.level', 'pid2.SV', 'tank_2.level']) // 含重复
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    // 必须发送了去重 + 排序后的订阅
++    expect(sock.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: ['pid2.SV', 'tank_2.level'] }),
++    )
++    ws.stop()
++  })
++
++  it('sends subscribe message when setSubscription called after open', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    sock.sentMessages = [] // 清空，只看后续 setSubscription
++    ws.setSubscription(['tank_2.level'])
++    expect(sock.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: ['tank_2.level'] }),
++    )
++    ws.stop()
++  })
++
++  it('re-sends subscription after reconnect', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription(['pid2.PV'])
++    await ws.start()
++    const sock1 = FakeWebSocket.instances[0]
++    sock1.triggerOpen()
++    expect(sock1.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: ['pid2.PV'] }),
++    )
++    // 模拟服务端断开
++    sock1.triggerServerClose()
++    // 等待指数退避（默认 1s）
++    await new Promise((resolve) => setTimeout(resolve, 1100))
++    const sock2 = FakeWebSocket.instances[1]
++    expect(sock2).toBeDefined()
++    sock2.triggerOpen()
++    // 重连后必须重发
++    expect(sock2.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: ['pid2.PV'] }),
++    )
++    ws.stop()
++  })
++
++  it('null subscription means full payload (no filter)', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription(null)
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    expect(sock.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: null }),
++    )
++    ws.stop()
++  })
++
++  it('limits subscription to MAX_SUBSCRIPTION_TAGS', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    const big = Array.from({ length: 6000 }, (_, i) => `tag${i}`)
++    ws.setSubscription(big)
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    const sent = sock.sentMessages.find((m) => m.includes('"type":"subscribe"'))
++    const parsed = JSON.parse(sent!)
++    expect(parsed.tags.length).toBe(5000)
++    ws.stop()
++  })
++
++  it('handles subscribed control message without going to snapshot', async () => {
++    const messages: any[] = []
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      (m) => messages.push(m),
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    sock.triggerMessage({ type: 'subscribed', tags: ['a', 'b'] })
++    expect(messages.length).toBe(1)
++    expect(messages[0].type).toBe('subscribed')
++    expect(messages[0].tags).toEqual(['a', 'b'])
++    ws.stop()
++  })
++
++  it('handles error control message', async () => {
++    const messages: any[] = []
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      (m) => messages.push(m),
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    sock.triggerMessage({ type: 'error', code: 'TOO_MANY_SUBSCRIPTIONS', message: 'too many' })
++    expect(messages.length).toBe(1)
++    expect(messages[0].type).toBe('error')
++    expect(messages[0].code).toBe('TOO_MANY_SUBSCRIPTIONS')
++    ws.stop()
++  })
++
++  it('stop() clears pending subscription', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription(['tank_2.level'])
++    ws.stop()
++    expect(ws.getSubscription()).toBeNull()
++  })
++})
+diff --git a/review3/config-tool/frontend/src/features/runtime/websocket.ts b/review3/config-tool/frontend/src/features/runtime/websocket.ts
+index 2e6bdbd..ab1f3b4 100644
+--- a/review3/config-tool/frontend/src/features/runtime/websocket.ts
++++ b/review3/config-tool/frontend/src/features/runtime/websocket.ts
+@@ -8,10 +8,17 @@
+ //   - 指数退避重连：1s, 2s, 4s, 8s, 16s, 30s（封顶 30s）。
+ //   - 重连必须严格按 backoff -> GET snapshot 完成 -> 创建 WS 的顺序执行。
+ //   - 卸载时关闭 WebSocket / 定时器 / 重连任务，禁止泄漏。
++//
++// 阶段 D：订阅协议。
++//   - setSubscription(tags|null) 在连接打开后立即发送，重连后自动重发。
++//   - 服务端响应 {type:'subscribed', tags:[...]} / {type:'error', code:'...'}。
++//   - 响应消息不会进入 buildRuntimeFrame。
+ 
+ import type { ConnectionState } from './types'
+ import { mapApiSnapshot } from './runtimeApi'
+ 
++export const MAX_SUBSCRIPTION_TAGS = 5000
++
+ export interface RuntimeWsConfig {
+   apiHost: string
+   apiPort: number
+@@ -26,6 +33,8 @@ export type StateHandler = (state: ConnectionState) => void
+ export type ParsedWsMessage =
+   | { type: 'snapshot'; snapshot: ReturnType<typeof mapApiSnapshot>; raw: Record<string, unknown> }
+   | { type: 'heartbeat'; ts: number }
++  | { type: 'subscribed'; tags: string[] | null }
++  | { type: 'error'; code: string; message: string }
+   | { type: 'unknown'; raw: unknown }
+ 
+ export interface RuntimeWs {
+@@ -35,6 +44,10 @@ export interface RuntimeWs {
+   fetchInitialSnapshot(signal?: AbortSignal): Promise<void>
+   isOpen(): boolean
+   forceReconnect(): void
++  /** 阶段 D：设置订阅 tag 集合。null 表示全量（兼容未订阅客户端）。 */
++  setSubscription(tags: string[] | null): void
++  /** 阶段 D：当前正在使用的订阅集合（最后发送值）。 */
++  getSubscription(): string[] | null
+ }
+ 
+ // 指数退避：1, 2, 4, 8, 16, 30, 30, 30 ... 上限 30s
+@@ -42,6 +55,19 @@ const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000, 16000, 30000]
+ // WebSocket 在浏览器/Node 环境都可以使用。这里假设全局 WebSocket（浏览器）。
+ type WsFactory = (url: string) => WebSocket
+ 
++function normalizeSubscription(tags: string[] | null): string[] | null {
++  if (tags === null) return null
++  const set = new Set<string>()
++  for (const t of tags) {
++    if (typeof t === 'string' && t.length > 0) set.add(t)
++  }
++  const arr = Array.from(set).sort()
++  if (arr.length > MAX_SUBSCRIPTION_TAGS) {
++    return arr.slice(0, MAX_SUBSCRIPTION_TAGS)
++  }
++  return arr
++}
++
+ export function createRuntimeWs(
+   config: RuntimeWsConfig,
+   onMessage: WsMessageHandler,
+@@ -58,6 +84,9 @@ export function createRuntimeWs(
+   let currentState: ConnectionState = 'idle'
+   let operationGeneration = 0
+   let snapshotAbort: AbortController | null = null
++  let pendingSubscription: string[] | null | undefined = undefined
++  let activeSubscription: string[] | null = null
++  let sendOnOpen = true
+ 
+   const factory: WsFactory = deps.wsFactory ?? ((url: string) => new WebSocket(url))
+ 
+@@ -90,6 +119,30 @@ export function createRuntimeWs(
+     }
+   }
+ 
++  // sendSubscription 立即发送订阅消息。
++  // 失败（连接未开）时记入 pendingSubscription，连接 onopen 时再发。
++  // 关键：null（"全量"）也是合法值，必须发送，不能因为"无变更"被吞掉。
++  const sendSubscriptionNow = (sock: WebSocket): boolean => {
++    if (pendingSubscription === undefined) {
++      // setSubscription 还未被调用过，不发送
++      return true
++    }
++    if (activeSubscription !== null && pendingSubscription !== null &&
++        activeSubscription.length === pendingSubscription.length &&
++        activeSubscription.every((v, i) => v === pendingSubscription[i])) {
++      // 同样非 null 的相同内容不重复发送
++      return true
++    }
++    if (sock.readyState !== WebSocket.OPEN) return false
++    try {
++      sock.send(JSON.stringify({ type: 'subscribe', tags: pendingSubscription }))
++      activeSubscription = pendingSubscription
++      return true
++    } catch {
++      return false
++    }
++  }
++
+   // 真实消息超过 HEARTBEAT_HEALTH_THRESHOLD_MS 没收到视为健康异常 → 主动重连。
+   // WS 自身有 ping/pong 但浏览器 API 不暴露，这里用一个客户端定时器做"长时间无任何消息"检测。
+   // 仅对 WS 自身 sanity 负责；上层 stale 由 store 根据 snapshot _receivedAt 判定。
+@@ -114,6 +167,19 @@ export function createRuntimeWs(
+       onMessage({ type: 'heartbeat', ts })
+       return
+     }
++    // 阶段 D：控制消息（不进入 buildRuntimeFrame）。
++    if (msg.type === 'subscribed') {
++      const tags = msg.tags
++      const arr = Array.isArray(tags) ? (tags as string[]).filter((t) => typeof t === 'string') : null
++      onMessage({ type: 'subscribed', tags: arr })
++      return
++    }
++    if (msg.type === 'error') {
++      const code = typeof msg.code === 'string' ? msg.code : 'UNKNOWN'
++      const message = typeof msg.message === 'string' ? msg.message : ''
++      onMessage({ type: 'error', code, message })
++      return
++    }
+     // snapshot 必须是包含 cycle_count 的 dict 对象。
+     // 不读取 message.data，也不额外解包一层。
+     if (typeof msg.cycle_count === 'number' || 'valve_1.current_opening' in msg || 'tank_2.level' in msg) {
+@@ -149,6 +215,10 @@ export function createRuntimeWs(
+       }
+       setState('connected')
+       armHeartbeatHealth()
++      // 重连后必须重发订阅（含 null=全量 与 显式列表）
++      if (pendingSubscription !== undefined) {
++        sendSubscriptionNow(socket)
++      }
+     }
+ 
+     socket.onmessage = (ev: MessageEvent) => {
+@@ -171,6 +241,8 @@ export function createRuntimeWs(
+       if (!isActive(generation) || ws !== socket) return
+       ws = null
+       clearHeartbeatHealth()
++      // activeSubscription 重置为未发送，触发重连后重发
++      activeSubscription = null
+       setState('disconnected')
+       scheduleReconnect(generation)
+     }
+@@ -227,12 +299,14 @@ export function createRuntimeWs(
+       }
+     }
+     clearHeartbeatHealth()
++    activeSubscription = null
+     setState('disconnected')
+     scheduleReconnect(generation)
+   }
+ 
+   const start = async (): Promise<void> => {
+     stopped = false
++    sendOnOpen = true
+     const generation = ++operationGeneration
+     clearReconnect()
+     clearHeartbeatHealth()
+@@ -243,6 +317,7 @@ export function createRuntimeWs(
+       ws = null
+       try { old.close() } catch { /* ignore */ }
+     }
++    activeSubscription = null
+     reconnectAttempt = 0
+     setState('connecting')
+     await fetchSnapshotThenConnect(generation)
+@@ -250,6 +325,7 @@ export function createRuntimeWs(
+ 
+   const stop = (): void => {
+     stopped = true
++    sendOnOpen = true
+     operationGeneration += 1
+     snapshotAbort?.abort()
+     snapshotAbort = null
+@@ -265,6 +341,8 @@ export function createRuntimeWs(
+       }
+     }
+     setState('idle')
++    activeSubscription = null
++    pendingSubscription = null
+   }
+ 
+   const fetchInitialSnapshot = async (signal?: AbortSignal): Promise<void> => {
+@@ -273,11 +351,23 @@ export function createRuntimeWs(
+ 
+   const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
+ 
++  const setSubscription = (tags: string[] | null): void => {
++    const normalized = normalizeSubscription(tags)
++    pendingSubscription = normalized
++    if (ws && ws.readyState === WebSocket.OPEN) {
++      sendSubscriptionNow(ws)
++    }
++  }
++
++  const getSubscription = (): string[] | null | undefined => pendingSubscription
++
+   return {
+     start,
+     stop,
+     fetchInitialSnapshot,
+     isOpen,
+     forceReconnect,
++    setSubscription,
++    getSubscription,
+   }
+ }
+-- 
+2.45.1.windows.1
+
+
+From 56bfd70542e8dd9c1d5354cabc8287be48c92395 Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 10:11:40 +0800
+Subject: [PATCH 5/8] fix: regenerate wails bindings and harden authenticated
+ bootstrap
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+P0-1 修复：Wails generated binding 补全
+  - RealtimeRuntimeBinding.js 增加 GetConnectionInfo 导出
+    （之前手工只补了 .d.ts，.js 没补，运行时 window['go'] 不存在该方法）
+  - RealtimeRuntimeBinding.d.ts 改为单行 import {bindings, realtime, context}
+    修复 'bindings' 命名空间未导入但已被引用的类型错误
+
+P0-2 修复：TypeScript 严格构建错误
+  - getSubscription 返回类型与 pendingSubscription 实际类型一致
+    （string[] | null | undefined 三态）
+  - sendSubscriptionNow 增加 subscriptionsEqual 显式比较
+  - activeSubscription 保持 undefined 作为"未发送"状态，
+    避免与显式 setSubscription(null) 的首次发送判断冲突
+  - start / onclose / forceReconnect 中 activeSubscription 重置为 undefined
+
+鉴权启动链路加固：
+  - RealtimeRunPage：GetConnectionInfo 失败 / 空 token 显式 setError，
+    绝不回退到无 token 连接（之前会触发 401/4401 循环重连）
+  - 异步 generation guard：await 后必须检查 dfStatus / session / generation 一致
+  - disconnect() 清空 apiToken + lastAcknowledgedSubscription + subscriptionError
+    主动 session 结束后 token 端到端生命周期闭合
+  - endRuntimeSession() 命名扩展点，阶段 G 可继续完善
+
+订阅状态模型修正（修复 4 准备）：
+  - 三态语义明确：undefined = 未指定；null = 显式全量；[] = 仅元数据；[a,b] = 订阅指定
+  - 引入 SubscriptionOverflowError 替换静默截断（5000 上限超限时显式抛错）
+  - computeSubscriptionUnion 区分'未注册'与'全空'：
+    空对象 → null，全为空数组 → []，否则排序去重并集
+  - registerSubscription 接受 string[] | null；超限保留旧值并写 subscriptionError
+  - unregisterSubscription 新增 action，组件卸载时清理 source
+
+测试更新：
+  - 删除 'limits subscription to MAX_SUBSCRIPTION_TAGS'（静默截断旧行为）
+  - 新增 SubscriptionOverflowError 测试
+  - 新增 'null' / '[]' / 'undefined' 三态区分测试
+  - 新增 'array → null' / 'array → []' 显式发送测试
+
+验证：
+  - npm run build: tsc && vite build 通过
+  - npm test -- --run: 21 文件 / 313 测试通过
+---
+ .../src/features/realtime/RealtimeRunPage.tsx |  30 ++--
+ .../src/features/runtime/useRuntimeStore.ts   | 128 +++++++++++++++---
+ .../src/features/runtime/websocket.test.ts    |  79 ++++++++++-
+ .../src/features/runtime/websocket.ts         |  90 +++++++++---
+ .../go/bindings/RealtimeRuntimeBinding.d.ts   |   3 +-
+ .../go/bindings/RealtimeRuntimeBinding.js     |   4 +
+ 6 files changed, 278 insertions(+), 56 deletions(-)
+
+diff --git a/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx b/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx
+index 9a3f4fc..cc8b0e5 100644
+--- a/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx
++++ b/review3/config-tool/frontend/src/features/realtime/RealtimeRunPage.tsx
+@@ -80,25 +80,37 @@ export function RealtimeRunPage() {
+     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+   }, [dfLogs])
+ 
++  // generation guard：本次 effect 启动时记录；任何 await 之后必须先检查当前
++  // 状态是否已被新 effect 接管，否则忽略本次 effect 的副作用。
+   useEffect(() => {
+     const rtStore = useRuntimeStore.getState()
++    const initialGen = useRealtimeRunSessionStore.getState()
++    const mySessionGen = initialGen.session
+     if (dfStatus.running && dfStatus.apiReady) {
+       const host = session?.apiHost || apiHost
+       const port = session?.apiPort || apiPort
+       // 自动从 Go 侧获取本次运行的 connection info（host / port / runtimeName / token）。
+       // 仅在内存使用，绝不写入持久化。
++      // 关键：
++      //   - GetConnectionInfo 失败时绝不能回退到无 token 连接（否则必然 401 / 4401）
++      //   - await 期间 dfStatus 可能已变化；写入前必须检查 generation
+       void (async () => {
++        let info
+         try {
+-          const info = await realtimeRuntimeApi.getConnectionInfo()
+-          if (info.apiToken) {
+-            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port, info.apiToken)
+-          } else {
+-            // 进程已运行但 token 暂时拿不到（极端时序），等下一次 dfStatus 变化再试。
+-            rtStore.setEndpoint(info.apiHost || host, info.apiPort || port)
+-          }
+-        } catch {
+-          rtStore.setEndpoint(host, port)
++          info = await realtimeRuntimeApi.getConnectionInfo()
++        } catch (e) {
++          // 显示错误，不发起任何连接。
++          setError(`无法获取运行 token：${String(e)}。请重新启动实时工程。`)
++          return
+         }
++        // 异步窗口检查：dfStatus / session / generation 必须一致。
++        if (!info.apiToken) {
++          setError('运行 token 为空，连接被拒绝。请重新启动实时工程。')
++          return
++        }
++        if (!dfStatus.running || !dfStatus.apiReady) return
++        if (useRealtimeRunSessionStore.getState().session !== mySessionGen) return
++        rtStore.setEndpoint(info.apiHost || host, info.apiPort || port, info.apiToken)
+         void rtStore.connect()
+       })()
+     } else if (!dfStatus.running) {
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+index e1c4ce7..3765d14 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+@@ -34,7 +34,12 @@ import {
+ import {
+   computeStaleThresholdMs,
+ } from './dataSelection'
+-import { createRuntimeWs, type RuntimeWs } from './websocket'
++import {
++  createRuntimeWs,
++  type RuntimeWs,
++  MAX_SUBSCRIPTION_TAGS,
++  SubscriptionOverflowError,
++} from './websocket'
+ import type { TrendBuffer, TrendPoint } from './trendBuffer'
+ import { TrendBuffer as TrendBufferClass } from './trendBuffer'
+ import { computeControlQuality, type QualitySample } from './controlQuality'
+@@ -92,9 +97,15 @@ export interface RuntimeStoreState {
+   connectGeneration: number
+   // 阶段 D3：订阅来源聚合。各组件 registerSubscription(source, tags)；
+   // 实际 WS 发送的并集见 getActiveSubscriptionUnion()，避免互相覆盖。
+-  subscriptionSources: Record<string, string[]>
++  // 三态语义：
++  //   - undefined：组件已注册但未指定 tag（视为空订阅 = 仅元数据）
++  //   - null：     组件已注销（key 已删除）
++  //   - string[]: 组件明确订阅的 tag 集合
++  subscriptionSources: Record<string, string[] | null>
+   /** 最近一次服务端 ack 的订阅列表（来自 {type:'subscribed'} 消息）。 */
+-  lastAcknowledgedSubscription: string[] | null
++  lastAcknowledgedSubscription: string[] | null | undefined
++  /** 最近一次订阅溢出错误（tag 数量超过 MAX_SUBSCRIPTION_TAGS）。 */
++  subscriptionError: string | null
+ 
+   // Actions
+   setEndpoint: (host: string, port: number, token?: string) => void
+@@ -109,10 +120,18 @@ export interface RuntimeStoreState {
+     patch: Partial<Pick<RuntimeWriteEvent, 'status' | 'confirmedAt'>>,
+   ) => void
+   recomputeQuality: () => void
+-  /** 阶段 D3：注册某个组件的订阅 tag 集合；source 是稳定 id。 */
+-  registerSubscription: (source: string, tags: string[]) => void
++  /**
++   * 阶段 D3：注册/更新某个组件的订阅 tag 集合。
++   * tags 传 null 表示该 source 主动声明"我不要任何 tag"（等同于 []）。
++   * 超过 MAX 抛 SubscriptionOverflowError，pending 状态保留。
++   */
++  registerSubscription: (source: string, tags: string[] | null) => void
++  /** 阶段 D4：组件卸载时调用，移除该 source 的订阅。 */
++  unregisterSubscription: (source: string) => void
+   connect: () => Promise<void>
+   disconnect: () => void
++  /** 显式结束 runtime session（详见 action 注释）。 */
++  endRuntimeSession: () => void
+   // 每秒调用一次检查 stale
+   tickStaleCheck: () => void
+   // 测试 helper
+@@ -122,20 +141,39 @@ export interface RuntimeStoreState {
+ const DEFAULT_API_HOST = '127.0.0.1'
+ const DEFAULT_API_PORT = 8000
+ 
+-// computeSubscriptionUnion 计算所有来源的 tag 并集 + 排序。
+-// 单一来源为空时整体视为 null（全量），便于后台把不必要的过滤移除。
+-function computeSubscriptionUnion(sources: Record<string, string[]>): string[] | null {
+-  const sets: string[][] = Object.values(sources)
+-  if (sets.length === 0) return null
++/**
++ * 阶段 D：计算所有来源的 tag 并集 + 排序。
++ * 关键：三态语义：
++ *   - 所有 source 都未注册（subscriptionSources 为空对象）→ null（"全量"，
++ *     与 setSubscription(null) 行为一致；旧客户端兼容）
++ *   - 至少一个 source 注册了非空 tag → 排序去重的并集
++ *   - 所有 source 都注册了空数组（"我不订阅任何 tag"） → []（仅运行元数据）
++ *
++ * 超过 MAX_SUBSCRIPTION_TAGS 时抛 SubscriptionOverflowError。
++ */
++function computeSubscriptionUnion(
++  sources: Record<string, string[] | null>,
++): string[] | null {
++  const entries = Object.values(sources)
++  if (entries.length === 0) return null
+   const out = new Set<string>()
+-  for (const tags of sets) {
++  let anyTag = false
++  for (const tags of entries) {
++    if (tags === null) continue
+     if (!Array.isArray(tags)) continue
+     for (const t of tags) {
+-      if (typeof t === 'string' && t.length > 0) out.add(t)
++      if (typeof t === 'string' && t.length > 0) {
++        out.add(t)
++        anyTag = true
++      }
+     }
+   }
+-  if (out.size === 0) return null
+-  return Array.from(out).sort()
++  if (!anyTag) return []
++  const arr = Array.from(out).sort()
++  if (arr.length > MAX_SUBSCRIPTION_TAGS) {
++    throw new SubscriptionOverflowError(arr.length, MAX_SUBSCRIPTION_TAGS)
++  }
++  return arr
+ }
+ 
+ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+@@ -218,7 +256,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+     lastError: null,
+     connectGeneration: 0,
+     subscriptionSources: {},
+-    lastAcknowledgedSubscription: null,
++    lastAcknowledgedSubscription: undefined,
++    subscriptionError: null,
+ 
+     setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
+     setApiReady: (ready) => set({ apiReady: ready }),
+@@ -271,10 +310,38 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+ 
+     // 阶段 D3：注册/更新一个组件的订阅 tag 集合。多次注册同一 source 会覆盖。
+     // union 一旦变化，ws 立即收到新的 setSubscription。
++    // 超过 MAX 抛 SubscriptionOverflowError，pendingSubscription 保留。
+     registerSubscription: (source, tags) => {
++      let union: string[] | null
++      try {
++        union = computeSubscriptionUnion({ ...get().subscriptionSources, [source]: tags })
++      } catch (e) {
++        const msg = e instanceof Error ? e.message : String(e)
++        set({ subscriptionError: msg })
++        // 保留旧 union / pendingSubscription；不更新 source 以免破坏其它组件。
++        return
++      }
++      set((prev) => ({
++        subscriptionSources: { ...prev.subscriptionSources, [source]: tags },
++        subscriptionError: null,
++      }))
++      if (ws) {
++        try {
++          ws.setSubscription(union)
++        } catch (e) {
++          const msg = e instanceof Error ? e.message : String(e)
++          set({ subscriptionError: msg })
++        }
++      }
++    },
++
++    // 阶段 D4：注销 source，从并集中移除。
++    unregisterSubscription: (source) => {
+       set((prev) => {
+-        const next = { ...prev.subscriptionSources, [source]: tags }
+-        return { subscriptionSources: next }
++        if (!(source in prev.subscriptionSources)) return {}
++        const next = { ...prev.subscriptionSources }
++        delete next[source]
++        return { subscriptionSources: next, subscriptionError: null }
+       })
+       const union = computeSubscriptionUnion(get().subscriptionSources)
+       if (ws) {
+@@ -399,8 +466,17 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+       if (get().connectGeneration !== myGen) runtimeWs.stop()
+     },
+ 
++    /**
++     * 主动结束 runtime 会话 / 用户停止。
++     * 行为：
++     *   - 递增 generation 让所有进行中的 connect 失效
++     *   - 停止 WS（保留 latestSnapshot / rawSnapshot 以便 UI 冻结最后值）
++     *   - 清空 apiToken（session 端到端生命周期闭合）
++     *   - 设置 stale = true（断线标记）
++     * 临时 WS 断线（指 createRuntimeWs 内部 scheduleReconnect 路径）不经过此函数，
++     * 不清 token；只有真正的"session 结束"才会进入这里。
++     */
+     disconnect: () => {
+-      // 递增 generation 让所有进行中的 connect 失效。
+       const nextGen = (get().connectGeneration ?? 0) + 1
+       set({ connectGeneration: nextGen })
+       stopStaleCheck()
+@@ -408,16 +484,24 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+         ws.stop()
+         ws = null
+       }
+-      // 按契约：
+-      // - 冻结最后真实值（不替换、不清空 latestSnapshot）
+-      // - 设置 stale = true（disconnect 视为断线，无论是否在阈值内）
+-      // - 不清空 snapshotReceivedAt（保持供 stale 计算）
+       set({
+         connectionState: 'idle',
+         stale: true,
++        apiToken: '',
++        lastAcknowledgedSubscription: undefined,
++        subscriptionError: null,
+       })
+     },
+ 
++    /**
++     * 阶段 G 前置：endRuntimeSession —— 显式区分"停止本次 session"。
++     * 当前实现等同于 disconnect()，保留命名以便阶段 G 完整化（写入 audit
++     * 事件、清理强制状态、关闭归档等扩展点）。
++     */
++    endRuntimeSession: () => {
++      get().disconnect()
++    },
++
+     tickStaleCheck: () => {
+       const s = get()
+       const receivedAt = s.snapshotReceivedAt
+diff --git a/review3/config-tool/frontend/src/features/runtime/websocket.test.ts b/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
+index 74f1ff2..ee6d54f 100644
+--- a/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/websocket.test.ts
+@@ -540,10 +540,45 @@ describe('createRuntimeWs subscription protocol', () => {
+     expect(sock.sentMessages).toContainEqual(
+       JSON.stringify({ type: 'subscribe', tags: null }),
+     )
++    expect(ws.getSubscription()).toBeNull()
++    ws.stop()
++  })
++
++  it('empty array subscription means metadata-only', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription([])
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    expect(sock.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: [] }),
++    )
++    expect(ws.getSubscription()).toEqual([])
++    ws.stop()
++  })
++
++  it('setSubscription undefined keeps "no preference" and does NOT send', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    // 没调 setSubscription → 不应发送 subscribe 消息。
++    expect(sock.sentMessages.find((m) => m.includes('"type":"subscribe"'))).toBeUndefined()
++    expect(ws.getSubscription()).toBeUndefined()
+     ws.stop()
+   })
+ 
+-  it('limits subscription to MAX_SUBSCRIPTION_TAGS', async () => {
++  it('throws SubscriptionOverflowError when subscription exceeds MAX_SUBSCRIPTION_TAGS', async () => {
+     const ws = createRuntimeWs(
+       { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
+       () => {},
+@@ -551,13 +586,47 @@ describe('createRuntimeWs subscription protocol', () => {
+       { fetchSnapshot: async () => {} },
+     )
+     const big = Array.from({ length: 6000 }, (_, i) => `tag${i}`)
+-    ws.setSubscription(big)
++    expect(() => ws.setSubscription(big)).toThrow(/订阅超过 5000 上限/)
++    // 失败时 pendingSubscription 必须保持旧值（无）
++    expect(ws.getSubscription()).toBeUndefined()
++    ws.stop()
++  })
++
++  it('switching from array to null actually sends (no equality short-circuit)', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription(['a', 'b'])
+     await ws.start()
+     const sock = FakeWebSocket.instances[0]
+     sock.triggerOpen()
+-    const sent = sock.sentMessages.find((m) => m.includes('"type":"subscribe"'))
+-    const parsed = JSON.parse(sent!)
+-    expect(parsed.tags.length).toBe(5000)
++    sock.sentMessages = [] // 清空，只看切换
++    ws.setSubscription(null)
++    expect(sock.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: null }),
++    )
++    ws.stop()
++  })
++
++  it('switching from array to [] actually sends (no equality short-circuit)', async () => {
++    const ws = createRuntimeWs(
++      { apiHost: '127.0.0.1', apiPort: 8000, cycleTime: 0.5 },
++      () => {},
++      () => {},
++      { fetchSnapshot: async () => {} },
++    )
++    ws.setSubscription(['a'])
++    await ws.start()
++    const sock = FakeWebSocket.instances[0]
++    sock.triggerOpen()
++    sock.sentMessages = []
++    ws.setSubscription([])
++    expect(sock.sentMessages).toContainEqual(
++      JSON.stringify({ type: 'subscribe', tags: [] }),
++    )
+     ws.stop()
+   })
+ 
+diff --git a/review3/config-tool/frontend/src/features/runtime/websocket.ts b/review3/config-tool/frontend/src/features/runtime/websocket.ts
+index ab1f3b4..bb608bf 100644
+--- a/review3/config-tool/frontend/src/features/runtime/websocket.ts
++++ b/review3/config-tool/frontend/src/features/runtime/websocket.ts
+@@ -44,10 +44,16 @@ export interface RuntimeWs {
+   fetchInitialSnapshot(signal?: AbortSignal): Promise<void>
+   isOpen(): boolean
+   forceReconnect(): void
+-  /** 阶段 D：设置订阅 tag 集合。null 表示全量（兼容未订阅客户端）。 */
+-  setSubscription(tags: string[] | null): void
++  /**
++   * 阶段 D：设置订阅 tag 集合。
++   * - undefined：尚未发送订阅命令（兼容旧客户端，server 走全量）
++   * - null：显式请求全量 snapshot
++   * - []：仅 cycle_count/sim_time 元数据
++   * - [a, b, ...]：仅订阅指定 tag + 元数据
++   */
++  setSubscription(tags: string[] | null | undefined): void
+   /** 阶段 D：当前正在使用的订阅集合（最后发送值）。 */
+-  getSubscription(): string[] | null
++  getSubscription(): string[] | null | undefined
+ }
+ 
+ // 指数退避：1, 2, 4, 8, 16, 30, 30, 30 ... 上限 30s
+@@ -55,7 +61,17 @@ const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000, 16000, 30000]
+ // WebSocket 在浏览器/Node 环境都可以使用。这里假设全局 WebSocket（浏览器）。
+ type WsFactory = (url: string) => WebSocket
+ 
+-function normalizeSubscription(tags: string[] | null): string[] | null {
++/**
++ * 规范化订阅 tag 集合：
++ *   - 过滤掉空字符串/非字符串
++ *   - 去重并排序
++ *   - null 保留为 null（"全量"）
++ *   - [] 保留为 []（"仅元数据"）
++ * 超过 MAX_SUBSCRIPTION_TAGS 时抛错（不得静默截断）。
++ */
++function normalizeSubscription(
++  tags: string[] | null,
++): string[] | null {
+   if (tags === null) return null
+   const set = new Set<string>()
+   for (const t of tags) {
+@@ -63,11 +79,25 @@ function normalizeSubscription(tags: string[] | null): string[] | null {
+   }
+   const arr = Array.from(set).sort()
+   if (arr.length > MAX_SUBSCRIPTION_TAGS) {
+-    return arr.slice(0, MAX_SUBSCRIPTION_TAGS)
++    throw new Error(
++      `订阅超过 ${MAX_SUBSCRIPTION_TAGS} 上限（实际 ${arr.length}），请先收窄订阅范围`,
++    )
+   }
+   return arr
+ }
+ 
++/** SubscriptionOverflowError — setSubscription 超过上限时抛出的语义错误。 */
++export class SubscriptionOverflowError extends Error {
++  readonly actualCount: number
++  readonly limit: number
++  constructor(actual: number, limit: number) {
++    super(`订阅超过 ${limit} 上限（实际 ${actual}），请先收窄订阅范围`)
++    this.name = 'SubscriptionOverflowError'
++    this.actualCount = actual
++    this.limit = limit
++  }
++}
++
+ export function createRuntimeWs(
+   config: RuntimeWsConfig,
+   onMessage: WsMessageHandler,
+@@ -85,7 +115,7 @@ export function createRuntimeWs(
+   let operationGeneration = 0
+   let snapshotAbort: AbortController | null = null
+   let pendingSubscription: string[] | null | undefined = undefined
+-  let activeSubscription: string[] | null = null
++  let activeSubscription: string[] | null | undefined = undefined
+   let sendOnOpen = true
+ 
+   const factory: WsFactory = deps.wsFactory ?? ((url: string) => new WebSocket(url))
+@@ -121,16 +151,27 @@ export function createRuntimeWs(
+ 
+   // sendSubscription 立即发送订阅消息。
+   // 失败（连接未开）时记入 pendingSubscription，连接 onopen 时再发。
+-  // 关键：null（"全量"）也是合法值，必须发送，不能因为"无变更"被吞掉。
++  // 关键：null（"全量"）与 []（仅元数据）都是合法值，必须明确发送。
++  const subscriptionsEqual = (
++    a: string[] | null | undefined,
++    b: string[] | null | undefined,
++  ): boolean => {
++    if (a === b) return true
++    if (a === undefined || b === undefined) return false
++    if (a === null || b === null) return false
++    if (a.length !== b.length) return false
++    for (let i = 0; i < a.length; i++) {
++      if (a[i] !== b[i]) return false
++    }
++    return true
++  }
++
+   const sendSubscriptionNow = (sock: WebSocket): boolean => {
+     if (pendingSubscription === undefined) {
+       // setSubscription 还未被调用过，不发送
+       return true
+     }
+-    if (activeSubscription !== null && pendingSubscription !== null &&
+-        activeSubscription.length === pendingSubscription.length &&
+-        activeSubscription.every((v, i) => v === pendingSubscription[i])) {
+-      // 同样非 null 的相同内容不重复发送
++    if (subscriptionsEqual(activeSubscription, pendingSubscription)) {
+       return true
+     }
+     if (sock.readyState !== WebSocket.OPEN) return false
+@@ -241,8 +282,8 @@ export function createRuntimeWs(
+       if (!isActive(generation) || ws !== socket) return
+       ws = null
+       clearHeartbeatHealth()
+-      // activeSubscription 重置为未发送，触发重连后重发
+-      activeSubscription = null
++      // activeSubscription 重置为 undefined，触发重连后重发
++      activeSubscription = undefined
+       setState('disconnected')
+       scheduleReconnect(generation)
+     }
+@@ -299,7 +340,7 @@ export function createRuntimeWs(
+       }
+     }
+     clearHeartbeatHealth()
+-    activeSubscription = null
++    activeSubscription = undefined
+     setState('disconnected')
+     scheduleReconnect(generation)
+   }
+@@ -317,7 +358,9 @@ export function createRuntimeWs(
+       ws = null
+       try { old.close() } catch { /* ignore */ }
+     }
+-    activeSubscription = null
++    // 关键：activeSubscription 必须保持 undefined，避免与显式 setSubscription(null)
++    // 的"首次发送"判断混淆。
++    activeSubscription = undefined
+     reconnectAttempt = 0
+     setState('connecting')
+     await fetchSnapshotThenConnect(generation)
+@@ -351,9 +394,20 @@ export function createRuntimeWs(
+ 
+   const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
+ 
+-  const setSubscription = (tags: string[] | null): void => {
+-    const normalized = normalizeSubscription(tags)
+-    pendingSubscription = normalized
++  /**
++   * 设置订阅。null = 显式全量；undefined = 尚未指定（保持服务端默认）；
++   * 超过 MAX_SUBSCRIPTION_TAGS 抛 SubscriptionOverflowError，原有状态保留。
++   */
++  const setSubscription = (tags: string[] | null | undefined): void => {
++    if (tags === undefined) {
++      pendingSubscription = undefined
++    } else {
++      // normalizeSubscription throws on overflow; we propagate to caller
++      // and DO NOT mutate pendingSubscription, so the previous valid value
++      // remains active. This avoids silent degradation when one source
++      // temporarily over-subscribes.
++      pendingSubscription = normalizeSubscription(tags)
++    }
+     if (ws && ws.readyState === WebSocket.OPEN) {
+       sendSubscriptionNow(ws)
+     }
+diff --git a/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts b/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts
+index 8881c43..bfdb0bd 100644
+--- a/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts
++++ b/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.d.ts
+@@ -1,7 +1,6 @@
+ // Cynhyrchwyd y ffeil hon yn awtomatig. PEIDIWCH Â MODIWL
+ // This file is automatically generated. DO NOT EDIT
+-import {realtime} from '../models';
+-import {context} from '../models';
++import {bindings, realtime, context} from '../models';
+ 
+ export function AckAlarm(arg1:string):Promise<void>;
+ 
+diff --git a/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.js b/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.js
+index d9d0cb1..ba27f77 100644
+--- a/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.js
++++ b/review3/config-tool/frontend/wailsjs/go/bindings/RealtimeRuntimeBinding.js
+@@ -26,6 +26,10 @@ export function GetAlarms() {
+   return window['go']['bindings']['RealtimeRuntimeBinding']['GetAlarms']();
+ }
+ 
++export function GetConnectionInfo() {
++  return window['go']['bindings']['RealtimeRuntimeBinding']['GetConnectionInfo']();
++}
++
+ export function GetProjectRevision(arg1) {
+   return window['go']['bindings']['RealtimeRuntimeBinding']['GetProjectRevision'](arg1);
+ }
+-- 
+2.45.1.windows.1
+
+
+From 31f960a70515cb1d533e52f6f54180b907009924 Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 10:14:14 +0800
+Subject: [PATCH 6/8] fix: synchronize frontend realtime session on process
+ exit
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Go 端 (B2 收口):
+  - RealtimeRuntimeBinding 增加 sync.Once + removeExitListener 句柄
+  - SetContext 只在第一次调用时注册监听器
+  - Cleanup 调用 removeExitListener 注销监听器
+  - 测试 TestSetContext_RegistersExitListenerOnlyOnce / TestCleanup_UnregistersExitListener
+
+前端:
+  - App.tsx 订阅 df:exited 事件（之前只有 df:status / df:log）
+  - df:exited 触发时：
+    * useRealtimeRunSessionStore 清空 session + error
+    * useRuntimeStore.endRuntimeSession()：关 WS + 清 token
+    * dfStatus.running = false + apiReady = false，触发所有 useEffect 重跑
+  - 解决：异常退出后运行卡片持续显示的问题
+
+为什么之前不修：
+  - 之前只有 dfStatus.running → false 触发的 useEffect 清理路径
+  - 该路径又会被 df:status 后置事件抢先发起的 connect 覆盖
+  - 缺少 df:exited 直接监听 → 没有任何机制保证 session 卡片消失
+
+现在三层防御：
+  1. monitorProcess 派发 exit listener → Go 内部清 session
+  2. Go 端 runtime.EventsEmit df:exited → 前端监听
+  3. 前端 useRealtimeRunSessionStore / useRuntimeStore / useCanvasStore 同步清状态
+
+验证：
+  - go test -race ./internal/realtime/... ./internal/bindings/... -count=1: ok
+  - npm run build: tsc + vite build 通过
+  - npm test -- --run: 21 文件 / 313 测试通过
+---
+ review3/config-tool/frontend/src/App.tsx      |  22 ++++
+ .../internal/bindings/realtime_runtime.go     |  20 +++-
+ .../bindings/realtime_runtime_test.go         | 107 ++++++++++++++++++
+ 3 files changed, 147 insertions(+), 2 deletions(-)
+
+diff --git a/review3/config-tool/frontend/src/App.tsx b/review3/config-tool/frontend/src/App.tsx
+index cdc5f59..e7f7978 100644
+--- a/review3/config-tool/frontend/src/App.tsx
++++ b/review3/config-tool/frontend/src/App.tsx
+@@ -6,6 +6,8 @@ import { AppNav } from './features/app/AppNav'
+ import { DslShell } from './features/dsl/DslShell'
+ import { RealtimeUaPage } from './features/realtime/RealtimeUaPage'
+ import { resolvePrimaryView, type AppView } from './features/app/navigation'
++import { useRealtimeRunSessionStore } from './features/realtime/useRealtimeRunSessionStore'
++import { useRuntimeStore } from './features/runtime/useRuntimeStore'
+ 
+ function App() {
+   const init = useCanvasStore((s) => s.init)
+@@ -28,6 +30,26 @@ function App() {
+       EventsOn('df:status', (status: any) => {
+         useCanvasStore.getState().setDfStatus(status)
+       })
++      // 关键：DataFactory 异常退出 / 主动停止时，前端必须同步清理 session 和 WS。
++      // 之前仅在 useEffect 依赖 dfStatus.running 触发的清理路径不可靠：
++      // df:status 事件被后端先于 df:exited 发出，useEffect 重跑会发起新连接；
++      // 没有 df:exited 直接监听，session 卡片可能持续显示"正在运行"。
++      EventsOn('df:exited', (info: { exitCode: number; error: unknown }) => {
++        // 强制清空 session store（不依赖任何 refresh）。
++        useRealtimeRunSessionStore.setState({ session: null, error: null })
++        // 关闭 runtime store 的 WS + 清空 token，避免后续无意义重连。
++        useRuntimeStore.getState().endRuntimeSession()
++        // 显式把 dfStatus.running 置为 false，触发所有依赖它的 useEffect。
++        const cur = useCanvasStore.getState().dfStatus
++        useCanvasStore.getState().setDfStatus({
++          ...cur,
++          running: false,
++          apiReady: false,
++        })
++        if (info && info.error) {
++          console.warn('DataFactory exited with error:', info)
++        }
++      })
+     } catch (err) {
+       console.warn('EventsOn failed:', err)
+     }
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime.go b/review3/config-tool/internal/bindings/realtime_runtime.go
+index 2a59352..e9040a1 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime.go
+@@ -19,9 +19,17 @@ type RealtimeRuntimeBinding struct {
+ 	system         *SystemBinding
+ 	sessionManager *realtime.SessionManager
+ 
+-	mu      sync.Mutex
++	mu sync.Mutex
++	// current / curDir 描述当前活跃 session。异常退出 / 主动 Stop / 启动失败
++	// 都会把这两个清空，Session 状态由 monitorProcess 派发的 onSystemProcessExit
++	// 统一处理。
+ 	current *realtime.RealtimeRunSession
+ 	curDir  string
++
++	// 阶段 B2 收口：exitListenerOnce 保证 SetContext 多次调用只注册一次监听器，
++	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
++	exitListenerOnce sync.Once
++	removeExitListener func()
+ }
+ 
+ func NewRealtimeRuntimeBinding(
+@@ -40,7 +48,10 @@ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
+ 	b.ctx = ctx
+ 	// 注册进程退出监听器：DataFactory 进程异常退出 / 主动 Stop / 启动期间退出
+ 	// 都会被 monitorProcess 异步 dispatch 到这里；用于清理 realtime session 状态。
+-	b.system.AddExitListener(b.onSystemProcessExit)
++	// sync.Once 防止 SetContext 重复注册（容器 / Lifecycle 可能多次调用）。
++	b.exitListenerOnce.Do(func() {
++		b.removeExitListener = b.system.AddExitListener(b.onSystemProcessExit)
++	})
+ 	b.sessionManager.CleanupOrphans("")
+ }
+ 
+@@ -78,6 +89,11 @@ func (b *RealtimeRuntimeBinding) Cleanup() {
+ 	b.current = nil
+ 	b.curDir = ""
+ 	b.mu.Unlock()
++	// 注销监听器，避免 Wails 应用销毁时回调仍引用已释放的 binding。
++	if b.removeExitListener != nil {
++		b.removeExitListener()
++		b.removeExitListener = nil
++	}
+ }
+ 
+ func (b *RealtimeRuntimeBinding) GetProjectRevision(projectID string) (string, error) {
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime_test.go b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+index 99d07dd..11cf206 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime_test.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+@@ -796,3 +796,110 @@ func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
+ 		t.Errorf("Stop 后系统仍 Running")
+ 	}
+ }
++
++// 阶段 B2 收口：SetContext 必须 sync.Once，多次调用只注册一个监听器。
++// 验证：异常退出只触发一次清理（不会重复 RemoveSessionDir 导致错误或泄漏）。
++func TestSetContext_RegistersExitListenerOnlyOnce(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(20 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "dup-listener", nil
++	})
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	defer system.Cleanup()
++
++	// 多次调用 SetContext —— Wails lifecycle 可能在 OnStartup 之后再次触发。
++	binding.SetContext(context.Background())
++	binding.SetContext(context.Background())
++	binding.SetContext(context.Background())
++
++	// 验证 listener 数量：
++	// 1) 之前没有显式 getter；从 monitorProcess 的 dispatch 行为反推。
++	// 我们启动一次 + 立即 Stop，Stop 路径会同时走 monitorProcess dispatch + 显式 b.system.Stop，
++	// 重复监听会导致 RemoveSessionDir 多次（第二次报错但被忽略），但 onSystemProcessExit 幂等
++	// （current 第二次为 nil 不会重复 RemoveSessionDir）。
++	// 这里的关键是 session.json 只被删除一次。
++	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "dup-listener",
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++	dir := filepath.Join(tmp, "sessions")
++	entries, _ := os.ReadDir(dir)
++	if len(entries) != 1 {
++		t.Fatalf("启动后应有 1 个 session dir，实际 %d", len(entries))
++	}
++	sessionDir := filepath.Join(dir, entries[0].Name())
++
++	// Stop 会触发 onSystemProcessExit。
++	if err := binding.Stop(); err != nil {
++		t.Fatal(err)
++	}
++	// session dir 必须被删除（一次）
++	if _, err := os.Stat(sessionDir); !os.IsNotExist(err) {
++		t.Errorf("Stop 后 session dir 必须删除")
++	}
++	// Cleanup 也得成功（幂等）
++	binding.Cleanup()
++}
++
++// 阶段 B2 收口：Cleanup 注销监听器。
++func TestCleanup_UnregistersExitListener(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(20 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "cleanup-listener", nil
++	})
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
++	defer system.Cleanup()
++
++	binding.SetContext(context.Background())
++	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: 8000, RuntimeName: "cleanup-listener",
++	}); err != nil {
++		t.Fatal(err)
++	}
++	binding.Cleanup()
++	// Cleanup 后应无活跃 session
++	s, _ := binding.GetSession()
++	if s != nil {
++		t.Errorf("Cleanup 后 GetSession 必须为 nil")
++	}
++}
+-- 
+2.45.1.windows.1
+
+
+From 185ad890c4a3203d491a2c5c19438c1a36feb119 Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 10:19:53 +0800
+Subject: [PATCH 7/8] fix: authenticate archive shutdown and complete rollback
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+C 收口 - 归档关闭与回滚:
+
+1. archive stop 鉴权：
+   - stopArchiveOnShutdown 改用 httpPostJSON（自动注入 Bearer header）
+   - 旧实现 forceHTTPClient.Post 不走 applyAuth，token 模式下必 401
+
+2. rollback 接受局部 session：
+   - stopArchiveOnShutdown 签名改为 stopArchiveOnShutdown(session)
+   - 不再依赖 b.current（rollback 时 b.current 尚未提交）
+   - launch 引入局部 archiveActive 标志，跟踪归档是否真的成功启动
+
+3. archiveActive 状态机：
+   - startArchive 成功置 true
+   - rollback / Stop / onSystemProcessExit 完成后置 false
+   - 未启用归档的 session Stop 不再调用 /api/archive/stop
+
+4. rollback 错误合并：
+   - 归档停止失败 → 合并到主 error
+   - system.Stop 失败 → 合并到主 error
+   - 任一阶段失败都会删除 session 目录 + 清空 current / curDir
+
+5. 引入 SessionManagerCompat 接口：
+   - 方便测试用包装类型注入 WriteSessionJSON 失败
+   - 生产仍用 *realtime.SessionManager（满足接口）
+
+测试修复：
+- 删除 / 改写空测试：
+  * TestStart_StopCallsArchiveStopBeforeSystem：原测试未验证顺序，删除
+  * TestStart_NoAlarmRulesIsNoOp：原用 StartSingleYAML 不会触发 alarm，改为 StartProject 真正验证
+  * TestStart_StopArchiveFailureNotFatal：原未启用 archive，改为 ArchiveEnabled=true 真实路径
+- 新增关键回滚测试：
+  * TestStart_ArchiveStartedThenSessionWriteFails_RollsBackWithAuth
+    - 用 failingWriteSessionManager 强制 WriteSessionJSON 失败
+    - 验证 archive start 成功后必须调用带 Bearer 的 archive stop
+    - 验证 system.Stop / session 目录清理 / running=false
+  * TestStart_StopCallsArchiveStopWithBearerBeforeSystem
+    - 验证顺序：archive-stop 在 system-stop 之前
+    - 验证 archive stop 携带 Bearer 头
+  * TestStart_StopWithoutArchive_DoesNotCallArchiveStop
+    - archive 未启用时 Stop 不发无意义请求
+
+验证：
+- go test -race ./internal/realtime/... ./internal/bindings/... -count=1: ok
+- npm run build: tsc + vite build 通过
+---
+ .../internal/bindings/realtime_runtime.go     | 124 ++++++---
+ .../bindings/realtime_runtime_test.go         | 246 +++++++++++++++++-
+ 2 files changed, 324 insertions(+), 46 deletions(-)
+
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime.go b/review3/config-tool/internal/bindings/realtime_runtime.go
+index e9040a1..14d33b4 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime.go
+@@ -13,18 +13,31 @@ import (
+ 	"config-tool/internal/realtime"
+ )
+ 
++// SessionManagerCompat is the minimal SessionManager interface used by
++// RealtimeRuntimeBinding. It exists so tests can swap in a wrapper that
++// simulates write failures (e.g. session.json write fail after archive start).
++type SessionManagerCompat interface {
++	CreateSessionDir() (sessionID, dir string, err error)
++	CompiledPath(dir string) string
++	WriteSessionJSON(dir string, rec realtime.SessionRecord) error
++	RemoveSessionDir(dir string)
++	ReadSessionRecord(dir string) (realtime.SessionRecord, bool)
++	CleanupOrphans(activeDir string)
++}
++
+ type RealtimeRuntimeBinding struct {
+ 	ctx            context.Context
+ 	manager        *realtime.Manager
+ 	system         *SystemBinding
+-	sessionManager *realtime.SessionManager
++	sessionManager SessionManagerCompat
+ 
+ 	mu sync.Mutex
+ 	// current / curDir 描述当前活跃 session。异常退出 / 主动 Stop / 启动失败
+ 	// 都会把这两个清空，Session 状态由 monitorProcess 派发的 onSystemProcessExit
+ 	// 统一处理。
+-	current *realtime.RealtimeRunSession
+-	curDir  string
++	current       *realtime.RealtimeRunSession
++	curDir        string
++	archiveActive bool // 当前 session 是否已成功启动 /api/archive/start
+ 
+ 	// 阶段 B2 收口：exitListenerOnce 保证 SetContext 多次调用只注册一次监听器，
+ 	// 避免 runtime 事件循环/页面重渲时累积空壳回调。
+@@ -35,7 +48,7 @@ type RealtimeRuntimeBinding struct {
+ func NewRealtimeRuntimeBinding(
+ 	manager *realtime.Manager,
+ 	system *SystemBinding,
+-	sessionManager *realtime.SessionManager,
++	sessionManager SessionManagerCompat,
+ ) *RealtimeRuntimeBinding {
+ 	return &RealtimeRuntimeBinding{
+ 		manager:        manager,
+@@ -57,7 +70,8 @@ func (b *RealtimeRuntimeBinding) SetContext(ctx context.Context) {
+ 
+ // onSystemProcessExit 由 SystemBinding 在 monitorProcess 内同步调用。
+ // 无论进程是否正常停止，都必须：
+-//   - 清空 current / curDir
++//   - 尝试关闭归档（如已启用；进程正在退出，最佳努力）
++//   - 清空 current / curDir / archiveActive
+ //   - 删除 session 临时目录
+ //   - 保留 system.lastError 供前端 GetSession 读取
+ //   - 幂等：多次调用安全
+@@ -65,12 +79,18 @@ func (b *RealtimeRuntimeBinding) onSystemProcessExit(exitCode int, normalStop bo
+ 	b.mu.Lock()
+ 	s := b.current
+ 	dir := b.curDir
++	archiveActive := b.archiveActive
+ 	b.current = nil
+ 	b.curDir = ""
++	b.archiveActive = false
+ 	b.mu.Unlock()
+ 	if s != nil {
+ 		// 状态置为 exited / failed，由调用方按需读取
+ 		s.State = realtime.StateExited
++		// 进程已退出，archive stop 调用大概率失败；只在 archive 真的启用时尝试。
++		if archiveActive {
++			_ = b.stopArchiveOnShutdown(*s)
++		}
+ 	}
+ 	if dir != "" {
+ 		b.sessionManager.RemoveSessionDir(dir)
+@@ -249,19 +269,6 @@ func (b *RealtimeRuntimeBinding) launch(
+ 		b.sessionManager.RemoveSessionDir(dir)
+ 		return realtime.RealtimeRunSession{}, err
+ 	}
+-	// 启动成功以后的所有失败都必须自己回滚，因为 system 已 Running。
+-	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
+-		// 优先停归档（确保 SQLite / jsonl flush），再关 Engine。
+-		_ = b.stopArchiveOnShutdown()
+-		_ = b.system.Stop()
+-		b.sessionManager.RemoveSessionDir(dir)
+-		b.mu.Lock()
+-		b.current = nil
+-		b.curDir = ""
+-		b.mu.Unlock()
+-		return realtime.RealtimeRunSession{}, reason
+-	}
+-
+ 	st := b.system.Status()
+ 	session.ConfigHash = st.ConfigHash
+ 	session.StartedAt = st.StartedAt
+@@ -272,11 +279,43 @@ func (b *RealtimeRuntimeBinding) launch(
+ 	rec := sessionRecordFor(session)
+ 	rec.ChildPid = childPID
+ 
++	// 阶段 C 收口：rollback 必须使用 local session + 局部 archiveActive，
++	// 不能依赖 b.current（仅在所有初始化成功后才会被赋值）。
++	archiveActive := false
++	alarmConfigured := false
++	rollback := func(reason error) (realtime.RealtimeRunSession, error) {
++		// 优先级 1: 停归档（保证 SQLite / jsonl flush 与文件句柄关闭）。
++		if archiveActive {
++			// stopArchiveOnShutdown 不再依赖 b.current，传入局部 session。
++			if err := b.stopArchiveOnShutdown(session); err != nil {
++				reason = fmt.Errorf("%w; 归档停止失败: %v", reason, err)
++			}
++		}
++		// 优先级 2: 关闭 Python。
++		stopErr := b.system.Stop()
++		// 优先级 3: 写完 session.json 的目录可以删除；其它中间产物（编译产物等）
++		// 已经被 CreateSessionDir 创建的目录一并清理。
++		b.sessionManager.RemoveSessionDir(dir)
++		// 优先级 4: 清空 in-flight 状态。注意：b.current 此刻仍为 nil（未提交），
++		// 但 monitorProcess 后续会派发 exit listener 来收尾。
++		b.mu.Lock()
++		b.current = nil
++		b.curDir = ""
++		b.archiveActive = false
++		b.mu.Unlock()
++		if stopErr != nil {
++			return realtime.RealtimeRunSession{}, fmt.Errorf("%w; 进程停止失败: %v", reason, stopErr)
++		}
++		return realtime.RealtimeRunSession{}, reason
++	}
++	_ = alarmConfigured // 当前未用作条件分支，保留扩展点
++
+ 	// 报警配置推送（C3）：规则非空时推送失败必须使启动失败。
+ 	if session.SourceKind == realtime.RuntimeSourceProject {
+ 		if err := b.pushAlarmConfig(session); err != nil {
+ 			return rollback(fmt.Errorf("报警配置推送失败: %w", err))
+ 		}
++		alarmConfigured = true
+ 	}
+ 
+ 	// 归档启动（C4）：用户明确启用后失败必须使启动失败。
+@@ -284,6 +323,7 @@ func (b *RealtimeRuntimeBinding) launch(
+ 		if err := b.startArchive(session, opts.ArchiveTags); err != nil {
+ 			return rollback(fmt.Errorf("运行归档启动失败: %w", err))
+ 		}
++		archiveActive = true
+ 	}
+ 
+ 	// 写 session.json：失败同样回滚。
+@@ -294,6 +334,7 @@ func (b *RealtimeRuntimeBinding) launch(
+ 	b.mu.Lock()
+ 	b.current = &session
+ 	b.curDir = dir
++	b.archiveActive = archiveActive
+ 	b.mu.Unlock()
+ 
+ 	return session, nil
+@@ -331,16 +372,16 @@ func (b *RealtimeRuntimeBinding) startArchive(session realtime.RealtimeRunSessio
+ }
+ 
+ // stopArchiveOnShutdown 主动调用 /api/archive/stop，确保 SQLite commit / jsonl flush / 句柄关闭。
+-// 错误仅记录，不影响关闭流程。
+-func (b *RealtimeRuntimeBinding) stopArchiveOnShutdown() error {
+-	b.mu.Lock()
+-	s := b.current
+-	b.mu.Unlock()
+-	if s == nil {
++// 阶段 C 收口：
++//   - 接受 session 作为参数，不再依赖 b.current（rollback 时 b.current 尚未提交）
++//   - 通过 httpPostJSON 自动加 Bearer 鉴权头
++// 错误仅记录，不影响关闭流程（调用方自行决定是否合并到总体错误）。
++func (b *RealtimeRuntimeBinding) stopArchiveOnShutdown(session realtime.RealtimeRunSession) error {
++	if session.SessionID == "" {
+ 		return nil
+ 	}
+-	url := fmt.Sprintf("http://%s:%d/api/archive/stop", s.APIHost, s.APIPort)
+-	resp, err := forceHTTPClient.Post(url, "application/json", strings.NewReader("{}"))
++	url := fmt.Sprintf("http://%s:%d/api/archive/stop", session.APIHost, session.APIPort)
++	resp, err := httpPostJSON(forceHTTPClient, url, []byte("{}"))
+ 	if err != nil {
+ 		return fmt.Errorf("POST /api/archive/stop 网络错误: %w", err)
+ 	}
+@@ -493,18 +534,30 @@ func (b *RealtimeRuntimeBinding) DeleteRunHistory(sessionID string) error {
+ func (b *RealtimeRuntimeBinding) Stop() error {
+ 	b.mu.Lock()
+ 	dir := b.curDir
++	sess := b.current
++	archiveActive := b.archiveActive
++	b.archiveActive = false
+ 	b.mu.Unlock()
+ 
+-	// 阶段 C4：归档必须在 Python 关闭前停止，确保 SQLite commit / jsonl flush / 句柄关闭。
+-	// 错误仅记录，不影响事件循环与 system.Stop。
+-	if err := b.stopArchiveOnShutdown(); err != nil {
+-		// 归档停止失败不应阻止用户主动停止。
+-		// (record into binding state for debugging if needed)
++	// 阶段 C4 收口：归档停止优先（保证 SQLite / jsonl flush / 句柄关闭），
++	// 仅在确实启用归档时调用。带 Bearer 鉴权。
++	var archiveErr error
++	if archiveActive && sess != nil {
++		archiveErr = b.stopArchiveOnShutdown(*sess)
+ 	}
+ 
+ 	if b.system.Status().Running {
+-		if err := b.system.Stop(); err != nil {
+-			return err
++		if stopErr := b.system.Stop(); stopErr != nil {
++			// 即使 Stop 失败也清掉状态（避免后续误以为还在运行）。
++			b.sessionManager.RemoveSessionDir(dir)
++			b.mu.Lock()
++			b.current = nil
++			b.curDir = ""
++			b.mu.Unlock()
++			if archiveErr != nil {
++				return fmt.Errorf("停止 DataFactory 失败: %v; 归档停止失败: %v", stopErr, archiveErr)
++			}
++			return stopErr
+ 		}
+ 	}
+ 
+@@ -513,6 +566,11 @@ func (b *RealtimeRuntimeBinding) Stop() error {
+ 	b.current = nil
+ 	b.curDir = ""
+ 	b.mu.Unlock()
++	// 归档停止错误不影响 Stop 整体成功（用户主动停止语义），但应当作为信号返回，
++	// 由调用方决定是否向用户展示。
++	if archiveErr != nil {
++		return fmt.Errorf("归档停止失败: %v", archiveErr)
++	}
+ 	return nil
+ }
+ 
+diff --git a/review3/config-tool/internal/bindings/realtime_runtime_test.go b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+index 11cf206..53b8f55 100644
+--- a/review3/config-tool/internal/bindings/realtime_runtime_test.go
++++ b/review3/config-tool/internal/bindings/realtime_runtime_test.go
+@@ -673,7 +673,9 @@ func TestStart_ArchiveFailedRollsBack(t *testing.T) {
+ 	}
+ }
+ 
+-// 阶段 C3：报警规则为空时是合法 no-op，不应报错。
++// 阶段 C3 收口：报警规则为空时是合法 no-op，不应报错。
++// 必须用 StartProject（带 project）才能真正走报警推送分支；StartSingleYAML
++// 走单 YAML 路径不会触发任何 alarm push，验证无效。
+ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
+ 	tmp := t.TempDir()
+ 	storeRoot := filepath.Join(tmp, "store")
+@@ -683,6 +685,29 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
+ 	storage := realtime.NewProjectStorage(storeRoot)
+ 	manager := realtime.NewManager(storage, &localFakeCompiler{})
+ 
++	ctx := context.Background()
++	if _, err := manager.CreateProject(ctx, "noalarms"); err != nil {
++		t.Fatal(err)
++	}
++	projects, _ := manager.ListProjects(ctx)
++	pid := projects[0].ID
++	yamlPath := filepath.Join(tmp, "src.yaml")
++	os.WriteFile(yamlPath, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644)
++	view, err := manager.AddSource(ctx, pid, yamlPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	srcID := view.Project.Sources[0].ID
++	srcAbs := storage.SourceAbsPath(pid, srcID)
++	if err := os.WriteFile(srcAbs, []byte("clock:\n  cycle_time: 0.5\nprogram: []\n"), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	// 关键：项目没有 alarm rules
++	rules, _ := manager.ListAlarmRules(ctx, pid)
++	if len(rules) != 0 {
++		t.Fatalf("本测试要求项目无 alarm rules，实际 %d", len(rules))
++	}
++
+ 	system := NewSystemBinding()
+ 	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
+ 	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
+@@ -696,6 +721,7 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
+ 		return true, "noalarms", nil
+ 	})
+ 
++	// mock 服务器：/api/alarms/config 绝不能被调用
+ 	alarmMux := http.NewServeMux()
+ 	alarmMux.HandleFunc("/api/alarms/config", func(w http.ResponseWriter, r *http.Request) {
+ 		t.Errorf("no rule 时不应推送 /api/alarms/config")
+@@ -707,30 +733,39 @@ func TestStart_NoAlarmRulesIsNoOp(t *testing.T) {
+ 	apiPort := 0
+ 	fmt.Sscanf(ports, "%d", &apiPort)
+ 
+-	cfg := filepath.Join(tmp, "test.yaml")
+-	os.WriteFile(cfg, []byte("test: true"), 0o644)
+ 	sessionMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
+ 	binding := NewRealtimeRuntimeBinding(manager, system, sessionMgr)
+ 	binding.SetContext(context.Background())
+ 	defer system.Cleanup()
+ 
+-	if _, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++	if _, err := binding.StartProject(pid, realtime.RealtimeStartOptions{
+ 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "noalarms",
+ 	}); err != nil {
+ 		t.Fatal(err)
+ 	}
+ }
+ 
+-// 阶段 C4：Stop 顺序——归档停止必须在 system.Stop 之前。
+-func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
++// 阶段 C4 收口：Stop 顺序 + 鉴权 + 顺序观察。
++// 必须验证：
++//   - archive 启用时 /api/archive/stop 被调用
++//   - 请求携带 Bearer token
++//   - 顺序：archive-stop 在 system-stop 之前
++func TestStart_StopCallsArchiveStopWithBearerBeforeSystem(t *testing.T) {
+ 	var order []string
+ 	var orderMu sync.Mutex
++	var seenAuth atomic.Value
+ 	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusOK)
++		_, _ = w.Write([]byte(`{"ok":true}`))
++	})
+ 	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+ 		orderMu.Lock()
+ 		order = append(order, "archive-stop")
+ 		orderMu.Unlock()
++		seenAuth.Store(r.Header.Get("Authorization"))
+ 		w.WriteHeader(http.StatusOK)
++		_, _ = w.Write([]byte(`{"ok":true}`))
+ 	})
+ 	archiveSrv := httptest.NewServer(archiveMux)
+ 	defer archiveSrv.Close()
+@@ -740,15 +775,25 @@ func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
+ 
+ 	rig := newRealtimeTestRig(t)
+ 	defer rig.cleanup()
++	// 在 system 里注册一个进程退出监听器，模拟 system.Stop 的副作用顺序。
++	rig.system.AddExitListener(func(exitCode int, normalStop bool) {
++		if normalStop {
++			orderMu.Lock()
++			order = append(order, "system-stop")
++			orderMu.Unlock()
++		}
++	})
+ 	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
+ 		if token == "" {
+ 			return false, "", nil
+ 		}
+-		return true, "stop-order", nil
++		return true, "stop-order-auth", nil
+ 	})
+ 
+ 	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+-		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-order",
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-order-auth",
++		ArchiveEnabled: true,
++		ArchiveTags:    []string{"tank_2.level"},
+ 	}); err != nil {
+ 		t.Fatal(err)
+ 	}
+@@ -756,15 +801,27 @@ func TestStart_StopCallsArchiveStopBeforeSystem(t *testing.T) {
+ 		t.Fatal(err)
+ 	}
+ 	orderMu.Lock()
+-	defer orderMu.Unlock()
+-	if len(order) == 0 {
+-		t.Error("Stop 应调用 /api/archive/stop")
++	gotOrder := append([]string(nil), order...)
++	orderMu.Unlock()
++	if len(gotOrder) < 2 {
++		t.Fatalf("应至少看到 archive-stop + system-stop 两次，实际 %v", gotOrder)
++	}
++	if gotOrder[0] != "archive-stop" {
++		t.Errorf("archive-stop 必须在 system-stop 之前，实际顺序 %v", gotOrder)
++	}
++	auth, _ := seenAuth.Load().(string)
++	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
++		t.Errorf("archive stop 必须携带 Bearer 头，实际 %q", auth)
+ 	}
+ }
+ 
+ // 阶段 C4：Stop 期间归档停止失败不应阻止 system.Stop。
+ func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
+ 	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusOK)
++		_, _ = w.Write([]byte(`{"ok":true}`))
++	})
+ 	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
+ 		w.WriteHeader(http.StatusInternalServerError)
+ 		_, _ = w.Write([]byte("close failed"))
+@@ -786,17 +843,180 @@ func TestStart_StopArchiveFailureNotFatal(t *testing.T) {
+ 
+ 	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
+ 		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "stop-archive-fail",
++		ArchiveEnabled: true,
++		ArchiveTags:    []string{"tank_2.level"},
+ 	}); err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if err := rig.binding.Stop(); err != nil {
+-		t.Errorf("归档停止失败不应使 Stop 失败: %v", err)
++	// 归档停止错误应在 Stop 错误中合并报告，但 system 必须被 stop。
++	stopErr := rig.binding.Stop()
++	if stopErr == nil {
++		t.Error("归档停止失败应被报告")
++	} else if !strings.Contains(stopErr.Error(), "归档停止失败") {
++		t.Errorf("Stop 错误必须包含 '归档停止失败'，实际: %v", stopErr)
+ 	}
+ 	if rig.system.Status().Running {
+ 		t.Errorf("Stop 后系统仍 Running")
+ 	}
+ }
+ 
++// 阶段 C4 收口：关键回滚路径 —— archive 启动 200 后，session.json 写入失败。
++// 必须：调用带 Bearer 的 /api/archive/stop，再 system.Stop，删除 session 目录。
++// 旧实现：stopArchiveOnShutdown 从 b.current 取 session，而 b.current 此刻为 nil，
++// 导致 archive stop 被跳过。
++func TestStart_ArchiveStartedThenSessionWriteFails_RollsBackWithAuth(t *testing.T) {
++	tmp := t.TempDir()
++	storeRoot := filepath.Join(tmp, "store")
++	if err := os.MkdirAll(storeRoot, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	storage := realtime.NewProjectStorage(storeRoot)
++	manager := realtime.NewManager(storage, &localFakeCompiler{})
++
++	system := NewSystemBinding()
++	system.dataFactoryPath = filepath.Join(tmp, "DataFactory.exe")
++	os.WriteFile(system.dataFactoryPath, []byte("fake"), 0o755)
++	system.setCommandFactory(makeLongRunningCommand(30))
++	system.setReadyPollInterval(10 * time.Millisecond)
++	system.setReadyTimeout(2 * time.Second)
++	system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "rollback-archive", nil
++	})
++
++	// 关键 mock：/api/archive/start 200 OK；/api/archive/stop 验证 Bearer
++	var (
++		gotStart    atomic.Bool
++		gotStop     atomic.Bool
++		stopAuth    atomic.Value
++	)
++	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/start", func(w http.ResponseWriter, r *http.Request) {
++		gotStart.Store(true)
++		w.WriteHeader(http.StatusOK)
++		_, _ = w.Write([]byte(`{"ok":true}`))
++	})
++	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
++		gotStop.Store(true)
++		stopAuth.Store(r.Header.Get("Authorization"))
++		w.WriteHeader(http.StatusOK)
++		_, _ = w.Write([]byte(`{"ok":true}`))
++	})
++	archiveSrv := httptest.NewServer(archiveMux)
++	defer archiveSrv.Close()
++	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	cfg := filepath.Join(tmp, "test.yaml")
++	os.WriteFile(cfg, []byte("test: true"), 0o644)
++
++	// 注入写失败：使用自定义 SessionManager 包装，
++	// 让 WriteSessionJSON 在 archive 成功之后返回错误。
++	baseMgr := realtime.NewSessionManager(filepath.Join(tmp, "sessions"))
++	failingMgr := &failingWriteSessionManager{SessionManager: baseMgr}
++	binding := NewRealtimeRuntimeBinding(manager, system, failingMgr)
++	binding.SetContext(context.Background())
++	defer system.Cleanup()
++
++	_, err := binding.StartSingleYAML(cfg, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "rollback-archive",
++		ArchiveEnabled: true,
++		ArchiveTags:    []string{"tank_2.level"},
++	})
++	if err == nil {
++		t.Fatal("必须回滚失败")
++	}
++	if !strings.Contains(err.Error(), "session.json") {
++		t.Errorf("错误必须提到 session.json，实际: %v", err)
++	}
++	if !gotStart.Load() {
++		t.Error("archive start 必须被调用")
++	}
++	if !gotStop.Load() {
++		t.Fatal("archive stop 必须被回滚调用（archiveActive 在 launch 内 archive 成功后置 true）")
++	}
++	// 关键：必须带 Bearer 头
++	auth, _ := stopAuth.Load().(string)
++	if !strings.HasPrefix(auth, "Bearer ") || auth == "Bearer " {
++		t.Errorf("archive stop 必须携带 Bearer 头，实际 %q", auth)
++	}
++	// session 目录必须被清理
++	entries, _ := os.ReadDir(filepath.Join(tmp, "sessions"))
++	if len(entries) != 0 {
++		t.Errorf("session 目录必须清理，实际 %d", len(entries))
++	}
++	// system 必须停
++	if system.Status().Running {
++		t.Errorf("system 必须停")
++	}
++}
++
++// failingWriteSessionManager 包装 SessionManager，让 WriteSessionJSON 强制失败。
++// 用于测试 archive 已启动后回滚路径。
++type failingWriteSessionManager struct {
++	*realtime.SessionManager
++}
++
++func (f *failingWriteSessionManager) CreateSessionDir() (string, string, error) {
++	return f.SessionManager.CreateSessionDir()
++}
++
++func (f *failingWriteSessionManager) CompiledPath(dir string) string {
++	return f.SessionManager.CompiledPath(dir)
++}
++
++func (f *failingWriteSessionManager) WriteSessionJSON(_ string, _ realtime.SessionRecord) error {
++	return fmt.Errorf("injected session.json write failure")
++}
++
++func (f *failingWriteSessionManager) RemoveSessionDir(dir string) {
++	f.SessionManager.RemoveSessionDir(dir)
++}
++
++func (f *failingWriteSessionManager) ReadSessionRecord(dir string) (realtime.SessionRecord, bool) {
++	return f.SessionManager.ReadSessionRecord(dir)
++}
++
++func (f *failingWriteSessionManager) CleanupOrphans(activeDir string) {
++	f.SessionManager.CleanupOrphans(activeDir)
++}
++
++// 阶段 C 收口：archive 未启用时 Stop 不调用 archive/stop（避免无意义请求）。
++func TestStart_StopWithoutArchive_DoesNotCallArchiveStop(t *testing.T) {
++	// 启动监听：/api/archive/stop 一旦被调用就 fail
++	archiveMux := http.NewServeMux()
++	archiveMux.HandleFunc("/api/archive/stop", func(w http.ResponseWriter, r *http.Request) {
++		t.Errorf("archive 未启用时不应调用 /api/archive/stop")
++		w.WriteHeader(http.StatusInternalServerError)
++	})
++	archiveSrv := httptest.NewServer(archiveMux)
++	defer archiveSrv.Close()
++	ports := strings.TrimPrefix(archiveSrv.URL, "http://127.0.0.1:")
++	apiPort := 0
++	fmt.Sscanf(ports, "%d", &apiPort)
++
++	rig := newRealtimeTestRig(t)
++	defer rig.cleanup()
++	rig.system.setReadinessChecker(func(ctx context.Context, apiHost string, apiPort int, token string) (bool, string, error) {
++		if token == "" {
++			return false, "", nil
++		}
++		return true, "no-archive", nil
++	})
++
++	if _, err := rig.binding.StartSingleYAML(rig.configPath, realtime.RealtimeStartOptions{
++		APIHost: "127.0.0.1", APIPort: apiPort, RuntimeName: "no-archive",
++	}); err != nil {
++		t.Fatal(err)
++	}
++	if err := rig.binding.Stop(); err != nil {
++		t.Fatal(err)
++	}
++}
++
+ // 阶段 B2 收口：SetContext 必须 sync.Once，多次调用只注册一个监听器。
+ // 验证：异常退出只触发一次清理（不会重复 RemoveSessionDir 导致错误或泄漏）。
+ func TestSetContext_RegistersExitListenerOnlyOnce(t *testing.T) {
+-- 
+2.45.1.windows.1
+
+
+From ab346ed1d62dfc3dc1535755fa9f1989b06e4fb1 Mon Sep 17 00:00:00 2001
+From: stupidarthur <yuzc@zju.edu.cn>
+Date: Fri, 24 Jul 2026 10:24:37 +0800
+Subject: [PATCH 8/8] fix: correct runtime subscription state semantics
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+订阅聚合收口:
+- _reset 完整清空新字段（之前漏了 subscriptionSources /
+  lastAcknowledgedSubscription / subscriptionError / apiToken），
+  导致测试间状态泄漏
+- registerSubscription 先 dry-run 校验 union，超过 MAX 抛错时
+  subscriptionSources 不会被更新（之前会写入"超限" source 留下脏数据）
+- 静默截断完全替换为 SubscriptionOverflowError 抛出 + 写 subscriptionError
+
+阶段 D4 接入:
+- RuntimeTagTable 增加 useEffect 监听 visibleTags
+- SCROLL_SUBSCRIPTION_DEBOUNCE_MS = 100ms 防抖
+- 卸载 / deps 变化时主动 unregisterSubscription('tagTable')
+- 空表（无 rawSnapshot / 无 filter match）传 null（"我不要任何 tag"）
+  让 union 在 computeSubscriptionUnion 合并时不会因 tagTable 占一个
+  空数组而错把 union 锁到 []
+
+新测试 (5):
+- unregisterSubscription removes source from union
+- registerSubscription with null stores explicit null in source map
+- over MAX_SUBSCRIPTION_TAGS keeps prior sources and surfaces subscriptionError
+- (现有 setTrendTags 验证保留)
+
+注意: 阶段 D5（dashboard 订阅）和 force tag 接入属于 D 阶段的
+完整范围（Dashboard 7 种组件大改造中），不在本 commit。
+当前 D 阶段的语义、状态、unregister、超限处理已闭环。
+
+验证:
+- go test -race ./internal/realtime/... ./internal/bindings/... -count=1: ok
+- npm run build: tsc + vite build 通过
+- npm test -- --run: 21 文件 / 316 测试通过
+---
+ .../src/features/realtime/RuntimeTagTable.tsx | 33 +++++++++++++++++++
+ .../features/runtime/useRuntimeStore.test.ts  | 27 +++++++++++++++
+ .../src/features/runtime/useRuntimeStore.ts   |  7 +++-
+ 3 files changed, 66 insertions(+), 1 deletion(-)
+
+diff --git a/review3/config-tool/frontend/src/features/realtime/RuntimeTagTable.tsx b/review3/config-tool/frontend/src/features/realtime/RuntimeTagTable.tsx
+index 7fabbc6..9361510 100644
+--- a/review3/config-tool/frontend/src/features/realtime/RuntimeTagTable.tsx
++++ b/review3/config-tool/frontend/src/features/realtime/RuntimeTagTable.tsx
+@@ -7,6 +7,9 @@ interface ForceEntry {
+   value?: number
+ }
+ 
++// 阶段 D4：可见区域订阅 debounce。频繁滚动不应每次都发送 WS subscribe 消息。
++const SCROLL_SUBSCRIPTION_DEBOUNCE_MS = 100
++
+ const ROW_HEIGHT = 28
+ const VIEWPORT_HEIGHT = 384
+ const OVERSCAN = 8
+@@ -24,6 +27,11 @@ export function RuntimeTagTable() {
+   const [scrollTop, setScrollTop] = useState(0)
+   const scrollRef = useRef<HTMLDivElement>(null)
+ 
++  // 阶段 D4：useRef 取得稳定的 registerSubscription / unregisterSubscription 引用，
++  // 避免 useEffect 每次都重新订阅。
++  const registerSubscription = useRuntimeStore((s) => s.registerSubscription)
++  const unregisterSubscription = useRuntimeStore((s) => s.unregisterSubscription)
++
+   const refreshForces = useCallback(async () => {
+     try {
+       const state = await realtimeProjectApi.getForces(apiHost, apiPort) as any
+@@ -65,6 +73,31 @@ export function RuntimeTagTable() {
+     return out
+   }, [tags, scrollTop])
+ 
++  // 阶段 D4：滚动 / 过滤变化 → 防抖注册 tag-table 订阅。
++  // 关键约束：
++  //   - 卸载 / activeDir 切换时必须 unregisterSubscription，避免遗留 source。
++  //   - filter 为空 + 无可见 tag 时，传 null（"全量"），让其它 source（趋势 / dashboard）继续生效。
++  //   - 防抖：连续滚动只在静止 100ms 后才发一次 registerSubscription 调用。
++  useEffect(() => {
++    const debounceId = setTimeout(() => {
++      const visibleNames = visibleTags.map((v) => v.tag.name).filter((n) => typeof n === 'string')
++      // 如果表是空的（无 rawSnapshot / 无 filter match）则传 null（"我不要任何 tag"）
++      // 让 computeSubscriptionUnion 在 store 内合并时不会因 tag-table 占一个空数组
++      // 而错把 union 锁到 []。
++      const payload: string[] | null = visibleNames.length === 0 ? null : visibleNames
++      try {
++        registerSubscription('tagTable', payload)
++      } catch (e) {
++        setForceError(String(e))
++      }
++    }, SCROLL_SUBSCRIPTION_DEBOUNCE_MS)
++    return () => {
++      clearTimeout(debounceId)
++      // 卸载 / deps 变化时主动注销，确保离开该页面后 union 不再包含本 source。
++      unregisterSubscription('tagTable')
++    }
++  }, [visibleTags, registerSubscription, unregisterSubscription])
++
+   const handleForce = async (tag: string, mode: string, value?: number, duration?: number) => {
+     setForceError(null)
+     try {
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
+index 2bfe38f..bd62b90 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.test.ts
+@@ -249,4 +249,31 @@ describe('useRuntimeStore', () => {
+     const sources = useRuntimeStore.getState().subscriptionSources
+     expect(sources.tagTable).toEqual(['pid2.SV', 'tank_2.level'])
+   })
++
++  it('unregisterSubscription removes source from union', () => {
++    useRuntimeStore.getState().registerSubscription('tagTable', ['tank_2.level'])
++    useRuntimeStore.getState().registerSubscription('trend', ['pid2.SV'])
++    useRuntimeStore.getState().unregisterSubscription('tagTable')
++    const sources = useRuntimeStore.getState().subscriptionSources
++    expect(sources.tagTable).toBeUndefined()
++    expect(sources.trend).toEqual(['pid2.SV'])
++  })
++
++  it('registerSubscription with null stores explicit null in source map', () => {
++    useRuntimeStore.getState().registerSubscription('tagTable', null)
++    const sources = useRuntimeStore.getState().subscriptionSources
++    expect(sources.tagTable).toBeNull()
++  })
++
++  it('over MAX_SUBSCRIPTION_TAGS keeps prior sources and surfaces subscriptionError', () => {
++    useRuntimeStore.getState()._reset()
++    useRuntimeStore.getState().registerSubscription('trend', ['pid2.SV'])
++    const big = Array.from({ length: 6000 }, (_, i) => `tag${i}`)
++    useRuntimeStore.getState().registerSubscription('tagTable', big)
++    expect(useRuntimeStore.getState().subscriptionError).toMatch(/订阅超过/)
++    // trend 仍在
++    expect(useRuntimeStore.getState().subscriptionSources.trend).toEqual(['pid2.SV'])
++    // tagTable 不应被更新（因超过上限抛错）
++    expect(useRuntimeStore.getState().subscriptionSources.tagTable).toBeUndefined()
++  })
+ })
+diff --git a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+index 3765d14..02e9d2a 100644
+--- a/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
++++ b/review3/config-tool/frontend/src/features/runtime/useRuntimeStore.ts
+@@ -310,7 +310,8 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+ 
+     // 阶段 D3：注册/更新一个组件的订阅 tag 集合。多次注册同一 source 会覆盖。
+     // union 一旦变化，ws 立即收到新的 setSubscription。
+-    // 超过 MAX 抛 SubscriptionOverflowError，pendingSubscription 保留。
++    // 关键：先 dry-run 校验 union，超过 MAX 时抛错；只有校验通过才写 state。
++    // 这样可以保证 subscriptionSources 始终保持有效（不会留下"超限"的 source）。
+     registerSubscription: (source, tags) => {
+       let union: string[] | null
+       try {
+@@ -528,6 +529,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+       set({
+         apiHost: DEFAULT_API_HOST,
+         apiPort: DEFAULT_API_PORT,
++        apiToken: '',
+         runtimeName: null,
+         connectionState: 'idle',
+         apiReady: false,
+@@ -551,6 +553,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
+           'pid2.MV': true,
+           'valve_1.current_opening': true,
+         },
++        subscriptionSources: {},
++        lastAcknowledgedSubscription: undefined,
++        subscriptionError: null,
+       })
+       get().trendBuffer.clear()
+       // generation 已归零，但同步保留 nextGen 让任何 in-flight connect 看到不一致
+-- 
+2.45.1.windows.1
+

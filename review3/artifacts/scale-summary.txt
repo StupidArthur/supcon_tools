@@ -1,0 +1,6 @@
+﻿=== realtime-scale-test ===
+SCALE_RESULT catalog=50000 domRows=30 subscribed=28 renderMs=193 scrollMs=188 snapshotMs=623
+test count: 3
+PASS: scale test
+
+ALL PASSED

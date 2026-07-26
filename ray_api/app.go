@@ -55,6 +55,16 @@ func (a *App) startup(ctx context.Context) {
 
 	dbPath := a.resolveDBPath(cfg.DBPath)
 	logx.L().Info("app starting", "clusters", len(cfg.Clusters), "dbPath", dbPath)
+	logx.Event("app", "app_starting",
+		"clusters", len(cfg.Clusters),
+		"cluster_ids", clusterIDs(cfg.Clusters),
+		"sample_every_sec", cfg.SampleInterval(),
+		"timeout_sec", cfg.TimeoutSec,
+		"concurrency", cfg.Concurrency,
+		"global_concurrency", cfg.GlobalConcurrency,
+		"retention_days", cfg.EffectiveRetentionDays(),
+		"cleanup_every_hours", cfg.EffectiveCleanupEveryHours(),
+		"db_path", dbPath)
 
 	store, err := storage.Open(dbPath)
 	if err != nil {
@@ -72,8 +82,10 @@ func (a *App) startup(ctx context.Context) {
 		dbg = append(dbg, "manager created, clusters="+itoa(len(cfg.Clusters)))
 
 		a.startCleanupLoop(cfg)
+		logx.Event("app", "runtime_initialized", "store_ok", true, "collectors", len(cfg.Clusters))
 	} else {
 		dbg = append(dbg, "manager NOT created (store nil)")
+		logx.Event("error", "runtime_initialization_failed", "store_ok", false, "db_path", dbPath)
 	}
 
 	if err := dumpDebug(dbg); err != nil {
@@ -185,6 +197,8 @@ func (a *App) shutdown(ctx context.Context) {
 		_ = a.store.Close()
 	}
 	logx.L().Info("app shutdown")
+	logx.Event("app", "app_shutdown")
+	logx.Close()
 }
 
 // ---- 采集控制 ----
@@ -248,10 +262,11 @@ func (a *App) GetGlobalPerf() model.GlobalPerf {
 // ---- 告警 ----
 
 func (a *App) ListAlerts(clusterID string) []model.Alert {
-	if a.alerts == nil {
+	am := a.alertManager()
+	if am == nil {
 		return nil
 	}
-	res, err := a.alerts.ListActive(clusterID)
+	res, err := am.ListActive(clusterID)
 	if err != nil {
 		logx.L().Warn("list alerts failed", "err", err)
 		return nil
@@ -260,10 +275,11 @@ func (a *App) ListAlerts(clusterID string) []model.Alert {
 }
 
 func (a *App) CountAlerts(clusterID string) int {
-	if a.alerts == nil {
+	am := a.alertManager()
+	if am == nil {
 		return 0
 	}
-	n, err := a.alerts.CountActive(clusterID)
+	n, err := am.CountActive(clusterID)
 	if err != nil {
 		return 0
 	}
@@ -271,14 +287,22 @@ func (a *App) CountAlerts(clusterID string) int {
 }
 
 func (a *App) AckAlert(alertID int64) bool {
-	if a.alerts == nil {
+	am := a.alertManager()
+	if am == nil {
 		return false
 	}
-	if err := a.alerts.Ack(alertID); err != nil {
+	if err := am.Ack(alertID); err != nil {
 		logx.L().Warn("ack alert failed", "err", err)
 		return false
 	}
 	return true
+}
+
+func (a *App) alertManager() *alert.Manager {
+	a.mu.Lock()
+	am := a.alerts
+	a.mu.Unlock()
+	return am
 }
 
 // ---- 当前态查询 ----
@@ -392,19 +416,11 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 	}
 
 	if a.manager != nil {
-		needReload := old.SampleEvery != cfg.SampleEvery ||
-			old.TimeoutSec != cfg.TimeoutSec ||
-			old.Concurrency != cfg.Concurrency ||
-			old.GlobalConcurrency != cfg.GlobalConcurrency
-		if needReload {
-			a.manager.ReloadAll(cfg)
-		} else {
-			a.manager.SyncClusters(old.Clusters, cfg.Clusters)
-		}
-
-		if old.Thresholds != cfg.Thresholds || old.RecoverConsecutive != cfg.RecoverConsecutive {
-			a.alerts = alert.NewManager(a.store, cfg.RecoverConsecutive)
-			a.manager.SetAlertChecker(a.alerts)
+		a.manager.ApplyConfig(cfg)
+		if old.RecoverConsecutive != cfg.RecoverConsecutive {
+			if am := a.alertManager(); am != nil {
+				am.UpdateRecoverConsecutive(cfg.RecoverConsecutive)
+			}
 		}
 	}
 
@@ -420,7 +436,25 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 	a.mu.Unlock()
 
 	logx.L().Info("config saved", "clusters", len(cfg.Clusters), "sampleEvery", cfg.SampleEvery)
+	logx.Event("app", "config_saved",
+		"clusters", len(cfg.Clusters),
+		"cluster_ids", clusterIDs(cfg.Clusters),
+		"sample_every_sec", cfg.SampleInterval(),
+		"timeout_sec", cfg.TimeoutSec,
+		"concurrency", cfg.Concurrency,
+		"global_concurrency", cfg.GlobalConcurrency,
+		"recover_consecutive", cfg.RecoverConsecutive,
+		"retention_days", cfg.EffectiveRetentionDays(),
+		"cleanup_every_hours", cfg.EffectiveCleanupEveryHours())
 	return SaveConfigResult{Success: true}
+}
+
+func clusterIDs(clusters []config.ClusterConfig) []string {
+	ids := make([]string, 0, len(clusters))
+	for _, cluster := range clusters {
+		ids = append(ids, cluster.ID)
+	}
+	return ids
 }
 
 func (a *App) AddCluster(cl config.ClusterConfig) SaveConfigResult {
@@ -443,7 +477,7 @@ func (a *App) AddCluster(cl config.ClusterConfig) SaveConfigResult {
 	a.mu.Unlock()
 
 	if a.manager != nil {
-		a.manager.AddCluster(cl)
+		a.manager.ApplyConfig(newCfg)
 	}
 	return SaveConfigResult{Success: true}
 }
@@ -469,7 +503,7 @@ func (a *App) RemoveCluster(id string) SaveConfigResult {
 	a.mu.Unlock()
 
 	if a.manager != nil {
-		a.manager.RemoveCluster(id)
+		a.manager.ApplyConfig(newCfg)
 	}
 	return SaveConfigResult{Success: true}
 }
@@ -504,7 +538,7 @@ func (a *App) UpdateCluster(cl config.ClusterConfig) SaveConfigResult {
 	a.mu.Unlock()
 
 	if a.manager != nil {
-		a.manager.UpdateCluster(cl)
+		a.manager.ApplyConfig(newCfg)
 	}
 	return SaveConfigResult{Success: true}
 }

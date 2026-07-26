@@ -1,520 +1,1646 @@
-# Code Review TODO
+下面内容直接作为一个完整任务交给 Agent。当前基线已经确认：`7118e09` 中虽然增加了 `DataFactoryServiceManager` 和 Python 常驻服务 API，但 `InitService()` 未被启动流程调用；实时运行仍调用旧 `SystemBinding.Start()` 创建独立进程；校验和编译仍使用 `exec.CommandContext()`；批量接口仍返回 501；前端仍传入端口 8000。
 
-> 最近一次审查时间：2026-07-09（第二轮）
->
-> 所有 🔴/🟡 问题均已修复，原文档里描述的 bug 已与代码对齐。
+# Agent 任务：完成 DataFactory 常驻服务的真实接线与全链路迁移
 
----
+## 0. 任务目标
 
-## 📌 会话恢复卡片（新会话开场提示）
+基于当前 `main`：
 
-> **如果你刚开新会话、从 `todo.md` 读起——这段就是你需要的全部上下文。**
+```text
+7118e09
+chore(frontend): 同步 Wails 生成绑定
+```
 
-**项目**：`F:\github\supcon_tools\review3`，叫 **DataFactory**，是 `data_factory_server` 的单 exe 精简单进程形态。
-**目标**：双击 `DataFactory.exe` 就能在任意干净 Python 环境运行，**无 Redis / 无 DuckDB / 无 Web / 无前端**。
-**核心**：每个 YAML 配置 → 一个 Engine 线程 + 一个 OPC UA Server，内存 `dict` + `queue.Queue` 通信。
+完成常驻 DataFactory 服务的真正落地。
 
-**核心文件**（改代码时优先看这里）：
-- `standalone_main.py` — CLI 入口（参数解析、batch 模式、daemon 模式、端口分配）
-- `controller/engine.py` — `UnifiedEngine`，含 SAFE STATE（节点连续 5 次异常切安全模式）+ `_safe_state` snapshot 字段
-- `controller/expression.py` — `ExpressionNode` / `AlgorithmNode` / `InstanceProxy` / `AttributeProxy` / `VariableAccessor`
-- `controller/parser.py` — `DSLParser`，**支持任意深度 namespace** 的 `[-N]` lag 分析（如 `ns1.pid1.mv[-30]`）
-- `controller/clock.py` — `Clock` 双模式（REALTIME/GENERATOR）
-- `controller/variable.py` — `VariableStore` + `RingBuffer`
-- `controller/factory.py` / `controller/instance.py` — 实例工厂 + 类型注册表
-- `datacenter/opcua_server.py` — `StandaloneOpcuaServer`，含 `wait_ready(timeout)` + `join()` 同步信号
+完成后必须满足：
 
-**已被本次 review 彻底清理的模块**（不要尝试 import 它们）：
-- ❌ `controller/realtime_publisher.py`、`controller/playback_engine.py`
-- ❌ `controller/diagnostics/playback_diagnostics.py`
-- ❌ `components/message_bus/` 整目录
-- ❌ `datacenter/storage_service.py`、`datacenter/diagnostics/`、`datacenter/history_query.py`
-- ❌ `services/` 整目录、`web_backend/`、`web_frontend/`
-- ❌ Redis / MessageBus / StorageService / WebService / StorageDiagnostic 全部删除
-- ⚠️ `controller/engine.py:enable_realtime_data()` 现在是**永久 no-op + warning**，不要期望它能连 Redis
+```text
+启动 Config Tool
+→ 自动创建 EXE 同级 project/ 和 template/
+→ 无窗口启动 EXE 同级 DataFactoryService.exe
+→ 整个 Config Tool 会话只启动一个 DataFactoryService 进程
+→ 打开工程、校验、编译、批量仿真、格式化导出、实时启动和停止全部复用该进程
+→ 启动/停止实时运行只改变 Engine 和 OPC UA，不结束后台服务进程
+→ 退出 Config Tool 后后台服务退出
+```
 
-**依赖**：`requirements.txt` 只 4 个包：`asyncua` / `PyYAML` / `python-dateutil` / `numpy`。
+不得再出现“新增了一套服务 API，但真实业务继续走旧 CLI 子进程”的双轨状态。
 
-**OPC UA namespace index 是 2**（不是 1！asyncua ns=0/1 是内置，ns=2 是第一个用户 namespace）。
-测试/客户端脚本一律用 `ua.NodeId("tank_1.level", 2)`。
+以下任意一项存在时，不得报告任务完成：
 
-**当前测试状态**（第二轮审查后）：
-- ✓ `pytest` 8/8 passed
-- ✓ `standalone_main.py -c config/tank_constant_sv.yaml --batch 50 --export smoke_batch.csv` 跑通
-- ✓ CLI 模式 OPC UA server 正常启动（`server.start()` 修复后），`wait_ready` 返回 True
-- ✓ asyncua client 端到端 read 全通（tank_1.level / v_name.SV / v_name.MV / source_flow）
-- ✓ asyncua client 端到端 write 验证：写 `v_name.SV = 1.5` 后 2s 再读 = 1.5 ✓（不再回退）
-
-**已知设计限制（不是 bug）**：
-- OPC UA 写值后需等引擎下一个周期（最多 1 个 cycle_time）才反映到 shared_data / OPC UA 节点
-- `start_time=0.0`（默认）时 `time_str` 使用本地时区显示 epoch 0（设计选择，非 bug）
-
-**`user_guide.md` 是最权威的运行手册**（DSL 语法、YAML 结构、OPC UA 节点、CLI 参数、设计细节）。`README.md` 是 30 秒项目入口。
+* `Container.InitService()` 未实际执行；
+* `StartProject()` 仍启动新的 DataFactory/Python 进程；
+* 工程校验或编译仍执行 `--inspect-project`、`--compile-project` 子进程；
+* `SystemBinding.RunBatch()` 仍执行 `--batch` 子进程；
+* `/api/batch/run` 仍返回 501；
+* 前端仍硬编码 API 端口 8000；
+* 构建后的 `DataFactoryService.exe` 不在 `config-tool.exe` 同级；
+* 普通用户操作仍会产生额外 Python/DataFactory 进程。
 
 ---
 
-## ✅ 测试结论（端到端三层验证）
+# 1. 仓库和用户文件保护
 
-测试时跑出来的真实状态（2026-07-09）：
+## 1.1 开始前记录
 
-| 层 | 测试 | 结果 |
-|----|------|------|
-| 1 | `pytest` 全套 | **8/8 passed**（含我修复后的三层 namespace lag、SAFE STATE 等） |
-| 2 | `standalone_main.py -c config/tank_constant_sv.yaml --batch 100 --export smoke_batch.csv` | ✓ 100 周期跑通，CSV 28 列导出，水位从 0 收敛到 1.04（SV=1.0），`_safe_state=False` 全程 |
-| 3 | OPC UA server + asyncua client 端到端（inline） | ✓ server `ready=True`，26 个节点 browse 成功，read/write 全部通过 |
+执行：
 
-测试中发现并修复的两个 bug：
+```bash
+git status --short
+git rev-parse HEAD
+git log -1 --oneline
+```
 
-### ✅ B6. `standalone_main --daemon` 模式立即退出 — **已修复**
+确认 HEAD 是 `7118e09` 或用户之后明确指定的更新提交。
 
-`standalone_main.py` 原 main() 在 `--daemon` 模式下 `if not args.daemon: while True: time.sleep(1)` 被跳过，
-进入 `finally` 后 `sys.exit(0)`，导致 OPC UA server 随 main() 一起死掉。
-**修复**：去掉 `if not args.daemon:` 条件，让 CLI 主线程无条件阻塞。daemon 标志只控制线程本身在主线程退出时是否被强 kill（保留给嵌入式 import 场景）。
+如果 HEAD 已变化，先阅读变化，不得回退用户的新提交。
 
-### ✅ B7. OPC UA namespace 实际是 2 不是 1 — **已修正测试脚本**
+## 1.2 禁止操作
 
-asyncua server 注册第一个用户 namespace URI 时返回 **ns=2**（ns=0/1 是 OPC UA 内置）。
-我之前在 B1 错误地推断 ns=1，把 `test_tank_stabilization.py` 和 `test_opcua_client.py` 改成了 ns=1，
-测试时仍读不到节点。**回退修正**：`test_tank_stabilization.py:46,59` 和 `test_opcua_client.py:56,68,77` 改回 ns=2。
+禁止：
 
-测试还暴露出一个之前未文档化的行为（不是 bug，是 init_args 类参数的设计限制）：
+```bash
+git add .
+git add -A
+git reset --hard
+git clean
+git stash
+git stash --include-untracked
+```
 
-### 🟢 已知设计限制：OPC UA 写 init_args 类参数会被 step 覆盖
+禁止删除、覆盖或暂存用户现有内容，特别是：
 
-测试写 `v_name.SV = 1.5` 后立即读 = 1.5 ✓，但 1s 后再读 = 1.0 ❌。原因是 `AlgorithmNode.step`
-末尾无脑 `vars_store.set(f"{instance_name}.{attr_name}", getattr(instance, attr_name))`，
-PID 实例的 `self.SV` 仍是 init_args=1.0（因为 yaml 表达式 `v_name.execute(PV=tank_1.level)` 没传 SV），
-把 vars 里的 SV 覆盖回去了。
+```text
+.mimocode/
+review3/todo/
+review3/todo.md
+review3/requirement.md
+review3/design.md
+review3/*.patch
+artifacts/
+review3/artifacts/
+所有 workplan 文件
+```
 
-**绕过方法**：把 SV 改成 Variable 类型，让 PID 表达式 `SV=<var>.out`，
-再从 OPC UA 写 `<var>`（user_guide.md §7.6 已有说明）。
+只按明确文件路径暂存本任务文件。
 
-> **第二轮审查更新**：经实测验证，`_apply_external_overrides` 会同时 `setattr(instance, "SV", value)`
-> 和 `vars.set(...)`，因此 `AlgorithmNode.step` 末尾读回的 `instance.SV` 已经是新值，不会覆盖回 init_args。
-> OPC UA 写 `v_name.SV = 1.5` 后 2s 再读 = 1.5 ✓（E2E 测试已验证）。
-> 此前文档中"1s 后再读 = 1.0"的描述已不适用。
+## 1.3 开发方式
+
+* 直接在当前 `main` 工作；
+* 不创建功能分支；
+* 不创建临时 worktree；
+* 可以按逻辑拆成多个提交；
+* 最终必须全部推送到 `origin/main`；
+* 不得用测试通过掩盖功能尚未接线。
 
 ---
 
-## ✅ 第二轮审查 - 已修复（2026-07-09）
+# 2. 开始编码前的调用链盘点
 
-### C1. `server.start()` 从未调用 - OPC UA server 在 CLI 模式下根本不启动 - **已修复**
+先完成一次静态盘点，并将结果写入本任务完成报告，不要另外修改用户的需求文件。
 
-`standalone_main.py:run_instance()` 创建了 `StandaloneOpcuaServer` 实例，
-启动了 `opcua_thread`（目标函数 `run_opcua_async` 只调用 `server.join()`），
-但 **`server.start()` 从未被调用**。`join()` 检查 `_server_thread is None` 直接返回，
-`wait_ready(5.0)` 因 `_ready_event` 永不 set 而超时返回 False。
+搜索：
 
-**影响**：`python standalone_main.py`（非 batch 模式）下 OPC UA server 永远不启动，
-客户端无法连接。上一会话的 E2E 测试是 inline 脚本（直接调 `server.start()`），未覆盖此路径。
+```bash
+git grep -n "exec.Command" -- review3/config-tool
+git grep -n "exec.CommandContext" -- review3/config-tool
+git grep -n "CombinedOutput" -- review3/config-tool
+git grep -n -- "--inspect-project" review3
+git grep -n -- "--compile-project" review3
+git grep -n -- "--batch" review3/config-tool
+git grep -n "apiPort: 8000" -- review3/config-tool/frontend
+git grep -n "CurrentAPIToken" -- review3/config-tool
+git grep -n "GetConnectionInfo" -- review3/config-tool
+```
 
-**修复**：在 `run_instance()` 中 `server` 创建后、`opcua_thread` 启动前添加 `server.start()`。
+分类每一处：
 
-### C2. 引擎线程崩溃后静默提供陈旧数据 - **已修复**
+1. 常驻服务自身唯一启动；
+2. 用户业务操作触发的 DataFactory/Python 子进程；
+3. 与 DataFactory 无关的系统命令；
+4. 测试替身。
 
-引擎线程 `while True` 循环中 `except Exception: raise` 会让线程退出，
-但主线程在 `while True: time.sleep(1)` 中无法感知。OPC UA server 继续轮询
-冻结的 `shared_data`，外部客户端看到陈旧数据但无任何告警。
+最终目标是：
 
-**修复**：主线程每秒检查 `engine_thread.is_alive()`，若任一引擎线程退出则触发关闭流程。
+* 生产代码中，只有 `DataFactoryServiceManager` 可以启动 `DataFactoryService.exe`；
+* 普通校验、编译、仿真、导出和实时运行不得再启动 DataFactory/Python；
+* Python CLI 兼容入口可以保留，但 Config Tool 不得再调用这些 CLI 模式。
 
-### C3. Ctrl+C 后进程无法退出 - **已修复**
+---
 
-默认 `as_daemon=False`，引擎和 OPC UA 线程为非 daemon。`sys.exit(0)` 后
-非 daemon 线程阻止进程退出，引擎 `while True` 无退出条件，`server.stop()` 从未被调用。
+# 3. 统一应用启动流程
 
-**修复**：
-- 引擎线程增加 `stop_event: threading.Event` 参数，循环条件改为 `while not stop_event.is_set()`
-- `finally` 块中先 `stop_event.set()` + `server.stop()`，再 `join(timeout=3.0)` 等待线程退出
+## 3.1 真正启动常驻服务
 
-### M1. 带命名空间的 VARIABLE 写值被误判为 instance.attr - **已修复**
+当前 `Container.InitService()` 存在但未调用。重构容器初始化顺序，使生产启动流程实际执行：
 
-`_apply_external_overrides` 用 `"." in param_name` 判断是否为 instance.attribute。
-带命名空间的 VARIABLE（如 `ns1.sin1`）含 `.`，被 `rsplit(".", 1)` 拆为 instance="ns1" + attr="sin1"，
-`instances.get("ns1")` 返回 None，写值被静默丢弃。
+```text
+EnsureAppWorkspaceDirs
+→ 创建并启动 DataFactoryServiceManager
+→ health 与协议版本校验通过
+→ 创建依赖服务客户端的 compiler 和 bindings
+→ 启动 Wails UI
+```
 
-**修复**：先尝试 instance.attr 解析，若实例不存在则回退为 VARIABLE 写入（`self.vars.set(param_name, value)`）。
+推荐调整：
 
-### M3. 外部调用私有方法 `_step_once()` - **已修复**
+```go
+func NewContainerWithDevMode(devMode bool) (*Container, error)
+```
 
-`standalone_main.py` 的 `run_engine_thread` 和 batch 模式直接调用 `engine._step_once()`（私有）。
-改为调用公共 API `engine.step()`。
+内部顺序必须变为：
 
-### M4. `enable_realtime_data()` 重复 warning - **已修复**
+1. 确保工作目录；
+2. 创建 `DataFactoryServiceManager`；
+3. 等待 `/api/health`；
+4. 创建 `ServiceRealtimeCompiler`；
+5. 创建 realtime manager；
+6. 创建 bindings；
+7. 注入统一服务客户端；
+8. 创建 lifecycle。
 
-`_realtime_enabled` 被设为 `False`（而非 `True`），导致每次调用都重新打印 warning。
-改为 `self._realtime_enabled = True`，使后续调用走 early return。
+不要继续先创建 `PythonRealtimeCompiler`，然后再单独挂一个没有人使用的 Service。
 
-### L1. `find_config_path` 死路径 - **已修复**
+## 3.2 禁止静默降级
 
-移除了指向不存在的 `classical_config/` 目录的备用路径。
+删除或停止生产使用当前 `noopCompiler` 静默降级逻辑。
 
-## ✅ 严重 — 已修复
+以下情况必须明确失败：
 
-### 1. TaskRuntime 完全损坏 — **已修复**
+* `DataFactoryService.exe` 缺失；
+* 服务进程启动失败；
+* health 超时；
+* API Token 不匹配；
+* `protocolVersion` 不匹配；
+* 服务启动后立即退出。
 
-`controller/engine.py` L905-L941 的 `TaskRuntime` 已重构为委托给 `self.engine`：
+不得继续打开一个“看起来正常但无法校验和运行”的 UI。
+
+错误必须包含：
+
+* 服务 EXE 的实际路径；
+* 服务状态；
+* 最近有限行日志；
+* 原始错误原因。
+
+不得把 Token 写进错误或日志。
+
+## 3.3 启动生命周期不得重复启动
+
+必须保证：
+
+* `NewContainer()`、`Lifecycle.Startup()` 和前端初始化不会各启动一次服务；
+* 同一个应用进程最多拥有一个 `DataFactoryServiceManager`；
+* `InitService()` 连续调用是幂等的；
+* 并发调用也不能启动两个服务。
+
+### 验收
+
+增加测试：
+
+1. 连续调用初始化两次，只调用一次 command factory；
+2. 并发调用初始化，仍只创建一个服务进程；
+3. 服务已 ready 时再次初始化直接返回；
+4. 第一次失败后允许明确重试；
+5. 不允许存在两个不同 PID。
+
+---
+
+# 4. 工作目录初始化必须完整闭环
+
+当前正常创建逻辑保留，但修正错误处理。
+
+## 4.1 目录要求
+
+应用启动时确保：
+
+```text
+<exe>/project/
+<exe>/template/
+```
+
+规则：
+
+* 不存在则创建；
+* 已存在则直接使用；
+* 不清空已有内容；
+* 不生成示例文件；
+* 路径被普通文件占用则失败；
+* 无权限创建则失败；
+* 必须基于 `os.Executable()`；
+* 不得回退到当前工作目录或用户配置目录。
+
+## 4.2 启动错误不能只写日志
+
+当前 `Lifecycle.Startup()` 只记录目录错误然后继续。修改为：
+
+* 容器构造阶段完成目录初始化；
+* 目录初始化失败时不继续启动服务和 UI；
+* 返回明确错误。
+
+## 4.3 文件选择器
+
+`ChooseProjectFile`：
+
+```text
+默认目录 = <exe>/project/
+```
+
+`ChooseYamlForDsl`：
+
+```text
+默认目录 = <exe>/template/
+```
+
+不得吞掉目录错误后返回空路径。
+
+`mustDefaultDirForChoose()` 应返回：
+
+```go
+(string, error)
+```
+
+而不是失败时返回 `""`。
+
+### 验收
+
+除已有测试外增加：
+
+1. 应用容器创建后两个目录已存在；
+2. `project` 被文件占用时容器创建失败；
+3. `template` 被文件占用时容器创建失败；
+4. 文件选择器初始化失败返回错误，不静默打开其他目录；
+5. 原有目录中的文件不被删除或覆盖。
+
+---
+
+# 5. DataFactoryServiceManager 完整化
+
+## 5.1 作为唯一进程所有者
+
+`DataFactoryServiceManager` 必须成为唯一持有以下对象的组件：
+
+```go
+*exec.Cmd
+服务 PID
+服务 host
+服务 port
+服务 Token
+服务状态
+服务 stdout/stderr
+服务退出事件
+```
+
+其他 binding 不得持有或启动 DataFactory 进程。
+
+## 5.2 统一认证客户端
+
+当前 `HTTPClient()` 返回普通 `http.Client`，并不会自动添加 Token。
+
+增加统一服务调用层，例如：
+
+```go
+type DataFactoryServiceClient interface {
+    DoJSON(ctx context.Context, method, path string, request any, response any) error
+    OpenSnapshotStream(ctx context.Context, handler func(RuntimeSnapshot)) error
+    Host() string
+    Port() int
+    PID() int
+    State() ServiceState
+}
+```
+
+所有请求必须统一：
+
+* 拼接 `http://127.0.0.1:<动态端口>`；
+* 设置 `Authorization: Bearer <token>`；
+* 设置 `Content-Type: application/json`；
+* 限制响应体大小；
+* 检查 HTTP 状态码；
+* 解析 FastAPI `detail`；
+* 转换成清晰的 Go 错误；
+* 不在错误中打印 Token。
+
+禁止各 binding 自行拼 URL、各自管理 Token。
+
+## 5.3 health 校验
+
+`/api/health` 必须校验：
+
+```json
+{
+  "ok": true,
+  "protocolVersion": 1,
+  "serviceState": "ready"
+}
+```
+
+仅搜索响应字符串中 `"ok": true` 不够。
+
+使用正式 JSON 结构解析。
+
+若版本不匹配，应返回：
+
+```text
+DataFactoryService 协议版本不匹配：
+Config Tool 需要 1，服务返回 2
+```
+
+## 5.4 端口竞争处理
+
+当前做法是先选一个空闲端口再关闭监听器，子进程启动前存在竞争窗口。
+
+至少实现：
+
+* 服务启动 bind 失败时识别端口占用；
+* 重新选择端口；
+* 最多重试 5 次；
+* 每次使用新 Token 或继续安全使用同一 Token；
+* 失败后回收前一次进程；
+* 不留下孤儿进程。
+
+## 5.5 Windows 无窗口实现
+
+将平台代码拆开：
+
+```text
+process_windows.go
+process_other.go
+```
+
+Windows 代码：
+
+```go
+func configureBackgroundProcess(cmd *exec.Cmd)
+```
+
+要求：
+
+* 如果 `cmd.SysProcAttr == nil`，再创建；
+* 设置 `HideWindow = true`；
+* 使用位或合并 `CREATE_NO_WINDOW`；
+* 不覆盖已有 `CreationFlags`；
+* 不覆盖其他 `SysProcAttr` 字段。
+
+非 Windows 为 no-op。
+
+### 验收
+
+Windows 测试必须真实断言：
+
+```text
+HideWindow == true
+CreationFlags 包含 0x08000000
+原有 CreationFlags 保留
+原有 SysProcAttr 不被整体替换
+```
+
+当前仅“函数能编译”的测试不合格。
+
+## 5.6 进程异常退出
+
+增加后台 `Wait()` 监控：
+
+* 服务意外退出时状态变为 `failed`；
+* 保存退出码和最近日志；
+* 通知 SystemBinding、RealtimeRuntimeBinding；
+* 当前实时 session 变为异常；
+* 前端收到明确状态事件；
+* 不自动无限重启；
+* 用户退出应用时的正常关闭不记录为异常。
+
+---
+
+# 6. 修复服务优雅关闭
+
+## 6.1 请求体匹配
+
+Go 调用：
+
+```text
+POST /api/service/shutdown
+```
+
+必须发送合法 JSON：
+
+```json
+{}
+```
+
+或：
+
+```json
+{"reason":"config-tool-exit"}
+```
+
+不得发送空 body 给要求 Pydantic body 的端点。
+
+## 6.2 响应检查
+
+必须检查：
+
+* HTTP 2xx；
+* JSON `ok=true`；
+* 非 2xx 时记录 detail；
+* 请求失败后再进入超时强杀流程。
+
+## 6.3 Python 关闭顺序
+
+`/api/service/shutdown` 必须：
+
+1. 如果 runtime 为 running/starting/stopping，执行真实 runtime stop；
+2. 等 Engine 线程退出；
+3. 停止 OPC UA；
+4. flush 并关闭归档；
+5. 清理运行期状态；
+6. 设置 service stopping；
+7. 触发服务主循环退出。
+
+不得只把状态改成 `stopping` 后直接退出进程。
+
+### 验收
+
+1. 无 runtime 时 shutdown 正常退出；
+2. runtime 运行中时先停止 runtime；
+3. 服务在 5 秒内正常退出；
+4. 正常关闭路径不调用 Kill；
+5. shutdown 返回 422 时测试必须失败；
+6. 模拟服务无响应时才执行强制 Kill；
+7. Config Tool 退出后进程列表中无 `DataFactoryService.exe`。
+
+---
+
+# 7. 用常驻服务替换 PythonRealtimeCompiler
+
+## 7.1 新 compiler
+
+实现：
+
+```go
+type ServiceRealtimeCompiler struct {
+    client DataFactoryServiceClient
+}
+```
+
+继续实现现有：
+
+```go
+type RealtimeCompiler interface {
+    Validate(...)
+    Compile(...)
+}
+```
+
+`Validate()` 调用：
+
+```text
+POST /api/project/inspect
+```
+
+或正式增加并调用：
+
+```text
+POST /api/project/validate
+```
+
+`Compile()` 调用：
+
+```text
+POST /api/project/compile
+```
+
+## 7.2 路径要求
+
+Go 发给服务的 source file 必须是规范化绝对路径。
+
+不得依赖 Python 服务当前工作目录。
+
+服务端应验证：
+
+* source id；
+* source file；
+* replicas；
+* output path；
+* 文件存在；
+* 文件可读。
+
+## 7.3 删除真实业务中的 CLI compiler
+
+`resolveRealtimeCompiler()` 不得再返回 `PythonRealtimeCompiler`。
+
+生产调用链中不得再出现：
+
+```text
+--inspect-project
+--compile-project
+exec.CommandContext
+```
+
+`PythonRealtimeCompiler` 可以暂时作为独立 CLI 兼容代码保留，但：
+
+* Config Tool 容器不得实例化它；
+* Config Tool 自动化测试不得依赖它；
+* 后续可单独删除，不要在本任务中无必要扩大删除范围。
+
+## 7.4 错误兼容
+
+保持现有前端可理解的：
+
+```go
+ValidationResult
+ValidationError
+DuplicateInstance
+ExpandedInstance
+```
+
+服务 HTTP 错误应转换成现有错误类型，不要让前端直接看到整段 FastAPI JSON。
+
+### 验收
+
+1. 创建工程后验证不启动新进程；
+2. 打开工程后验证不启动新进程；
+3. 添加 YAML 验证不启动新进程；
+4. 修改副本数验证不启动新进程；
+5. 启动前编译不启动新进程；
+6. compiler command factory 调用次数为 0；
+7. 服务 PID 在所有操作前后不变；
+8. 原有 duplicate/validation 测试继续通过；
+9. `git grep` 确认容器不再创建 `PythonRealtimeCompiler`。
+
+---
+
+# 8. 工程上下文真实同步到服务
+
+## 8.1 打开与新建
+
+工程打开或创建成功后调用：
+
+```text
+POST /api/project/open
+{
+  "projectFile": "绝对路径"
+}
+```
+
+覆盖：
+
+* 文件选择器打开工程；
+* 最近工程打开；
+* 新建工程；
+* 测试入口 `createProjectAt`。
+
+## 8.2 工程修改
+
+以下操作成功并写入工程文件后调用：
+
+```text
+POST /api/project/reload
+```
+
+覆盖：
+
+* 添加 YAML；
+* 移除 YAML；
+* 修改 replicas；
+* 修改 runtime；
+* 以后统一保存工程时的保存操作。
+
+## 8.3 关闭与切换
+
+* 切换工程时，直接 `/api/project/open` 新工程；
+* 用户明确关闭工程时调用 `/api/project/close`；
+* 切换普通顶部 Tab 不调用 close；
+* 实时运行中不允许切换工程，保持已有约束。
+
+## 8.4 同步失败语义
+
+不得静默忽略服务同步错误。
+
+若磁盘修改已完成，但 reload 失败，错误必须明确：
+
+```text
+工程文件已保存，但 DataFactory 后台服务同步失败。
+请重试打开工程或重启工具。
+```
+
+同时保留当前工程路径，不能把 UI 清成空工程。
+
+增加 `serviceSyncError` 或等价状态，后续成功 reload 后清除。
+
+### 验收
+
+使用 mock service 记录请求：
+
+1. 打开工程产生一次 `/api/project/open`；
+2. 打开最近工程产生一次 `/api/project/open`；
+3. 新建工程产生一次 `/api/project/open`；
+4. 添加 YAML 成功后产生 `/api/project/reload`；
+5. replicas 修改成功后产生 `/api/project/reload`；
+6. remove 成功后产生 `/api/project/reload`；
+7. runtime 修改后产生 `/api/project/reload`；
+8. 校验失败、事务未应用时不得 reload；
+9. 切换 Tab 不 close；
+10. 同步失败时 UI 有明确错误。
+
+---
+
+# 9. 实时运行迁移到服务内 Engine
+
+## 9.1 保持上层 API，替换内部实现
+
+尽量保持前端调用：
+
+```text
+RealtimeRuntimeBinding.StartProject
+RealtimeRuntimeBinding.Stop
+RealtimeRuntimeBinding.GetSession
+```
+
+但内部不再创建 DataFactory 子进程。
+
+建议将现有 `SystemBinding.Start/Stop/Status` 转为服务代理，避免大面积破坏现有 store：
+
+```text
+SystemBinding.Start
+→ POST /api/runtime/start
+
+SystemBinding.Stop
+→ POST /api/runtime/stop
+
+SystemBinding.Status
+→ GET /api/runtime/status + 服务管理器状态
+```
+
+`DataFactoryServiceManager` 是唯一真实进程。
+
+## 9.2 StartProject 流程
+
+完整顺序：
+
+1. 检查服务 ready；
+2. 检查没有 runtime；
+3. 检查没有 batch；
+4. 获取工程 revision；
+5. 使用 `ServiceRealtimeCompiler` 编译到 session 目录；
+6. 创建 session 记录；
+7. 调用 `/api/runtime/start`；
+8. 等 runtime state 为 running；
+9. 推送报警配置；
+10. 启动归档；
+11. 写 session.json；
+12. 设置 current session；
+13. 发出运行状态事件。
+
+不得调用：
+
+```go
+exec.Command
+SystemBinding 的旧 dfLaunch.command
+新的 Python/DataFactory 进程
+```
+
+## 9.3 API 参数
+
+请求：
+
+```json
+{
+  "configPath": "绝对路径",
+  "runtimeName": "工程名称",
+  "cycleTime": 0.5,
+  "opcUaHost": "0.0.0.0",
+  "opcUaPort": 18951
+}
+```
+
+服务 API host/port 不从前端传入，统一由 `DataFactoryServiceManager` 决定。
+
+## 9.4 Stop 流程
+
+停止时：
+
+1. 停止归档；
+2. 调用 `/api/runtime/stop`；
+3. 确认 runtimeState 为 stopped；
+4. 更新 session；
+5. 清理 session 临时目录；
+6. 清空运行状态；
+7. 服务进程继续存活。
+
+若 runtime stop 失败：
+
+* 不得假装停止成功；
+* session 变为 `stop-failed`；
+* 保留 session 信息供重试；
+* 服务进程不得被直接 Kill；
+* 用户可再次点击停止。
+
+## 9.5 Service PID 语义
+
+后台服务 PID 整个应用会话固定。
+
+实时运行页面不再显示 PID。
+
+内部诊断可以保存服务 PID，但不得把服务 PID误称为“当前工程进程 PID”。
+
+### 验收
+
+1. 启动 Config Tool 后记录服务 PID；
+2. 启动实时运行后 PID 不变；
+3. 停止实时运行后 PID 不变；
+4. 再次启动运行后 PID 不变；
+5. runtime stop 后 `/api/health` 仍返回 200；
+6. runtime stop 后校验和编译仍可用；
+7. 点击实时启动期间没有新增 Python/DataFactory 进程；
+8. `StartProject` 相关测试 command factory 调用次数为 0；
+9. 停止失败时 session 保留且可重试；
+10. 切换 Tab 不停止 runtime。
+
+---
+
+# 10. 修复 Python runtime 生命周期
+
+## 10.1 runtimeName
+
+`/api/runtime/start` 成功时必须更新：
 
 ```python
-class TaskRuntime:
-    def __init__(self, engine: UnifiedEngine):
-        self.engine = engine
-    def override_variable(self, param_name, value):
-        self.engine.override_variable(param_name, value)   # 委托
-    def _apply_external_overrides(self):
-        self.engine._apply_external_overrides()            # 委托
+b.instance_name = req.runtimeName
 ```
 
-不再引用不存在的 `self._lock` / `self._external_overrides` / `self.vars` / `self._instances`。
+所有：
+
+```text
+/api/instances/{name}/...
+/ws/snapshot
+/status
+```
+
+使用同一个真实 runtime name。
+
+## 10.2 启动事务
+
+runtime start 任一步失败时必须回滚：
+
+* Engine clock；
+* Engine thread；
+* OPC UA；
+* force manager；
+* quality manager；
+* shared data；
+* snapshot；
+* 临时引用；
+* runtime state。
+
+不能出现 OPC UA 启动失败但 Engine 线程仍运行。
+
+## 10.3 停止真实性
+
+`/api/runtime/stop`：
+
+* 设置停止事件；
+* 停 OPC UA；
+* 等 Engine 线程；
+* 线程超时仍存活时返回失败；
+* 不得将状态标为 stopped；
+* 成功后才标记 stopped。
+
+## 10.4 清理运行期状态
+
+停止成功后清理：
+
+```text
+b.engine = None
+b.shared_data = {}
+b.force_manager 重置
+b.quality_manager 重置
+b.opcua_server = None
+b.engine_thread = None
+b.engine_stop_event = None
+latest snapshot 清空
+snapshot buffer 清空
+归档引用清空
+报警运行状态清空
+```
+
+固定输出和质量码是运行期状态，停止运行后不得泄漏到下一次运行。
+
+## 10.5 Engine 未运行接口
+
+以下接口不得因 `b.engine is None` 抛 AttributeError：
+
+```text
+/api/status
+/api/instances/{name}/meta
+/api/instances/{name}/tags
+/api/instances/{name}/snapshot
+/api/instances/{name}/params
+/api/instances/{name}/override
+/api/instances/{name}/writes
+/api/force
+/api/quality
+```
+
+未运行时统一返回明确 HTTP 状态和中文 detail，例如：
+
+```text
+409 当前工程未运行
+```
+
+health 和 runtime status 仍返回 200。
+
+### 验收
+
+1. start → stop → start 连续 10 次；
+2. 每次只有一个 Engine 线程；
+3. 每次只有一个 OPC UA 服务；
+4. stop 后线程已退出；
+5. stop 后 Engine 引用为空；
+6. stop 后 force/quality 为空；
+7. stop 后运行接口返回 409，不返回 500；
+8. OPC UA 端口占用时启动失败且无残留线程；
+9. Engine 初始化异常时状态为 failed，允许重新 start；
+10. runtimeName 与工程名一致。
 
 ---
 
-### 1.1 新发现的 Bug — `Clock.step()` 与 `PlaybackEngine` 参数不匹配 — **已修复**
+# 11. 实现真正的进程内批量仿真
 
-- `controller/clock.py:173`：`def step(self) -> ...`（无参数）
-- `controller/playback_engine.py:179` 原先调用 `self.clock.step(force_sleep=True)` 会抛 `TypeError`
-- **修复**：移除 `force_sleep=True` 关键字参数（`Clock.step` 是单一对外 API，REALTIME 模式内部已经按 cycle_time sleep）
+## 11.1 禁止保留 501 占位
 
-### 1.2 新发现的 Bug — `enable_realtime_data()` 直接抛 `NotImplementedError` — **已修复**
+完成 `/api/batch/run`，不得再返回：
 
-- `controller/engine.py` 原方法直接抛 `NotImplementedError`，被 `tests/test_data_manager.py:106/152` 和 `tools/performance_test.py:152` 调用时会崩溃
-- **修复**：改为惰性导入 `RealtimePublisher`，尝试启用；失败时（缺 redis / Redis 不可达）记录 warning 并以 no-op 形式跳过，不再抛异常
-- 诊断模块 `controller/diagnostics/engine_diagnostics.py:305` 的 `hasattr(self.engine, '_realtime_publisher')` 检查现在能正确工作（`__init__` 已初始化 `self._realtime_publisher = None`）
+```text
+501 batch_run 计划在后续阶段实现
+```
+
+## 11.2 抽取现有 CLI 逻辑
+
+从 `standalone_main.py --batch` 抽取可复用函数，例如：
+
+```python
+def run_batch_in_process(
+    config_path: str,
+    cycles: int,
+    cycle_time: Optional[float],
+) -> BatchRunResult:
+```
+
+要求保留：
+
+* `GENERATOR` 模式；
+* 现有 cycle 语义；
+* snapshot 数据；
+* `_sim_time`；
+* `_need_sample`；
+* display columns；
+* plot scales；
+* 原有错误语义；
+* 原有最大值或边界规则，不新增无需求限制。
+
+## 11.3 API 请求响应
+
+请求至少：
+
+```json
+{
+  "configPath": "绝对路径",
+  "cycles": 1000,
+  "cycleTime": 0.5
+}
+```
+
+响应应能直接转换为现有 Go `BatchResult`，例如包含：
+
+```text
+columns
+rows
+displayColumns
+plotScales
+cycles
+```
+
+避免为了内部传输先生成 CSV 再读回来。
+
+## 11.4 并发约束
+
+服务内部维护批量状态和锁：
+
+* runtime running/starting/stopping 时拒绝 batch；
+* 已有 batch 时拒绝第二个 batch；
+* batch 运行时拒绝 runtime start；
+* batch 结束或失败后必须释放状态；
+* batch 不修改当前实时 Engine；
+* batch 不覆盖当前工程上下文。
+
+## 11.5 Go 接入
+
+`SystemBinding.RunBatch()` 改为调用：
+
+```text
+POST /api/batch/run
+```
+
+不得再：
+
+```go
+dfLaunch.command(...)
+CombinedOutput()
+--batch
+```
+
+### 验收
+
+1. 10、100、1000 cycle 返回正确行数；
+2. GENERATOR 模式不按真实时间等待；
+3. display columns 和 plot scales 与旧 CLI 一致；
+4. runtime 运行中 batch 返回 409；
+5. batch 运行中 runtime start 返回 409；
+6. 两个并发 batch 只有一个成功；
+7. batch 失败后可以再次 batch；
+8. batch 前后服务 PID 不变；
+9. batch 不创建临时 DataFactory/Python 进程；
+10. 原有前端批量测试全部通过；
+11. 原有 acceptance isolation 问题如仍存在，必须在本任务内修复，不再标记为“旧问题无关”，因为本任务正好重构批量并发模型。
 
 ---
 
-## ✅ 中等 — 已修复
+# 12. 格式化导出接入常驻服务
 
-### 2. `_expr_cache` 类级别缓存存在跨实例污染风险 — **已修复**
+## 12.1 保留纯 Go CSV
 
-- `controller/expression.py` 原先 L66 的 `_expr_cache: Dict[str, ...]` 是类级别，不同 `ExpressionEvaluator` 实例持有不同 `instances` 时会拿到错误缓存
-- **修复**：`_expr_cache` 移到 `__init__` 中，作为实例属性；并删除同一位置的 `_compile_cache` 死代码
+单纯将 rows 写普通 CSV 的纯 Go `ExportCSVRows()` 可以保留，因为它不创建子进程。
 
-### 3. `_precompile` 静默吞掉所有异常 — **已修复**
+## 12.2 DataFactory 格式化导出
 
-- 文档里说的是 `pass`，实际代码 L810 已有 `logger.debug("预编译失败: %s, 错误: %s", self._expr_str, e)`
+所有需要 DataFactory 模板、双行表头、XLSX 或格式转换的操作统一调用：
 
-### 4. 动态添加的节点不预编译 + AlgorithmNode 每次 step 重复建 ExpressionEvaluator — **已修复**
+```text
+POST /api/export/convert
+```
 
-两处都修：
+不得再执行：
 
-- **`controller/engine.py:_apply_pending_changes`** 在 `_rebuild_nodes_from_program_items()` 后立刻调用 `self._precompile_nodes()`
-- **`controller/expression.py:AlgorithmNode.step`** 第一次进入 `else` 分支时，把新建的 `ExpressionEvaluator` 保存到 `self._evaluator`，下次直接复用
+```text
+--convert-export
+DataFactory 子进程
+Python 子进程
+```
 
-### 4.1 衍生修复 — `_apply_pending_changes` 改表达式后必须重置预编译 — **已修复**
+## 12.3 输出规则
 
-- 原代码 `node.config.expression = new_expr` 后 `_evaluator` / `_expr_str` 还指向旧表达式，新表达式永远不执行
-- **修复**：表达式变更后把 `node._expr_str` / `node._evaluator` 置 `None`，并立即调用 `node._precompile(self.vars)` 重预编译；预编译失败时记录 warning
+必须保持当前产品已有行为：
 
-### 5. `VariableAccessor` 缺少 `__getattr__` — **已修复**
+* CSV；
+* XLSX；
+* 时间列；
+* 采样过滤；
+* 表头；
+* display columns；
+* sheet name；
+* 输出目录自动创建；
+* 错误不留下半成品文件。
 
-- `controller/expression.py` `VariableAccessor` 加了 `__getattr__`，委托给 `AttributeProxy(self._var_name, name, None, self._vars)`
-- `accessor.attr` 现在等价于 `instance.attr` 的解析形式，可用于 `float() / [-N] / +/*/-//` 等运算
+建议使用临时输出文件，成功后原子替换目标文件。
 
-### 5.1 衍生修复 — 运行时新增变量也需配 lag — **已修复**
+### 验收
 
-- 新增 `_configure_lags_for_new_items(new_added)` 方法，在 `_apply_pending_changes` 重建节点后调用，分析新项的 lag 需求并配历史缓冲区
-- 否则 `queue_add_variable` 添加的变量若被 `[-N]` 访问会因历史不存在而返回默认值 0
+1. CSV 导出内容与旧实现一致；
+2. XLSX 可正常打开；
+3. 空 rows 返回明确错误；
+4. 非法格式返回 400；
+5. 目标目录不存在时创建；
+6. 导出失败不留下损坏目标文件；
+7. 导出前后服务 PID 不变；
+8. 不创建额外 Python/DataFactory 进程；
+9. 连续导出 20 次无文件句柄泄漏。
 
 ---
 
-## ✅ 轻微 — 已处理
+# 13. 前端不得再硬编码服务 endpoint
 
-### 6. 外部覆写值被节点执行覆盖 — 设计限制，已在文档中说明
+## 13.1 删除 8000
 
-`user_guide.md` §3.5、§7.6 已写明此限制和绕过方法。
+删除：
 
-### 7. 死代码清理 — **部分处理**
+```typescript
+apiHost: '127.0.0.1',
+apiPort: 8000,
+```
 
-| 位置 | 处理 |
-|------|------|
-| `expression.py` `_compile_cache` 类属性 | 删除 |
-| `playback_engine.py` `Clock.step(force_sleep=True)` | 移除非法参数 |
-| `engine.py` `enable_realtime_data()` 永远抛 NotImpl | 改为优雅降级 |
-| `realtime_publisher.py` / `playback_engine.py` / `playback_diagnostics.py` 整文件删除 | standalone 模式已剔除 Redis/消息总线依赖 |
-| `tools/performance_test.py`、`tools/test_opcua_status.py`、`tools/test_query.py`、`tools/test_query_direct.py` | 整文件删除（依赖 Redis） |
-| `tests/test_data_manager.py`、`tests/test_opcua_server.py` | 整文件删除（依赖 Redis） |
-| `tests/test_v2_bug.py`、`tests/test_v2_debug.py` | 整文件删除（历史回归测试，bug 已不复现） |
-| `components/diagnostics/base.py` `import redis` | 改为 try/except，`redis_client` 参数改可选 |
-| `engine.py` `enable_realtime_data()` | 改为永久 no-op + warning（保留接口兼容 `hasattr` 检查） |
-| `parser.py` `parse()` 写临时文件再读回 | 简化为直接 `yaml.safe_load` |
-| `variable.py` `RingBuffer._data` 多余的 None default | 删除 |
-| `instance.py` TYPE_CHECKING 路径错（`data_next.programs.base` → `components.programs.base`） | 修正 |
-| `controller/__pycache__/dependency.cpython-313.pyc`、`expression_node.cpython-313.pyc` 残留 | 删除 |
+实时启动参数只包含用户工程运行参数：
+
+```text
+cycleTime
+opcUaHost
+opcUaPort
+runtimeName
+```
+
+后台 API endpoint 由 Go 自己管理。
+
+验收：
+
+```bash
+git grep -n "apiPort: 8000" -- review3/config-tool/frontend
+```
+
+结果必须为空。
+
+## 13.2 Token 不暴露给 React
+
+当前 `GetConnectionInfo()` 将 Token 返回给前端。完成以下调整：
+
+* React 不再获取长期后台服务 Token；
+* Wails 生成模型中不再暴露 `apiToken`；
+* 前端不保存 Token；
+* 前端不把 Token拼进 REST 或 WebSocket；
+* force、quality、override、tags、snapshot 等请求由 Go binding 代理；
+* WebSocket snapshot 由 Go 后端连接 Python 服务，再通过 Wails Event 推送给 React。
+
+可以保留仅 Go 内存中的：
+
+```text
+host
+port
+token
+```
+
+## 13.3 Go 代理接口
+
+增加或重构 Wails binding，使前端使用：
+
+```text
+GetRuntimeTags(...)
+GetRuntimeSnapshot(...)
+SetRuntimeValue(...)
+SetForce(...)
+ClearForce(...)
+GetForces(...)
+SetQuality(...)
+ClearQuality(...)
+GetQualities(...)
+```
+
+这些方法不得再接收：
+
+```text
+apiHost
+apiPort
+apiToken
+```
+
+统一通过服务客户端调用。
+
+## 13.4 Snapshot 事件桥
+
+Go 使用认证连接订阅 Python `/ws/snapshot`，再发出 Wails event，例如：
+
+```text
+runtime:snapshot
+runtime:connection
+runtime:error
+```
+
+要求：
+
+* runtime 启动后建立；
+* runtime 停止后关闭；
+* Tab 切换不重复建立；
+* 断线后有限重连；
+* service 退出后停止重连并报告错误；
+* 不创建多个重复订阅；
+* 慢前端只保留最新帧，不积压无限队列。
+
+### 验收
+
+1. 浏览器开发工具和前端 store 中不存在 Token；
+2. Wails 生成 TS 模型没有 `apiToken`；
+3. 前端没有直接 `fetch(http://127.0.0.1:<service-port>)`；
+4. 前端没有直接连接 Python WS；
+5. snapshot 仍正常刷新；
+6. force/quality/override 仍正常；
+7. 切换 Tab 不产生重复帧；
+8. 停止后没有继续轮询；
+9. 服务退出时前端显示运行异常。
 
 ---
 
-## ⚠️ 已知未修 / 历史遗留
+# 14. SystemBinding 收口
 
-### ~~A. `v2 == 0` 表达式求值 bug~~ — 已确认不复现，对应测试已删除
+## 14.1 不再代表 DataFactory 子进程
 
-`tests/test_v2_bug.py` 与 `tests/test_v2_debug.py` 已删除。
-在当前代码上跑 `classical_config/test_bug.yaml` 的 10 个周期实测：
+保留文件对话框、纯 Go 文件处理等通用能力。
 
+对于 DataFactory 能力：
+
+```text
+Start
+Stop
+Status
+RunBatch
+格式化导出
 ```
-cycle 0: v1.out=0.0,    v2=50.0
-cycle 1: v1.out=0.262,  v2=50.262
-...
-cycle 9: v2=52.36
+
+全部改成代理常驻服务。
+
+`SystemBinding` 不得再持有“每次实时运行创建的 DataFactory managedProcess”。
+
+## 14.2 状态语义
+
+建议：
+
+```text
+SystemStatus.APIReady
+= 常驻服务 ready
+
+SystemStatus.Running
+= runtime Engine running/starting/stopping
+
+SystemStatus.PID
+= 常驻服务 PID，仅内部兼容
 ```
 
-`v2 = v1.out + 50` 工作正常，cycle 0 时 `v1.out = sin(0) = 0`，故 `v2 = 0 + 50` 是预期行为。
+前端不得展示 PID。
 
-### ~~B. `realtime_publisher.py` 仍 `import redis`~~ — 已彻底剔除
+## 14.3 退出监听
 
-- `controller/realtime_publisher.py`、`controller/playback_engine.py`、`controller/diagnostics/playback_diagnostics.py` 整文件删除
-- `engine.enable_realtime_data()` 改为永久 no-op + warning（接口保留仅为兼容 `hasattr` 检查）
-- `components/diagnostics/base.py` 的 `import redis` 改为 `try/except`，`redis_client` 参数可选
-- `tools/` 与 `tests/` 下所有依赖 Redis 的脚本整文件删除
+原 `addExitListener` 语义改为监听：
 
-standalone exe 现在源码层面也不依赖 Redis，可在无任何中间件的独立环境运行。
+* 常驻服务异常退出；
+* runtime 异常结束；
+* runtime 正常停止。
 
-### C. ~~`start_system.bat` / `engines_manifest.yaml` / `tests/pytest.ini` 指向不存在的目录~~ — 已删除
+不要依赖“子进程退出就代表一次实时运行结束”的旧模型。
 
-distributed 残留整批清理：
+### 验收
 
-- `start_system.bat`、`engines_manifest.yaml`、`tests/run_all.bat` — 启动 web_backend/web_frontend（已删除目录），完全 broken，整文件删除
-- `components/message_bus/` 整个目录 — 顶层硬性 `import redis`，pytest 收集即崩；模块引用方只有自身内部和 `components/__init__.py` 的 try/except 保护，standalone 不依赖
-- `components/__init__.py` — 移除 `FROZEN` 检查 + `sys.modules.setdefault("components.message_bus", None)` 保护代码
-- `tests/pytest.ini` — `testpaths` 从 `message_bus/tests` 改回 `tests`
-- `tests/conftest.py` — 新增，将项目根目录与 tests 目录加入 `sys.path`，让 `from test_xxx import helper` 风格互引能 work
-- `tests/test_generator_performance.py` — 性能 demo 脚本，原 `def test_performance(config_path, cycle_counts)` 缺 fixture；改名为 `run_performance` 避免被 pytest 误收，仍可通过 `python tests/test_generator_performance.py` 直接跑 benchmark
-- `tests/*.duckdb` × 5、`tools/performance_test_results.json` — 历史测试产物，约 20MB，整批删除
-
-清理后 `python -m pytest` 跑通 8/8 passed（剩余 warning 是历史代码用 `return` 而非 `assert` 的风格问题，不影响功能）。
+1. `SystemBinding.Start` 不调用 command factory；
+2. `SystemBinding.Stop` 不结束服务进程；
+3. `Status.Running` 随 runtime 状态变化；
+4. `Status.APIReady` 在 runtime stopped 时仍为 true；
+5. 服务异常退出时 `APIReady=false`；
+6. runtime 停止后服务 PID仍存在。
 
 ---
 
-## 🚧 新任务：PID 调试 GUI 工具（DataFactory + FastAPI + Wails）
+# 15. 发布构建必须完整
 
-> 创建时间：2026-07-10
-> 状态：**待实现**（计划已批准，尚未动手）
-> 计划文件：`.mimocode/plans/1783645093627-tidy-wolf.md`
+## 15.1 修正 PyInstaller spec
 
-### 背景
+确认模块名正确：
 
-用户记得 `F:\github\supcon_tools\pid_simu_ua_server`（Python+PyQt6）能调试 PID、获取模拟运行值、导出 CSV。
-用户认为 review3（DataFactory）的引擎能力完全可以实现得更好，因为 YAML 组态可自定义（不限于 PID）。
-目标：基于 review3 引擎，新建一个 **FastAPI 后端 + Wails GUI 前端** 的调试工具。
+* PyYAML 的 import 模块通常是 `yaml`，不要只写无效的 `PyYAML` hidden import；
+* 包含 FastAPI、Uvicorn、asyncua、numpy、controller、components、datacenter；
+* 包含运行时需要的资源；
+* `console=False`；
+* 从任意工作目录可启动。
 
-### 决策摘要
+## 15.2 自动构建和复制
 
-| 项 | 选择 |
-|----|------|
-| 后端 | review3 新加 FastAPI 服务（`--api` 模式），与 Engine + OPC UA 同进程共存 |
-| 协议 | HTTP REST（控制/调参）+ WebSocket（snapshot 实时推送） |
-| 多实例 | 先单实例 MVP，API 路径预留 `{name}` 但实际只跑 1 个 |
-| GUI 技术栈 | Wails v2 + Go + React-TS（与 config-tool 同栈） |
-| GUI 项目位置 | `F:\github\supcon_tools\pid_debug_gui\`（独立目录，不与 config-tool 耦合） |
-| MVP 功能 | ① 选 config 启动 Engine；② 左侧参数面板（按 stored_attributes 动态生成）；③ 中间实时曲线（WebSocket 推送）；④ 一键 CSV 导出 |
+增加统一构建脚本，例如：
 
-### 阶段 1：review3 加 FastAPI 服务
-
-#### 新增依赖
-
-`requirements.txt` 追加：
-- `fastapi`
-- `uvicorn[standard]`（含 websockets）
-
-#### 新增文件：`datacenter/engine_api.py`
-
-FastAPI app，路由设计：
-
-| 方法 | 路径 | 功能 | 底层调用 |
-|------|------|------|---------|
-| GET | `/api/status` | 实例名、cycle_count、sim_time、_safe_state、mode | `engine.get_statistics()` + `shared_data` |
-| GET | `/api/instances/{name}/meta` | 所有 program 项 + stored_attributes + default_params | `engine.get_variable_meta()` |
-| GET | `/api/instances/{name}/snapshot` | 最新一次 snapshot | 读 `shared_data` dict |
-| POST | `/api/instances/{name}/params` | 改算法参数 | body `{"param": "PB", "value": 12.0}` -> `engine.queue_param_update(name, param, value)` |
-| POST | `/api/instances/{name}/override` | 覆写变量值 | body `{"tag", "value"}` -> `engine.override_variable(tag, value)` |
-| POST | `/api/instances/{name}/export` | 导出 CSV | body `{"path", "cycles?"}` |
-| WS | `/ws/snapshot` | 实时推送 snapshot | 引擎每周期推一次 |
-
-#### WebSocket 推送机制
-
-引擎线程本身不知道有 WS 客户端存在。方案：
-- `engine_api.py` 持有一个 `queue.Queue`（或 `threading.Event` + 共享 dict）
-- 在 `standalone_main.run_engine_thread` 的循环里，`engine.step()` 之后、写入 `shared_data` 之后，额外往这个 queue 放一份 snapshot
-- WS handler 协程从 queue 取数据推给客户端
-- 多个 WS 客户端时用 broadcaster 模式（每个客户端一个独立 queue）
-
-#### 修改文件：`standalone_main.py`
-
-新增 `--api` 启动模式：
-- `--api` 标志：除了起 Engine + OPC UA，额外起一个 uvicorn 线程跑 FastAPI
-- 默认端口 8000（可用 `--api-port` 覆盖）
-- uvicorn 在 daemon 线程中运行，主线程仍走现有的 liveness monitor 循环
-
-#### 关键集成点（已确认）
-
-- `engine.override_variable(tag, value)` -- 线程安全，acquire `self._lock`，append 到 `self._external_overrides`，下周期 `_apply_external_overrides()` 应用
-- `engine.queue_param_update(instance_name, param_name, value)` -- 线程安全，acquire `self._lock`，append 到 `self._pending_param_updates`，下周期 `_apply_pending_changes()` 应用
-- `engine.get_variable_meta()` -- 返回 `Dict[str, dict]`，每个 entry 含 `instance/param/description/is_display/plot_scale_ref`
-- `engine.get_statistics()` -- 便宜，可每次 HTTP 请求调用
-- `shared_data` dict -- 引擎线程每周期写入，HTTP handler 可直接读（dict 读写 GIL 保护，足够）
-
-### 阶段 2：新建 Wails GUI 项目
-
-#### 项目位置：`F:\github\supcon_tools\pid_debug_gui\`
-
-#### 目录结构
-
-```
-pid_debug_gui/
-├── main.go                          # Wails 入口（窗口"PID 调试工具"1280x800）
-├── go.mod / go.sum / wails.json
-├── internal/
-│   ├── app/
-│   │   ├── container.go             # DI 容器
-│   │   └── lifecycle.go             # Startup/Shutdown
-│   ├── api/
-│   │   ├── client.go                # HTTP client（调 review3 FastAPI）
-│   │   └── ws.go                    # WebSocket client（订阅 snapshot）
-│   └── bindings/
-│       └── debug.go                 # 暴露给 JS 的方法
-└── frontend/
-    ├── index.html
-    ├── package.json
-    ├── vite.config.ts
-    ├── tailwind.config.js
-    ├── tsconfig.json
-    └── src/
-        ├── App.tsx                  # 顶层布局
-        ├── main.tsx
-        ├── style.css
-        ├── components/
-        │   ├── Toolbar.tsx          # 顶部：连接地址输入、启动/停止、导出按钮
-        │   ├── ParamPanel.tsx       # 左侧：按 meta 动态生成参数输入框
-        │   ├── ChartPanel.tsx       # 中间：WebSocket 订阅 + recharts 实时折线
-        │   └── StatusBar.tsx        # 底部：mode/cycle_count/sim_time/_safe_state
-        ├── store/
-        │   └── useStore.ts          # Zustand 全局状态
-        ├── lib/
-        │   ├── api.ts               # 封装 Go binding 调用
-        │   └── utils.ts
-        └── types/
-            └── index.ts
+```text
+review3/config-tool/scripts/build_release.ps1
 ```
 
-#### 前端依赖
+流程：
 
-- `react` + `react-dom` -- UI 框架
-- `recharts` -- 实时折线图
-- `zustand` -- 状态管理
-- `tailwindcss` + `clsx` + `tailwind-merge` -- 样式
-- `lucide-react` -- 图标
+1. 构建 `DataFactoryService.exe`；
+2. 对服务 EXE执行 health smoke；
+3. 构建 `config-tool.exe`；
+4. 将服务复制到：
 
-#### Go 端 bindings（暴露给 JS）
-
-```
-GetMeta()                          -> 调 GET /api/instances/{name}/meta
-SetParam(name, param, value)       -> 调 POST /api/instances/{name}/params
-Override(name, tag, value)         -> 调 POST /api/instances/{name}/override
-ExportCsv(name, path)              -> 调 POST /api/instances/{name}/export
-Connect(url)                       -> 建立 WebSocket 连接，开始接收 snapshot
-Disconnect()                       -> 断开 WS
-GetStatus()                        -> 调 GET /api/status
+```text
+review3/config-tool/build/bin/DataFactoryService.exe
 ```
 
-Go 端收到 WS snapshot 后，通过 Wails 的 `runtime.EventsEmit(ctx, "snapshot", data)` 推给前端。
-前端用 `EventsOn("snapshot", callback)` 接收。
+5. 在发布目录创建：
 
-#### 前端组件设计
+```text
+project/
+template/
+```
 
-**Toolbar.tsx**：
-- API 地址输入框（默认 `http://127.0.0.1:8000`）
-- 连接/断开按钮
-- 导出 CSV 按钮（弹出文件保存对话框，调 Go 端 ExportCsv）
-- 实例名显示
+6. 输出两个 EXE 的大小和 SHA256。
 
-**ParamPanel.tsx**：
-- 调 `GetMeta()` 拿到所有 program 项的 stored_attributes + default_params + param_descriptions
-- 按 program 项分组，每项展开显示参数输入框
-- 输入框 onChange 防抖 300ms -> 调 `SetParam(name, param, value)`
-- 参数类型自动推断（float -> number input，MODE -> select）
+不得要求用户手工复制。
 
-**ChartPanel.tsx**：
-- WebSocket 订阅的 snapshot 存入环形缓冲（默认保留最近 1000 个点）
-- recharts `<LineChart>` 渲染
-- 位号多选 checkbox（从 meta 的 display 变量列表来）
-- Y 轴可切换自动/手动量程
-- X 轴 = cycle_count
+## 15.3 生产版禁止回退系统 Python
 
-**StatusBar.tsx**：
-- 显示 mode（REALTIME/GENERATOR）
-- cycle_count、sim_time
-- _safe_state 状态灯（绿色=正常，红色=SAFE STATE）
-- _consecutive_failures 计数
+生产模式：
 
-### 阶段 3：联调 + e2e 验证
+```text
+只允许 <exe>/DataFactoryService.exe
+```
 
-#### 验证步骤
+服务 EXE 缺失时明确失败。
 
-1. 启后端：`python standalone_main.py -c config/tank_constant_sv.yaml --api`
-2. 验证 API：
-   - `curl http://127.0.0.1:8000/api/status` 返回引擎状态
-   - `curl http://127.0.0.1:8000/api/instances/tank_constant_sv/meta` 返回所有位号 meta
-   - `curl -X POST http://127.0.0.1:8000/api/instances/tank_constant_sv/params -d '{"param":"PB","value":15.0}'` 改 PID 比例带
-   - 用 wscat 连 `ws://127.0.0.1:8000/ws/snapshot` 观察 snapshot 推送
-3. 启 GUI：`cd pid_debug_gui && wails dev`
-4. GUI 中：
-   - 输入 API 地址 -> 连接
-   - 左侧参数面板显示 PID 的 PB/TI/TD/SV/H/L/MODE + Tank 的 height/radius 等
-   - 改 SV = 1.5 -> 曲线中 SV 线跳变 -> PV 开始跟随
-   - 改 PB = 20 -> 响应变慢
-   - 点导出 -> 选路径 -> CSV 落盘
-   - StatusBar 显示 cycle_count 递增、_safe_state=False 绿灯
+开发模式可以使用源码 Python，但必须通过明确的开发入口或构建模式，不得在生产版静默回退。
 
-#### 端到端测试场景
+### 验收
 
-- 场景 1：SV 阶跃（1.0 -> 1.5），观察 PV 收敛
-- 场景 2：改 PB 看响应速度变化
-- 场景 3：导出 CSV 后用 `tools/data_plotter_pro.py` 打开验证数据完整
-- 场景 4：断开/重连 WebSocket，曲线不中断
-- 场景 5：SAFE STATE 触发（构造一个会报错的表达式），状态灯变红
+构建后目录必须至少有：
 
-### 关键文件清单
+```text
+build/bin/
+├── config-tool.exe
+├── DataFactoryService.exe
+├── project/
+└── template/
+```
 
-#### review3 修改/新增
+从该目录复制到另一台机器后，不依赖仓库源代码路径。
 
-| 文件 | 操作 | 说明 |
-|------|------|------|
-| `datacenter/engine_api.py` | **新增** | FastAPI app + 路由 + WS handler |
-| `standalone_main.py` | **修改** | 加 `--api` / `--api-port` 参数，起 uvicorn 线程 |
-| `requirements.txt` | **修改** | 追加 fastapi + uvicorn[standard] |
+---
 
-#### pid_debug_gui 新建
+# 16. 必须增加的测试
 
-| 文件 | 说明 |
-|------|------|
-| `main.go` | Wails 入口 |
-| `internal/app/container.go` + `lifecycle.go` | DI + 生命周期 |
-| `internal/api/client.go` | HTTP client |
-| `internal/api/ws.go` | WebSocket client |
-| `internal/bindings/debug.go` | JS 桥接方法 |
-| `frontend/src/App.tsx` | 顶层布局 |
-| `frontend/src/components/Toolbar.tsx` | 工具栏 |
-| `frontend/src/components/ParamPanel.tsx` | 参数面板 |
-| `frontend/src/components/ChartPanel.tsx` | 实时曲线 |
-| `frontend/src/components/StatusBar.tsx` | 状态栏 |
-| `frontend/src/store/useStore.ts` | Zustand 状态 |
-| `frontend/src/lib/api.ts` | API 封装 |
-| `frontend/src/types/index.ts` | 类型定义 |
+## 16.1 Go 单元测试
 
-### 风险与注意事项
+至少覆盖：
 
-1. **线程安全**：`shared_data` dict 是引擎线程写、HTTP handler 读。Python dict 的单键读写有 GIL 保护，但 `dict(snapshot)` 全量拷贝在迭代时可能看到中间状态。WS 推送应该用引擎线程主动 put 到 queue，而不是 HTTP handler 去 poll shared_data。
+1. 工作目录创建；
+2. 工作目录错误不吞掉；
+3. 服务只启动一次；
+4. 服务 health JSON 和协议版本；
+5. 动态端口重试；
+6. Token 自动注入；
+7. Token 不进入日志；
+8. Windows flags 合并；
+9. shutdown 发送合法 JSON；
+10. shutdown 检查 HTTP 状态；
+11. shutdown 超时 kill；
+12. 服务异常退出；
+13. ServiceRealtimeCompiler validate；
+14. ServiceRealtimeCompiler compile；
+15. 工程 open/reload 同步；
+16. StartProject 调 `/api/runtime/start`；
+17. Stop 调 `/api/runtime/stop`；
+18. RunBatch 调 `/api/batch/run`；
+19. 格式导出调 `/api/export/convert`；
+20. 普通操作 command factory 调用次数为 0；
+21. 服务 PID 跨操作不变；
+22. runtime stopped 时 service ready。
 
-2. **uvicorn 与 asyncio**：review3 的 OPC UA server 已经在一个独立 asyncio loop 里跑。uvicorn 会在另一个线程起自己的 asyncio loop。两个 loop 不冲突（不同线程），但要注意不要跨 loop 传 asyncio 对象。
+## 16.2 Go race
 
-3. **Wails 开发环境**：需要 Go 1.21+、Node 18+、WebView2 runtime（Windows 自带）。`wails dev` 启动后 Vite 热重载。
+运行：
 
-4. **CORS**：Wails 的 WebView 访问 `http://127.0.0.1:8000` 属于跨域，FastAPI 需加 `CORSMiddleware`（允许 `*` 或 `http://wails.localhost`）。
+```bash
+go test -race ./internal/bindings ./internal/config ./internal/realtime ./internal/app
+```
 
-5. **MVP 不做**：多实例切换、组态在线编辑、历史回放、OPC UA 直读。这些留给后续迭代。
+若 Windows 环境对部分 race 不支持，报告真实情况，不得伪造。
 
-### 实现顺序建议
+重点覆盖：
 
-1. 先做阶段 1（FastAPI 后端），用 curl + wscat 验证所有 API 端点
-2. 再做阶段 2（Wails GUI），先搭骨架再逐个组件填充
-3. 最后阶段 3 联调，跑完 5 个测试场景
+* InitService 并发；
+* Start/Stop 并发；
+* batch/runtime 互斥；
+* service exit callback；
+* snapshot event bridge；
+* shutdown 与 runtime stop 并发。
+
+## 16.3 Python 测试
+
+至少覆盖：
+
+1. service 无 config 启动；
+2. health；
+3. auth；
+4. project open；
+5. project reload；
+6. inspect；
+7. validate；
+8. compile；
+9. runtime start；
+10. runtimeName；
+11. runtime stop；
+12. stop 后状态清理；
+13. stop 超时；
+14. start rollback；
+15. runtime 未启动接口；
+16. batch 正常；
+17. batch 并发；
+18. batch/runtime 互斥；
+19. export CSV；
+20. export XLSX；
+21. shutdown 无 runtime；
+22. shutdown 有 runtime；
+23. start-stop-start 10 次；
+24. force/quality 不跨 session 泄漏。
+
+## 16.4 前端测试
+
+至少覆盖：
+
+1. 不再传 API host/port；
+2. 不再获取 Token；
+3. 不再硬编码 8000；
+4. 启动运行按钮；
+5. 停止运行按钮；
+6. Wails snapshot 事件；
+7. Tab 切换无重复监听；
+8. runtime error 显示；
+9. service unavailable 显示；
+10. force/quality/override 通过 Wails binding；
+11. 原有全部测试继续通过。
+
+## 16.5 静态门禁测试
+
+增加测试或脚本，至少检查：
+
+```text
+config-tool 生产代码中：
+- 不调用 --inspect-project
+- 不调用 --compile-project
+- 不调用 --batch
+- 不调用 --convert-export
+- 不存在 apiPort: 8000
+- 不向前端暴露 apiToken
+```
+
+允许这些 CLI 参数继续存在于 Python 独立 CLI 兼容代码中。
+
+---
+
+# 17. 手工端到端验收
+
+必须使用最终发布目录，不得只用源码 pytest 代替。
+
+## 17.1 启动目录验收
+
+1. 删除发布目录中的 `project/` 和 `template/`；
+2. 启动 `config-tool.exe`；
+3. 两个目录自动创建；
+4. 重启应用；
+5. 目录内容不被清空；
+6. 打开 YML 默认进入 `template/`；
+7. 打开工程默认进入 `project/`；
+8. 新建工程创建到 `project/<工程名>/`。
+
+## 17.2 进程验收
+
+启动应用后记录任务管理器：
+
+```text
+config-tool.exe PID = A
+DataFactoryService.exe PID = B
+```
+
+依次执行：
+
+```text
+打开工程
+添加 YAML
+修改副本数
+保存运行参数
+切换三个 Tab
+运行批量仿真
+导出 CSV
+导出 XLSX
+启动实时运行
+查看实时值
+固定输出
+解除固定
+修改质量码
+解除质量码
+设置设定值
+停止实时运行
+再次批量仿真
+再次启动实时运行
+再次停止
+```
+
+每一步记录：
+
+* `DataFactoryService.exe` PID 始终为 B；
+* 不出现第二个 DataFactoryService；
+* 不出现 python.exe；
+* 不出现额外 DataFactory.exe；
+* 不弹出命令行窗口；
+* 停止实时运行后 B 仍存在；
+* 退出 Config Tool 后 B 消失。
+
+## 17.3 无 Python 环境验收
+
+在无系统 Python、无 venv、无仓库源码的 Windows 环境：
+
+1. 复制完整发布目录；
+2. 启动 Config Tool；
+3. 创建目录；
+4. 打开 YML；
+5. 新建工程；
+6. 添加 YAML；
+7. 校验；
+8. 批量仿真；
+9. CSV 导出；
+10. XLSX 导出；
+11. 实时运行；
+12. OPC UA 连接；
+13. 停止；
+14. 退出。
+
+任意环节依赖系统 Python则验收失败。
+
+## 17.4 异常验收
+
+测试：
+
+* 删除 `DataFactoryService.exe`；
+* 服务端口竞争；
+* `project` 被普通文件占用；
+* `template` 被普通文件占用；
+* OPC UA 端口被占用；
+* 工程 YAML 格式错误；
+* 服务运行中被任务管理器强制结束；
+* batch 执行中点击实时启动；
+* runtime 执行中点击 batch；
+* runtime stop 超时。
+
+所有情况必须给出明确错误，不得崩溃或留下孤儿进程。
+
+---
+
+# 18. 禁止扩展
+
+本任务不要新增：
+
+* Windows 系统服务安装；
+* 开机启动；
+* 系统托盘；
+* 服务脱离 Config Tool 长期运行；
+* 远程网络监听；
+* 多用户服务；
+* 多工程同时运行；
+* 服务自动更新；
+* 新报警功能；
+* 新归档功能；
+* 新工程文件格式；
+* 新页面；
+* 新模板管理功能；
+* 与本任务无关的 UI 重设计。
+
+保留现有产品页面，不要借架构改造重做界面。
+
+---
+
+# 19. 提交要求
+
+建议按逻辑拆分提交：
+
+```text
+fix(app): start DataFactory service during Config Tool bootstrap
+refactor(compiler): use persistent service for validate and compile
+refactor(project): synchronize project context with DataFactory service
+refactor(runtime): run engine inside persistent DataFactory service
+refactor(batch): move batch execution into persistent service
+refactor(frontend): proxy runtime data through Wails without exposing token
+build(release): package DataFactoryService beside Config Tool
+test(service): add persistent-process integration and acceptance coverage
+```
+
+只暂存对应文件路径。
+
+最终推送 `origin/main`。
+
+---
+
+# 20. 完成报告格式
+
+完成报告必须包含以下内容，不得只写“测试通过”。
+
+## 20.1 Git 信息
+
+```text
+开始 HEAD
+最终 HEAD
+提交列表
+origin/main 推送范围
+```
+
+## 20.2 架构接线证明
+
+明确列出：
+
+```text
+Config Tool 启动在哪里启动 service
+compiler 在哪里调用 service
+工程 open/reload 在哪里同步
+runtime start/stop 在哪里调用 service
+batch 在哪里调用 service
+export 在哪里调用 service
+snapshot 如何从 service 到 React
+```
+
+## 20.3 旧进程路径清理证明
+
+附上命令结果：
+
+```bash
+git grep -n "exec.Command" -- review3/config-tool
+git grep -n "exec.CommandContext" -- review3/config-tool
+git grep -n -- "--inspect-project" review3/config-tool
+git grep -n -- "--compile-project" review3/config-tool
+git grep -n -- "--batch" review3/config-tool
+git grep -n "apiPort: 8000" review3/config-tool/frontend
+git grep -n "apiToken" review3/config-tool/frontend/src
+```
+
+逐项解释剩余结果为何合法。
+
+## 20.4 测试结果
+
+报告真实结果：
+
+* Go；
+* Go race；
+* Python；
+* Frontend；
+* Wails build；
+* PyInstaller build；
+* service smoke；
+* 发布目录 smoke；
+* 无 Python 环境 smoke。
+
+未执行的项目必须写“未执行”，不得用“实现层面验证”代替。
+
+## 20.5 二进制
+
+提供：
+
+```text
+config-tool.exe 路径、大小、SHA256
+DataFactoryService.exe 路径、大小、SHA256
+```
+
+确认二者同级。
+
+## 20.6 PID 验收
+
+提供真实记录：
+
+```text
+启动后 PID
+校验后 PID
+batch 后 PID
+runtime start 后 PID
+runtime stop 后 PID
+再次 start 后 PID
+应用退出后进程是否消失
+```
+
+不得只描述代码设计。
+
+## 20.7 窗口验收
+
+明确说明：
+
+* 是否真实观察到无命令行窗口；
+* 使用什么构建产物；
+* 是否运行过 batch、compile、runtime；
+* 是否仅通过代码推断。
+
+## 20.8 工作区保护
+
+最后附：
+
+```bash
+git status --short
+```
+
+确认用户原有 todo、patch、artifact、requirement、design 和 `.mimocode` 内容未被触碰。
+
+---
+
+# 最终完成定义
+
+只有同时满足以下条件才算完成：
+
+```text
+DataFactoryService 随 Config Tool 自动启动
++
+服务 EXE 随发布包自动放到正确位置
++
+校验/编译不再启动子进程
++
+batch 不再启动子进程
++
+实时运行不再启动子进程
++
+导出不再启动子进程
++
+前端无固定 API 端口
++
+前端不持有后台服务 Token
++
+实时 start/stop 不改变服务 PID
++
+应用退出后无孤儿服务
++
+无 Python 环境实测通过
+```
+
+不要再次提交只有骨架、占位接口或“下阶段实现”的版本。

@@ -143,7 +143,7 @@ const (
 
 var tablesNeedingClusterID = []string{
 	"node_metric", "worker_snapshot", "actor_snapshot", "job_snapshot",
-	"cluster_metric", "actor_event", "job_event",
+	"cluster_metric", "actor_event", "job_event", "alert",
 }
 
 func (s *Store) createSchema() error {

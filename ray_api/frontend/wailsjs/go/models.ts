@@ -348,6 +348,7 @@ export namespace model {
 	    freshNodeCount: number;
 	    failedNodeCount: number;
 	    staleNodeCount: number;
+	    missingNodeCount: number;
 	    staleWorkerCount: number;
 	    staleActorCount: number;
 	    clusterDataStale: boolean;
@@ -371,6 +372,7 @@ export namespace model {
 	        this.freshNodeCount = source["freshNodeCount"];
 	        this.failedNodeCount = source["failedNodeCount"];
 	        this.staleNodeCount = source["staleNodeCount"];
+	        this.missingNodeCount = source["missingNodeCount"];
 	        this.staleWorkerCount = source["staleWorkerCount"];
 	        this.staleActorCount = source["staleActorCount"];
 	        this.clusterDataStale = source["clusterDataStale"];

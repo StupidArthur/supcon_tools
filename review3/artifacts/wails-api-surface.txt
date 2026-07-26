@@ -1,0 +1,140 @@
+# Wails 生产绑定 API 面
+
+## ComponentBinding.d
+  - List
+  - SetContext
+
+## ConfigBinding.d
+  - ExportYAML
+  - ImportYAML
+  - LoadCanvas
+  - SaveCanvas
+  - SetContext
+  - Validate
+
+## RealtimeProjectBinding.d
+  - AddSource
+  - ClearAllForces
+  - ClearForce
+  - CompileProject
+  - CreateAlarmRule
+  - CreateProject
+  - DeleteAlarmRule
+  - DeleteProject
+  - GetDashboard
+  - GetForces
+  - ListAlarmRules
+  - ListProjects
+  - OpenProject
+  - RemoveSource
+  - RenameProject
+  - SaveDashboard
+  - SetContext
+  - SetForce
+  - UpdateAlarmRule
+  - UpdateReplicas
+  - ValidateAlarmRules
+  - ValidateProject
+
+## RealtimeRuntimeBinding.d
+  - AckAlarm
+  - AckAllAlarms
+  - Cleanup
+  - DeleteRunHistory
+  - GetAlarmEvents
+  - GetAlarms
+  - GetConnectionInfo
+  - GetProjectRevision
+  - GetSession
+  - ListRunHistory
+  - SetContext
+  - StartProject
+  - StartSingleYAML
+  - Stop
+
+## SystemBinding.d
+  - AllocateTempYAMLPath
+  - BrowseExe
+  - Cleanup
+  - CleanupTempYAML
+  - ExportBatch
+  - ExportBatchFormatted
+  - ExportCSVRows
+  - ExportRowsFormatted
+  - GetDataFactoryPath
+  - GetRecentLogs
+  - ListConfigs
+  - OpenYAMLFile
+  - ReadTextFile
+  - RunBatch
+  - SaveCSVFile
+  - SaveExportFile
+  - SaveYAMLFile
+  - SetContext
+  - Start
+  - Status
+  - Stop
+  - WriteTempYAML
+  - WriteTextFile
+
+## TemplateConfigBinding.d
+  - ApplyRuntimeOverrides
+  - IsBuiltinTemplate
+  - LoadBuiltinTemplate
+  - LoadTemplate
+  - SaveTemplate
+  - SetContext
+  - ValidateTemplateConfig
+
+## models.ts exported classes
+  - ApplyRuntimeOverridesRequest
+  - ApplyRuntimeOverridesResult
+  - BatchResult
+  - ForceEntry
+  - ForceState
+  - RealtimeConnectionInfo
+  - StartParams
+  - SystemStatus
+  - Position
+  - BlockNode
+  - Connection
+  - ClockConfig
+  - CanvasState
+  - ParamMeta
+  - OutputPort
+  - InputPort
+  - ComponentMeta
+  - PIDPresence
+  - TankPresence
+  - ValvePresence
+  - FieldPresence
+  - PIDConfig
+  - TemplatePatch
+  - SaveTemplateRequest
+  - TemplateProgramTopology
+  - TemplateTopology
+  - TankConfig
+  - ValveConfig
+  - TemplateConfig
+  - TemplateDocument
+  - SaveTemplateResult
+  - ValidationIssue
+  - ValidationResult
+  - AlarmRule
+  - DashboardWidget
+  - DashboardPage
+  - Dashboard
+  - InstanceOrigin
+  - DuplicateInstance
+  - ExpandedInstance
+  - Source
+  - Project
+  - ProjectSummary
+  - ValidationResult
+  - ProjectView
+  - RealtimeRunSession
+  - RealtimeStartOptions
+  - Node
+
+## Forbidden symbol scan
+  clean

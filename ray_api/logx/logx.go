@@ -9,9 +9,29 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 )
 
-var logger *slog.Logger
+var (
+	logger         *slog.Logger
+	legacy         *os.File
+	observationDir string
+	logMu          sync.Mutex
+	logFiles       = map[string]*dimensionLog{}
+	nowFunc        = time.Now
+)
+
+type dimensionLog struct {
+	date   string
+	file   *os.File
+	logger *slog.Logger
+}
+
+var validDimensions = map[string]bool{
+	"app": true, "api": true, "environment": true, "collection": true, "error": true,
+}
 
 // Init 初始化全局 logger。logDir 为日志文件目录。
 // 返回实际日志文件绝对路径（即使失败也返回尝试的路径），供上层诊断。
@@ -24,7 +44,16 @@ func Init(logDir string) (string, error) {
 		return "", err
 	}
 	logger = slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logMu.Lock()
+	if legacy != nil {
+		_ = legacy.Close()
+	}
+	legacy = f
+	observationDir = filepath.Dir(f.Name())
+	logMu.Unlock()
+	pruneObservationLogs(observationDir, nowFunc().AddDate(0, 0, -30))
 	logger.Info("logger initialized", "logFile", f.Name())
+	Event("app", "logger_initialized", "log_dir", observationDir, "retention_days", 30)
 	return f.Name(), nil
 }
 
@@ -64,4 +93,81 @@ func L() *slog.Logger {
 		logger = slog.Default()
 	}
 	return logger
+}
+
+// Event writes a structured JSONL event to a dimension-specific daily file.
+// Dimension names are fixed so callers cannot create arbitrary paths.
+func Event(dimension, message string, attrs ...any) {
+	if !validDimensions[dimension] {
+		dimension = "app"
+	}
+	logMu.Lock()
+	defer logMu.Unlock()
+	if observationDir == "" {
+		return
+	}
+	now := nowFunc()
+	date := now.Format("2006-01-02")
+	entry := logFiles[dimension]
+	if entry == nil || entry.date != date {
+		if entry != nil && entry.file != nil {
+			_ = entry.file.Close()
+		}
+		path := filepath.Join(observationDir, dimension+"_"+date+".jsonl")
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			L().Warn("open observation log failed", "dimension", dimension, "err", err)
+			delete(logFiles, dimension)
+			return
+		}
+		entry = &dimensionLog{
+			date:   date,
+			file:   file,
+			logger: slog.New(slog.NewJSONHandler(file, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		}
+		logFiles[dimension] = entry
+	}
+	entry.logger.Info(message, attrs...)
+}
+
+func Close() {
+	logMu.Lock()
+	defer logMu.Unlock()
+	for name, entry := range logFiles {
+		if entry.file != nil {
+			_ = entry.file.Close()
+		}
+		delete(logFiles, name)
+	}
+	if legacy != nil {
+		_ = legacy.Close()
+		legacy = nil
+	}
+}
+
+func pruneObservationLogs(dir string, before time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		matched := false
+		for dimension := range validDimensions {
+			if strings.HasPrefix(name, dimension+"_") && strings.HasSuffix(name, ".jsonl") {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		info, err := entry.Info()
+		if err == nil && info.ModTime().Before(before) {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
+	}
 }

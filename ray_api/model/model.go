@@ -160,6 +160,7 @@ type CollectionHealth struct {
 	FreshNodeCount   int `json:"freshNodeCount"`
 	FailedNodeCount  int `json:"failedNodeCount"`
 	StaleNodeCount   int `json:"staleNodeCount"`
+	MissingNodeCount int `json:"missingNodeCount"`
 	StaleWorkerCount int `json:"staleWorkerCount"`
 	StaleActorCount  int `json:"staleActorCount"`
 
