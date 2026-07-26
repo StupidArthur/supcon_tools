@@ -61,8 +61,6 @@ export interface RuntimeStoreState {
   // 连接状态
   apiHost: string
   apiPort: number
-  /** 仅内存；不持久化。空字符串表示未注入 token（如未启实时进程）。 */
-  apiToken: string
   runtimeName: string | null
   connectionState: ConnectionState
   // API readiness（由 SystemBinding.status().apiReady 写入，REST 真实可达）
@@ -108,7 +106,7 @@ export interface RuntimeStoreState {
   subscriptionError: string | null
 
   // Actions
-  setEndpoint: (host: string, port: number, token?: string) => void
+  setEndpoint: (host: string, port: number) => void
   setApiReady: (ready: boolean) => void
   setTrendTags: (tags: string[]) => void
   setSeriesVisibility: (tag: string, visible: boolean) => void
@@ -139,7 +137,6 @@ export interface RuntimeStoreState {
 }
 
 const DEFAULT_API_HOST = '127.0.0.1'
-const DEFAULT_API_PORT = 8000
 
 /**
  * 阶段 D：计算所有来源的 tag 并集 + 排序。
@@ -228,8 +225,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
 
   return {
     apiHost: DEFAULT_API_HOST,
-    apiPort: DEFAULT_API_PORT,
-    apiToken: '',
+    apiPort: 0,
     runtimeName: null,
     connectionState: 'idle',
     apiReady: false,
@@ -259,7 +255,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
     lastAcknowledgedSubscription: undefined,
     subscriptionError: null,
 
-    setEndpoint: (host, port, token) => set({ apiHost: host, apiPort: port, apiToken: token ?? '' }),
+    setEndpoint: (host, port) => set({ apiHost: host, apiPort: port }),
     setApiReady: (ready) => set({ apiReady: ready }),
     setTrendTags: (tags) => {
       set({ trendTags: tags })
@@ -363,7 +359,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       // 第一步：GET /api/status 获取真实 runtimeName
       let status
       try {
-        status = await getStatus({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken })
+        status = await getStatus({ apiHost: state.apiHost, apiPort: state.apiPort })
       } catch (e) {
         // 若 generation 已变（disconnect 在我们 await 期间发生），不要写错误状态
         if (get().connectGeneration !== myGen) return
@@ -382,14 +378,14 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
 
       // 第三步：用真实 runtimeName 调 meta（meta 失败不阻止 WS）
       try {
-        await getMeta({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }, runtimeName)
+        await getMeta({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
       } catch (e) {
         // 忽略
       }
 
       // 通用 tag catalog（失败不阻止 WS）
       try {
-        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }, runtimeName)
+        const tagsResp = await getTags({ apiHost: state.apiHost, apiPort: state.apiPort }, runtimeName)
         if (get().connectGeneration === myGen && Array.isArray(tagsResp.tags)) {
           set({ tagCatalog: tagsResp.tags })
         }
@@ -409,9 +405,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       })
 
       // 第四步：连接 WS；start() 内会先 GET snapshot 再开 WS。
-      const endpoint = { apiHost: state.apiHost, apiPort: state.apiPort, apiToken: state.apiToken }
+      const endpoint = { apiHost: state.apiHost, apiPort: state.apiPort }
       const runtimeWs = createRuntimeWs(
-        { apiHost: state.apiHost, apiPort: state.apiPort, cycleTime, apiToken: state.apiToken },
+        { apiHost: state.apiHost, apiPort: state.apiPort, cycleTime },
         (msg) => {
           // 消息回调：仅在 generation 未变时写入 snapshot / heartbeat。
           if (get().connectGeneration !== myGen) return
@@ -472,10 +468,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
      * 行为：
      *   - 递增 generation 让所有进行中的 connect 失效
      *   - 停止 WS（保留 latestSnapshot / rawSnapshot 以便 UI 冻结最后值）
-     *   - 清空 apiToken（session 端到端生命周期闭合）
      *   - 设置 stale = true（断线标记）
-     * 临时 WS 断线（指 createRuntimeWs 内部 scheduleReconnect 路径）不经过此函数，
-     * 不清 token；只有真正的"session 结束"才会进入这里。
+     * 临时 WS 断线（指 createRuntimeWs 内部 scheduleReconnect 路径）不经过此函数；
+     * 只有真正的"session 结束"才会进入这里。
      */
     disconnect: () => {
       const nextGen = (get().connectGeneration ?? 0) + 1
@@ -488,7 +483,6 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       set({
         connectionState: 'idle',
         stale: true,
-        apiToken: '',
         lastAcknowledgedSubscription: undefined,
         subscriptionError: null,
       })
@@ -528,8 +522,7 @@ export const useRuntimeStore = create<RuntimeStoreState>((set, get) => {
       stopStaleCheck()
       set({
         apiHost: DEFAULT_API_HOST,
-        apiPort: DEFAULT_API_PORT,
-        apiToken: '',
+        apiPort: 0,
         runtimeName: null,
         connectionState: 'idle',
         apiReady: false,

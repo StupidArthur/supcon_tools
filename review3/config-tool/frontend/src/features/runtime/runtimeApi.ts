@@ -4,8 +4,7 @@
 //   - 必须先调 getStatus() 获取真实 runtimeName，再调 getMeta/getSnapshot。
 //   - 任何路径里的 runtimeName 都来自 /api/status.instance_name，禁止硬编码或与 Program 实例名混淆。
 //   - 这里不维护业务状态（连接、缓存、心跳），只做 HTTP 调用和字段映射。
-//   - REST 鉴权：cfg.apiToken 非空时必须加 Authorization: Bearer <token> 头；
-//     空 token 不发送 Authorization（兼容 DATAFACTORY_NO_AUTH 开发模式）。
+//   - 服务由 Config Tool 启动时设置 DATAFACTORY_NO_AUTH=1，前端无需 Token。
 
 import type {
   ApiMetaResponse,
@@ -17,8 +16,6 @@ import type {
 export interface RuntimeApiConfig {
   apiHost: string
   apiPort: number
-  /** 仅内存；不持久化。空字符串表示不发送 Authorization（如开发模式）。 */
-  apiToken?: string
 }
 
 export class RuntimeApiError extends Error {
@@ -28,14 +25,10 @@ export class RuntimeApiError extends Error {
   }
 }
 
-async function fetchJson<T>(url: string, cfg: RuntimeApiConfig, signal?: AbortSignal): Promise<T> {
-  const headers: Record<string, string> = {}
-  if (cfg.apiToken) {
-    headers['Authorization'] = `Bearer ${cfg.apiToken}`
-  }
-  const resp = await fetch(url, { signal, headers })
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const resp = await fetch(url, { signal })
   if (!resp.ok) {
-    throw new RuntimeApiError(resp.status, `${url} → HTTP ${resp.status}`)
+    throw new RuntimeApiError(resp.status, `${url} -> HTTP ${resp.status}`)
   }
   return (await resp.json()) as T
 }
@@ -49,7 +42,7 @@ export async function getStatus(
   cfg: RuntimeApiConfig,
   signal?: AbortSignal,
 ): Promise<ApiStatusResponse> {
-  return fetchJson<ApiStatusResponse>(apiUrl(cfg, '/api/status'), cfg, signal)
+  return fetchJson<ApiStatusResponse>(apiUrl(cfg, '/api/status'), signal)
 }
 
 export async function getMeta(
@@ -59,7 +52,6 @@ export async function getMeta(
 ): Promise<ApiMetaResponse> {
   return fetchJson<ApiMetaResponse>(
     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/meta`),
-    cfg,
     signal,
   )
 }
@@ -71,7 +63,6 @@ export async function getSnapshot(
 ): Promise<ApiSnapshot> {
   return fetchJson<ApiSnapshot>(
     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/snapshot`),
-    cfg,
     signal,
   )
 }
@@ -88,7 +79,6 @@ export async function getTags(
 ): Promise<ApiTagsResponse> {
   return fetchJson<ApiTagsResponse>(
     apiUrl(cfg, `/api/instances/${encodeURIComponent(runtimeName)}/tags`),
-    cfg,
     signal,
   )
 }
@@ -99,7 +89,7 @@ export async function getTags(
 //
 // 关键约束：cycle_count / sim_time 缺失时**绝不能**映射为 0；这会与
 // "Engine 已启动但还没推周期"或"snapshot 字段不完整"两种状态混淆。
-// 缺失时保持 undefined，由上层 UI 显示 `—` 和告警。
+// 缺失时保持 undefined，由上层 UI 显示 `-` 和告警。
 export function mapApiSnapshot(raw: ApiSnapshot, receivedAt: number): RuntimeSnapshot {
   const num = (k: string): number | undefined => {
     const v = raw[k]

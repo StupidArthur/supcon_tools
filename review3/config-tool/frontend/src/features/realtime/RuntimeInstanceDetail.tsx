@@ -50,9 +50,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch(`http://${apiHost}:${apiPort}/api/instances/default/tags`, {
-          headers: { Authorization: `Bearer ${(useRuntimeStore.getState() as any).apiToken || ''}` },
-        })
+        const res = await fetch(`http://${apiHost}:${apiPort}/api/instances/default/tags`)
         if (cancelled) return
         if (!res.ok) {
           setInstanceNotReady(true)

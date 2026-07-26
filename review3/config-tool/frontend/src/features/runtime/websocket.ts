@@ -23,8 +23,6 @@ export interface RuntimeWsConfig {
   apiHost: string
   apiPort: number
   cycleTime: number
-  /** 仅内存；不持久化。空字符串表示不附加 token（开发模式）。 */
-  apiToken?: string
 }
 
 export type WsMessageHandler = (msg: ParsedWsMessage) => void
@@ -122,11 +120,7 @@ export function createRuntimeWs(
 
   const wsUrl = (): string => {
     const proto = 'ws:'
-    const base = `${proto}//${config.apiHost}:${config.apiPort}/ws/snapshot`
-    if (!config.apiToken) return base
-    // 不使用 URLSearchParams 以避免对 token 内部特殊字符做二次变换；
-    // encodeURIComponent 已经覆盖了所有 reserved 字符。
-    return `${base}?token=${encodeURIComponent(config.apiToken)}`
+    return `${proto}//${config.apiHost}:${config.apiPort}/ws/snapshot`
   }
 
   const setState = (s: ConnectionState): void => {

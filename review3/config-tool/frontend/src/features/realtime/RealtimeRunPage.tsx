@@ -81,12 +81,11 @@ export function RealtimeRunPage() {
         ) {
           return
         }
-        // todo.md §13.2：前端不持有 token，由 Go 代理
         if (!info.apiHost || !info.apiPort) {
           setError('运行 host/port 缺失，连接被拒绝。请重新启动实时工程。')
           return
         }
-        rtStore.setEndpoint(info.apiHost, info.apiPort, '')
+        rtStore.setEndpoint(info.apiHost, info.apiPort)
         void rtStore.connect()
       })()
     } else if (!dfStatus.running) {
