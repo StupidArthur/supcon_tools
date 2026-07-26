@@ -1479,10 +1479,7 @@ func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath st
 // 注：本方法为旧的重跑导出路径，当前主流程不使用（主流程用 ExportRowsFormatted 导出内存结果）；
 // xls 暂未启用（运行环境缺 xlwt）。
 func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) error {
-	// 在函数开头统一规范化 format（trim + lowercase），后续 format 门禁与参数构造必须使用同一 fmtLower，
-	// 避免把原始的 " xlsx " 等带空格串透传给 Python argparse（choices 为精确匹配，会被拒）。
 	fmtLower := strings.ToLower(strings.TrimSpace(format))
-	// 格式门禁前置：xls 当前版本暂不支持，未知格式直接拒绝；都不启动子进程。
 	switch fmtLower {
 	case "csv", "xlsx":
 	case "xls":
@@ -1490,33 +1487,33 @@ func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, expo
 	default:
 		return fmt.Errorf("不支持的导出格式: %s", format)
 	}
-	if err := b.ensureDataFactory(); err != nil {
-		return err
-	}
 	if exportPath == "" {
 		return fmt.Errorf("导出路径不能为空")
 	}
 	if cycles <= 0 {
 		return fmt.Errorf("周期数必须大于 0")
 	}
-	if err := b.beginBatch(); err != nil {
-		return err
-	}
-	defer b.endBatch()
 
-	args := buildBatchExportArgs(configPath, cycles, exportPath, fmtLower, columns, sheetName)
-	cmd := b.dfLaunch.command(b.commandFactory, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("DataFactory 导出失败: %w\n%s", err, string(output))
+	// §九：通过服务 API 执行 batch + 导出
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("DataFactoryService 未初始化")
 	}
 
-	info, err := os.Stat(exportPath)
+	batchResult, err := b.runBatchViaService(client, configPath, cycles)
 	if err != nil {
-		return fmt.Errorf("导出文件未生成: %w", err)
+		return fmt.Errorf("批量仿真失败: %w", err)
 	}
-	if info.Size() == 0 {
-		return fmt.Errorf("导出文件为空")
+
+	cols := columns
+	if len(cols) == 0 {
+		cols = batchResult.Columns
+	}
+
+	if err := b.exportViaService(client, cols, batchResult.Rows, exportPath, fmtLower, sheetName); err != nil {
+		return fmt.Errorf("导出失败: %w", err)
 	}
 	return nil
 }
