@@ -272,11 +272,11 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "m_drum_max_kmol": 1.0,
         "m_sump_max_kmol": 3.0,
         # 稳态流量初值 (kmol/s)，参考工况 100 kg/h 进料
-        "feed_flow_kgmol_per_s": 0.001307,    # 100 kg/h
-        "distillate_flow_kgmol_per_s": 0.000209,
-        "bottoms_flow_kgmol_per_s": 0.001098,
-        "reflux_flow_kgmol_per_s": 0.000625,
-        "vapor_boilup_kgmol_per_s": 0.000834,
+        "feed_flow_kgmol_per_s": 0.00130716777,
+        "distillate_flow_kgmol_per_s": 0.00020933521,
+        "bottoms_flow_kgmol_per_s": 0.00109783256,
+        "reflux_flow_kgmol_per_s": 0.00062800562,
+        "vapor_boilup_kgmol_per_s": 0.00083734082,
         # 进料
         "feed_ethanol_wt": 0.25,
         "feed_temperature_c": 60.0,
@@ -287,9 +287,9 @@ class ETHANOL_WATER_DISTILLATION(BaseProgram):
         "sump_ua_kw_per_k": 0.02,               # 塔釜散热 UA (kW/K)
         "ambient_temperature_c": 25.0,          # 环境温度 (℃)
         # 数值积分
-        "max_internal_step": 0.05,
+        "max_internal_step": 0.25,
         # 初始化
-        "initialization_mode": "STEADY",
+        "initialization_mode": "WARM_GUESS",
         "random_seed": 20260719,
         # ===== 阶段 D 新增：阀门动态（spec §6.2） =====
         # 每个阀门：(满行程时间 s, 特性)
