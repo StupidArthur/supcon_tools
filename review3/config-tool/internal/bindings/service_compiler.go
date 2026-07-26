@@ -3,26 +3,27 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"config-tool/internal/realtime"
 )
 
 // ServiceRealtimeCompiler 通过常驻服务 API 执行校验和编译（todo.md §7.1）。
-//
-// 替代 PythonRealtimeCompiler（exec.CommandContext + --inspect-project / --compile-project）。
-// 继续实现 realtime.RealtimeCompiler 接口，使 Manager 上层逻辑不变。
 type ServiceRealtimeCompiler struct {
-	client *DataFactoryServiceClient
+	client      *DataFactoryServiceClient
+	mu          sync.Mutex
+	projectFile string
 }
 
-// NewServiceRealtimeCompiler 创建基于服务的编译器。
 func NewServiceRealtimeCompiler(client *DataFactoryServiceClient) *ServiceRealtimeCompiler {
 	return &ServiceRealtimeCompiler{client: client}
 }
 
-// inspectRequest 是 POST /api/project/inspect 的请求体。
-type inspectRequest struct {
-	Sources []inspectSource `json:"sources"`
+// SetProjectFile 设置当前工程文件路径，校验/编译时传给服务端。
+func (c *ServiceRealtimeCompiler) SetProjectFile(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.projectFile = path
 }
 
 type inspectSource struct {
@@ -31,18 +32,26 @@ type inspectSource struct {
 	Replicas int    `json:"replicas"`
 }
 
-// inspectResponse 是 POST /api/project/inspect 的响应体。
+type inspectRequest struct {
+	Sources     []inspectSource `json:"sources"`
+	ProjectFile string          `json:"projectFile,omitempty"`
+}
+
 type inspectResponse struct {
-	OK         bool                       `json:"ok"`
-	Valid      bool                       `json:"valid"`
-	Instances  []realtime.ExpandedInstance `json:"instances"`
+	OK         bool                        `json:"ok"`
+	Valid      bool                        `json:"valid"`
+	Instances  []realtime.ExpandedInstance  `json:"instances"`
 	Duplicates []realtime.DuplicateInstance `json:"duplicates"`
 }
 
-// Validate 调用 POST /api/project/inspect（todo.md §7.1）。
 func (c *ServiceRealtimeCompiler) Validate(ctx context.Context, sources []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
+	c.mu.Lock()
+	pf := c.projectFile
+	c.mu.Unlock()
+
 	req := inspectRequest{
-		Sources: make([]inspectSource, len(sources)),
+		Sources:     make([]inspectSource, len(sources)),
+		ProjectFile: pf,
 	}
 	for i, s := range sources {
 		req.Sources[i] = inspectSource{
@@ -71,23 +80,26 @@ func (c *ServiceRealtimeCompiler) Validate(ctx context.Context, sources []realti
 	return result, nil
 }
 
-// compileRequest 是 POST /api/project/compile 的请求体。
 type compileRequest struct {
-	Sources []inspectSource `json:"sources"`
-	Output  string          `json:"output"`
+	Sources     []inspectSource `json:"sources"`
+	Output      string          `json:"output"`
+	ProjectFile string          `json:"projectFile,omitempty"`
 }
 
-// compileResponse 是 POST /api/project/compile 的响应体。
 type compileResponse struct {
 	OK     bool   `json:"ok"`
 	Output string `json:"output"`
 }
 
-// Compile 调用 POST /api/project/compile（todo.md §7.1）。
 func (c *ServiceRealtimeCompiler) Compile(ctx context.Context, sources []realtime.CompilerSourceSpec, outputPath string) (string, error) {
+	c.mu.Lock()
+	pf := c.projectFile
+	c.mu.Unlock()
+
 	req := compileRequest{
-		Sources: make([]inspectSource, len(sources)),
-		Output:  outputPath,
+		Sources:     make([]inspectSource, len(sources)),
+		Output:      outputPath,
+		ProjectFile: pf,
 	}
 	for i, s := range sources {
 		req.Sources[i] = inspectSource{
@@ -107,5 +119,4 @@ func (c *ServiceRealtimeCompiler) Compile(ctx context.Context, sources []realtim
 	return resp.Output, nil
 }
 
-// 编译时验证接口实现
 var _ realtime.RealtimeCompiler = (*ServiceRealtimeCompiler)(nil)

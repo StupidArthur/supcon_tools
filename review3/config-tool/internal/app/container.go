@@ -79,8 +79,10 @@ func NewContainerWithMode(devMode bool, wailsGenerateMode bool) (*Container, err
 
 	// 4. 创建 ServiceRealtimeCompiler（todo.md §7.1）
 	var compiler realtime.RealtimeCompiler
+	var serviceCompiler *bindings.ServiceRealtimeCompiler
 	if service != nil {
-		compiler = bindings.NewServiceRealtimeCompiler(service.Client())
+		serviceCompiler = bindings.NewServiceRealtimeCompiler(service.Client())
+		compiler = serviceCompiler
 	} else {
 		// wails generate mode 或服务未启动：使用 noop compiler
 		compiler = &noopCompiler{}
@@ -130,6 +132,9 @@ func NewContainerWithMode(devMode bool, wailsGenerateMode bool) (*Container, err
 		runtimeBinding.SetServiceClient(service.Client())
 		realtimeBinding.SetServiceClient(service.Client())
 		systemBinding.SetServiceClient(service.Client())
+		if serviceCompiler != nil {
+			realtimeBinding.SetProjectFileSetter(serviceCompiler.SetProjectFile)
+		}
 	}
 
 	// 8. 创建 lifecycle

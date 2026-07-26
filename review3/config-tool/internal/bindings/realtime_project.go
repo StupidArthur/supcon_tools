@@ -22,7 +22,8 @@ type RealtimeProjectBinding struct {
 	manager *realtime.Manager
 	// serviceClient 用于同步工程上下文到常驻服务（todo.md §8）。
 	// 由 container 在服务启动后注入。
-	serviceClient *DataFactoryServiceClient
+	serviceClient     *DataFactoryServiceClient
+	projectFileSetter func(string)
 }
 
 func NewRealtimeProjectBinding(manager *realtime.Manager) *RealtimeProjectBinding {
@@ -32,6 +33,11 @@ func NewRealtimeProjectBinding(manager *realtime.Manager) *RealtimeProjectBindin
 // SetServiceClient 注入服务客户端（todo.md §8）。
 func (b *RealtimeProjectBinding) SetServiceClient(client *DataFactoryServiceClient) {
 	b.serviceClient = client
+}
+
+// SetProjectFileSetter 注入 compiler 的 projectFile 设置回调。
+func (b *RealtimeProjectBinding) SetProjectFileSetter(fn func(string)) {
+	b.projectFileSetter = fn
 }
 
 func (b *RealtimeProjectBinding) SetContext(ctx context.Context) {
@@ -518,14 +524,22 @@ func (b *RealtimeProjectBinding) SetRuntimeValue(apiHost string, apiPort int, in
 // syncProjectOpen 通知服务打开工程（todo.md §8.1）。
 // 在 CreateProject / OpenProjectFile / OpenRecentProject 成功后调用。
 func (b *RealtimeProjectBinding) syncProjectOpen(projectFile string) error {
+	// 设置 compiler 的 projectFile（用于 /api/project/inspect 和 /api/project/compile）
+	if b.projectFileSetter != nil {
+		b.projectFileSetter(projectFile)
+	}
 	if b.serviceClient == nil {
-		return nil // 服务未注入时静默跳过（兼容旧测试）
+		return nil
 	}
 	req := map[string]string{"projectFile": projectFile}
 	var resp struct {
 		OK bool `json:"ok"`
 	}
-	return b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/open", req, &resp)
+	if err := b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/open", req, &resp); err != nil {
+		fmt.Fprintf(os.Stderr, "[realtime] syncProjectOpen 失败: %v\n", err)
+		return err
+	}
+	return nil
 }
 
 // syncProjectReload 通知服务重新加载工程（todo.md §8.2）。
