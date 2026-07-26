@@ -52,14 +52,82 @@ if (-not $SkipServiceBuild) {
     $ServiceExe = Join-Path $Review3Dir "dist\DataFactoryService.exe"
 }
 
-# 2. Health smoke test
+# 2. Health smoke test（真实验证）
 Write-Host "[2/6] 服务 health smoke test..." -ForegroundColor Yellow
-# 注意：完整的 smoke test 需要启动服务并检查 /api/health
-# 这里只做基本的文件存在检查
 if (-not (Test-Path $ServiceExe)) {
     throw "DataFactoryService.exe 不存在: $ServiceExe"
 }
-Write-Host "  服务 EXE 存在检查通过" -ForegroundColor Green
+
+# 选择一个动态端口
+$SmokePort = 18999
+$SmokeProcess = $null
+try {
+    # 启动服务，设置无鉴权模式
+    $env:DATAFACTORY_NO_AUTH = "1"
+    $SmokeProcess = Start-Process -FilePath $ServiceExe `
+        -ArgumentList "--service", "--api-host", "127.0.0.1", "--api-port", $SmokePort `
+        -PassThru -WindowStyle Hidden `
+        -RedirectStandardOutput (Join-Path $env:TEMP "df_smoke_stdout.log") `
+        -RedirectStandardError (Join-Path $env:TEMP "df_smoke_stderr.log")
+
+    Write-Host "  服务 PID: $($SmokeProcess.Id)"
+
+    # 等待 /api/health 就绪（最多 15 秒）
+    $HealthOk = $false
+    $HealthDetail = ""
+    for ($i = 0; $i -lt 30; $i++) {
+        Start-Sleep -Milliseconds 500
+        try {
+            $resp = Invoke-RestMethod -Uri "http://127.0.0.1:$SmokePort/api/health" -Method GET -TimeoutSec 2
+            if ($resp.ok -eq $true -and $resp.serviceState -eq "ready") {
+                $HealthOk = $true
+                $HealthDetail = "ok=$($resp.ok) protocolVersion=$($resp.protocolVersion) serviceState=$($resp.serviceState) runtimeState=$($resp.runtimeState)"
+                break
+            }
+            $HealthDetail = "ok=$($resp.ok) serviceState=$($resp.serviceState)"
+        } catch {
+            $HealthDetail = "等待中... ($($_.Exception.Message))"
+        }
+    }
+
+    if (-not $HealthOk) {
+        $stderrLog = ""
+        try { $stderrLog = Get-Content (Join-Path $env:TEMP "df_smoke_stderr.log") -Raw -ErrorAction Stop } catch {}
+        throw "Health smoke 失败: 服务未在 15s 内就绪。详情: $HealthDetail`nstderr: $stderrLog"
+    }
+
+    Write-Host "  Health 验证通过: $HealthDetail" -ForegroundColor Green
+
+    # 验证 protocolVersion
+    $resp = Invoke-RestMethod -Uri "http://127.0.0.1:$SmokePort/api/health" -Method GET -TimeoutSec 2
+    if ($resp.protocolVersion -ne 1) {
+        throw "protocolVersion 不匹配: 期望 1, 实际 $($resp.protocolVersion)"
+    }
+
+    # 请求 /api/service/shutdown
+    try {
+        Invoke-RestMethod -Uri "http://127.0.0.1:$SmokePort/api/service/shutdown" -Method POST -TimeoutSec 5 -Body '{}' -ContentType 'application/json'
+    } catch {
+        # shutdown 可能导致连接断开，忽略
+    }
+
+    # 等待进程退出（最多 10 秒）
+    $Exited = $SmokeProcess.WaitForExit(10000)
+    if (-not $Exited) {
+        Write-Host "  服务未在 10s 内退出，强制终止" -ForegroundColor Red
+        $SmokeProcess.Kill()
+        $SmokeProcess.WaitForExit(5000)
+        throw "服务未在超时内退出"
+    }
+
+    Write-Host "  服务已正常退出 (exit code: $($SmokeProcess.ExitCode))" -ForegroundColor Green
+}
+finally {
+    if ($SmokeProcess -and -not $SmokeProcess.HasExited) {
+        try { $SmokeProcess.Kill() } catch {}
+    }
+    Remove-Item Env:\DATAFACTORY_NO_AUTH -ErrorAction SilentlyContinue
+}
 
 # 3. 构建 config-tool.exe
 if (-not $SkipWailsBuild) {
