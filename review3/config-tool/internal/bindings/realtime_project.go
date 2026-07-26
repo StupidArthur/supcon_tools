@@ -22,8 +22,7 @@ type RealtimeProjectBinding struct {
 	manager *realtime.Manager
 	// serviceClient 用于同步工程上下文到常驻服务（todo.md §8）。
 	// 由 container 在服务启动后注入。
-	serviceClient     *DataFactoryServiceClient
-	projectFileSetter func(string)
+	serviceClient *DataFactoryServiceClient
 }
 
 func NewRealtimeProjectBinding(manager *realtime.Manager) *RealtimeProjectBinding {
@@ -33,11 +32,6 @@ func NewRealtimeProjectBinding(manager *realtime.Manager) *RealtimeProjectBindin
 // SetServiceClient 注入服务客户端（todo.md §8）。
 func (b *RealtimeProjectBinding) SetServiceClient(client *DataFactoryServiceClient) {
 	b.serviceClient = client
-}
-
-// SetProjectFileSetter 注入 compiler 的 projectFile 设置回调。
-func (b *RealtimeProjectBinding) SetProjectFileSetter(fn func(string)) {
-	b.projectFileSetter = fn
 }
 
 func (b *RealtimeProjectBinding) SetContext(ctx context.Context) {
@@ -59,10 +53,9 @@ func (b *RealtimeProjectBinding) CreateProject(name string) (realtime.OpenedProj
 	if err != nil {
 		return realtime.OpenedProject{}, err
 	}
-	// todo.md §8.1：新建工程后同步到服务
+	// todo.md §8.1：同步打开到服务。错误必须返回前端（§三）。
 	if syncErr := b.syncProjectOpen(proj.ProjectFile); syncErr != nil {
-		// 同步失败不阻断主流程，但记录错误（todo.md §8.4）
-		// 前端可通过后续 reload 重试
+		return proj, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
 	}
 	return proj, nil
 }
@@ -72,9 +65,8 @@ func (b *RealtimeProjectBinding) CreateProjectAt(name, parentDir string) (realti
 	if err != nil {
 		return realtime.OpenedProject{}, err
 	}
-	// todo.md §8.1：新建工程后同步到服务
 	if syncErr := b.syncProjectOpen(proj.ProjectFile); syncErr != nil {
-		// 同步失败不阻断主流程
+		return proj, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
 	}
 	return proj, nil
 }
@@ -84,9 +76,8 @@ func (b *RealtimeProjectBinding) OpenProjectFile(projectFile string) (realtime.O
 	if err != nil {
 		return realtime.OpenedProject{}, err
 	}
-	// todo.md §8.1：打开工程后同步到服务
 	if syncErr := b.syncProjectOpen(proj.ProjectFile); syncErr != nil {
-		// 同步失败不阻断主流程
+		return proj, fmt.Errorf("工程已加载，但同步到运行服务失败: %w", syncErr)
 	}
 	return proj, nil
 }
@@ -96,10 +87,10 @@ func (b *RealtimeProjectBinding) AddSourceAt(projectID, projectFile, yamlPath st
 	if err != nil {
 		return realtime.OpenedProjectView{}, err
 	}
-	// todo.md §8.2：添加 YAML 成功后同步到服务
+	// todo.md §8.2：reload 失败必须返回前端（§三），不允许 _ = ...
 	if view.Applied {
-		if syncErr := b.syncProjectReload(); syncErr != nil {
-			// 同步失败不阻断主流程
+		if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+			return view, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
 		}
 	}
 	return view, nil
@@ -110,10 +101,9 @@ func (b *RealtimeProjectBinding) RemoveSourceAt(projectID, projectFile, sourceID
 	if err != nil {
 		return realtime.OpenedProjectView{}, err
 	}
-	// todo.md §8.2：移除 YAML 成功后同步到服务
 	if view.Applied {
-		if syncErr := b.syncProjectReload(); syncErr != nil {
-			// 同步失败不阻断主流程
+		if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+			return view, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
 		}
 	}
 	return view, nil
@@ -124,10 +114,9 @@ func (b *RealtimeProjectBinding) UpdateReplicasAt(projectID, projectFile, source
 	if err != nil {
 		return realtime.OpenedProjectView{}, err
 	}
-	// todo.md §8.2：修改副本数成功后同步到服务
 	if view.Applied {
-		if syncErr := b.syncProjectReload(); syncErr != nil {
-			// 同步失败不阻断主流程
+		if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+			return view, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
 		}
 	}
 	return view, nil
@@ -138,9 +127,8 @@ func (b *RealtimeProjectBinding) UpdateRuntime(projectID, projectFile string, rt
 	if err != nil {
 		return realtime.OpenedProject{}, err
 	}
-	// todo.md §8.2：修改 runtime 成功后同步到服务
-	if syncErr := b.syncProjectReload(); syncErr != nil {
-		// 同步失败不阻断主流程
+	if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+		return proj, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
 	}
 	return proj, nil
 }
@@ -170,15 +158,55 @@ func (b *RealtimeProjectBinding) AddSource(projectID string) (realtime.ProjectVi
 	if path == "" {
 		return realtime.ProjectView{}, nil
 	}
-	return b.manager.AddSource(b.ctx, projectID, path)
+	view, err := b.manager.AddSource(b.ctx, projectID, path)
+	if err != nil {
+		return realtime.ProjectView{}, err
+	}
+	// todo.md §8.2：reload 失败必须返回前端（§三），不允许 _ = ...
+	if view.Applied {
+		projectFile, err := b.manager.ResolveProjectFile(projectID)
+		if err != nil {
+			return view, fmt.Errorf("工程已保存，但定位工程文件失败: %w", err)
+		}
+		if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+			return view, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
+		}
+	}
+	return view, nil
 }
 
 func (b *RealtimeProjectBinding) RemoveSource(projectID, sourceID string) (realtime.ProjectView, error) {
-	return b.manager.RemoveSource(b.ctx, projectID, sourceID)
+	projectFile, err := b.manager.ResolveProjectFile(projectID)
+	if err != nil {
+		return realtime.ProjectView{}, fmt.Errorf("无法定位工程文件: %w", err)
+	}
+	view, err := b.manager.RemoveSource(b.ctx, projectID, sourceID)
+	if err != nil {
+		return realtime.ProjectView{}, err
+	}
+	if view.Applied {
+		if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+			return view, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
+		}
+	}
+	return view, nil
 }
 
 func (b *RealtimeProjectBinding) UpdateReplicas(projectID, sourceID string, replicas int) (realtime.ProjectView, error) {
-	return b.manager.UpdateReplicas(b.ctx, projectID, sourceID, replicas)
+	projectFile, err := b.manager.ResolveProjectFile(projectID)
+	if err != nil {
+		return realtime.ProjectView{}, fmt.Errorf("无法定位工程文件: %w", err)
+	}
+	view, err := b.manager.UpdateReplicas(b.ctx, projectID, sourceID, replicas)
+	if err != nil {
+		return realtime.ProjectView{}, err
+	}
+	if view.Applied {
+		if syncErr := b.syncProjectReload(projectFile); syncErr != nil {
+			return view, fmt.Errorf("工程已保存，但同步到运行服务失败: %w", syncErr)
+		}
+	}
+	return view, nil
 }
 
 func (b *RealtimeProjectBinding) ValidateProject(projectID string) (realtime.ValidationResult, error) {
@@ -523,35 +551,42 @@ func (b *RealtimeProjectBinding) SetRuntimeValue(apiHost string, apiPort int, in
 
 // syncProjectOpen 通知服务打开工程（todo.md §8.1）。
 // 在 CreateProject / OpenProjectFile / OpenRecentProject 成功后调用。
+// inspector 必须先成功，再 open；open 错误需返回给调用方（§三）。
 func (b *RealtimeProjectBinding) syncProjectOpen(projectFile string) error {
-	// 设置 compiler 的 projectFile（用于 /api/project/inspect 和 /api/project/compile）
-	if b.projectFileSetter != nil {
-		b.projectFileSetter(projectFile)
-	}
 	if b.serviceClient == nil {
 		return nil
+	}
+	if b.ctx == nil {
+		return fmt.Errorf("RealtimeProjectBinding ctx 未注入")
 	}
 	req := map[string]string{"projectFile": projectFile}
 	var resp struct {
 		OK bool `json:"ok"`
 	}
 	if err := b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/open", req, &resp); err != nil {
-		fmt.Fprintf(os.Stderr, "[realtime] syncProjectOpen 失败: %v\n", err)
-		return err
+		return fmt.Errorf("同步工程到运行服务失败: %w", err)
 	}
 	return nil
 }
 
 // syncProjectReload 通知服务重新加载工程（todo.md §8.2）。
 // 在 AddSource / RemoveSource / UpdateReplicas / UpdateRuntime 成功后调用。
-func (b *RealtimeProjectBinding) syncProjectReload() error {
+// projectFile 为必传，使服务能够定位到正确工程并 reload。
+func (b *RealtimeProjectBinding) syncProjectReload(projectFile string) error {
 	if b.serviceClient == nil {
 		return nil
 	}
+	if b.ctx == nil {
+		return fmt.Errorf("RealtimeProjectBinding ctx 未注入")
+	}
+	req := map[string]string{"projectFile": projectFile}
 	var resp struct {
 		OK bool `json:"ok"`
 	}
-	return b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/reload", nil, &resp)
+	if err := b.serviceClient.DoJSON(b.ctx, "POST", "/api/project/reload", req, &resp); err != nil {
+		return fmt.Errorf("同步工程变更到运行服务失败: %w", err)
+	}
+	return nil
 }
 
 // syncProjectClose 通知服务关闭工程（todo.md §8.3）。

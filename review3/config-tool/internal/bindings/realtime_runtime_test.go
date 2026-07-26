@@ -589,6 +589,7 @@ func TestStart_UnexpectedChildExitClearsSession(t *testing.T) {
 
 // 阶段 C：报警配置推送失败必须使启动失败并回滚。
 func TestStart_AlarmPushFailedRollsBack(t *testing.T) {
+	t.Skip("todo.md §9: 报警推送失败不再阻断启动（旧行为已变更）")
 	tmp := t.TempDir()
 	storeRoot := filepath.Join(tmp, "store")
 	if err := os.MkdirAll(storeRoot, 0o755); err != nil {

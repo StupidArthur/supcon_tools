@@ -151,10 +151,10 @@ func (m *Manager) OpenProjectFile(_ context.Context, projectFile string) (Opened
 	}, nil
 }
 
-// resolveProjectFile 返回 projectID 对应的 project.yaml 绝对路径，
+// ResolveProjectFile 返回 projectID 对应的 project.yaml 绝对路径，
 // 不在 locations 时回退到 storage.projectFile(id)。
 // 调用方必须未持有 m.mu。
-func (m *Manager) resolveProjectFile(projectID string) (string, error) {
+func (m *Manager) ResolveProjectFile(projectID string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.resolveProjectFileLocked(projectID)

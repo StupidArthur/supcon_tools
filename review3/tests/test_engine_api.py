@@ -346,6 +346,41 @@ def test_tags_404_when_runtime_name_mismatch(binding):
         engine_api.api_tags("wrong_name")
 
 
+def test_tags_real_runtime_name_non_empty(binding):
+    """runtime 启动后真实 runtimeName 的 tags 返回非空（§六）。"""
+    resp = engine_api.api_tags("second_order_tank")
+    assert resp["ok"] is True
+    assert len(resp["tags"]) > 0, "runtime 启动后 tags 必须非空"
+
+
+def test_tags_have_correct_instance_field(binding):
+    """tags 中 PID 参数的 instance 字段必须是真实实例名（§六）。"""
+    resp = engine_api.api_tags("second_order_tank")
+    by_name = {t["name"]: t for t in resp["tags"]}
+    # pid2.PV/SV/MV/PB/TI 应当 instance=pid2
+    for tag_name in ["pid2.SV", "pid2.PV", "pid2.MV", "pid2.PB", "pid2.TI"]:
+        if tag_name in by_name:
+            assert by_name[tag_name]["instance"] == "pid2", (
+                f"{tag_name}.instance 应为 pid2，实际 {by_name[tag_name]['instance']!r}"
+            )
+
+
+def test_tags_default_runtime_name_returns_404(binding):
+    """请求 /api/instances/default/tags 且真实 runtimeName 不是 default 时返回 404（§六）。"""
+    import pytest
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        engine_api.api_tags("default")
+    assert exc.value.status_code == 404
+
+
+def test_tags_real_runtime_name_returns_200(binding):
+    """请求真实 runtimeName 时返回 200（§六）。"""
+    resp = engine_api.api_tags("second_order_tank")
+    assert resp["ok"] is True
+    assert "tags" in resp
+
+
 def test_broadcaster_full_snapshot_without_subscribe(binding):
     bc = engine_api._WsBroadcaster()
     q = bc.register()

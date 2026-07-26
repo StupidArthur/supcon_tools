@@ -26,7 +26,11 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
   const registerSubscription = useRuntimeStore((s) => s.registerSubscription)
   const unregisterSubscription = useRuntimeStore((s) => s.unregisterSubscription)
 
-  const isRunning = connectionState === 'connected' || connectionState === 'connecting'
+  const isConnected = connectionState === 'connected'
+  const isConnecting = connectionState === 'connecting'
+  const isRunning = isConnected || isConnecting
+  const lastError = useRuntimeStore((s) => s.lastError)
+  const hasRuntimeName = !!runtimeName
 
   const [forces, setForces] = useState<Record<string, ForceEntry>>({})
   const [qualities, setQualities] = useState<Record<string, string>>({})
@@ -107,6 +111,10 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
     setError(null)
     try {
       if (opKind === 'fix') {
+        if (!hasRuntimeName) {
+          setError('运行连接信息尚未就绪')
+          return
+        }
         const v = Number(inputValue)
         if (!Number.isFinite(v)) {
           setError('固定值必须是有限数')
@@ -114,12 +122,16 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
         }
         await realtimeProjectApi.setForce(apiHost, apiPort, opTargetTag, 'fixed', v, undefined)
       } else if (opKind === 'sv') {
+        if (!hasRuntimeName) {
+          setError('运行连接信息尚未就绪')
+          return
+        }
         const v = Number(inputValue)
         if (!Number.isFinite(v)) {
           setError('设定值必须是有限数')
           return
         }
-        await realtimeProjectApi.setRuntimeValue(apiHost, apiPort, runtimeName ?? '', opTargetTag, v)
+        await realtimeProjectApi.setRuntimeValue(apiHost, apiPort, runtimeName, opTargetTag, v)
       } else if (opKind === 'quality') {
         await realtimeProjectApi.setQuality(apiHost, apiPort, opTargetTag, qualityValue)
       }
@@ -164,13 +176,25 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
         ) : null}
       </div>
 
-      {!isRunning ? (
+      {connectionState === 'error' || (lastError && !isRunning) ? (
+        <div className="mt-4 text-sm text-destructive" data-testid="runtime-detail-error">
+          {lastError}
+        </div>
+      ) : !isRunning ? (
         <div className="mt-4 text-sm text-muted-foreground" data-testid="runtime-detail-empty">
           服务尚未启动，暂无实时参数。
         </div>
+      ) : lastError ? (
+        <div className="mt-4 text-sm text-destructive" data-testid="runtime-detail-error">
+          {lastError}
+        </div>
+      ) : isConnecting ? (
+        <div className="mt-4 text-sm text-muted-foreground" data-testid="runtime-detail-empty">
+          正在加载实例参数…
+        </div>
       ) : instanceTags.length === 0 ? (
         <div className="mt-4 text-sm text-muted-foreground" data-testid="runtime-detail-empty">
-          当前实例没有参数。
+          当前实例没有可用参数。
         </div>
       ) : (
         <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
@@ -197,7 +221,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
                     {showForce ? (
                       <div className="text-xs">
                         固定输出：{typeof force?.value === 'number' ? force.value.toFixed(4) : '—'}
-                        {isRunning ? (
+                        {isConnected && hasRuntimeName ? (
                           <button
                             type="button"
                             onClick={() => void handleClear(tag.name, 'fix')}
@@ -212,7 +236,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
                     {quality ? (
                       <div className="text-xs">
                         质量码：{quality}
-                        {isRunning ? (
+                        {isConnected && hasRuntimeName ? (
                           <button
                             type="button"
                             onClick={() => void handleClear(tag.name, 'quality')}
@@ -224,7 +248,7 @@ export function RuntimeInstanceDetail({ instanceName, onBack }: Props) {
                         ) : null}
                       </div>
                     ) : null}
-                    {isRunning && tag.writable ? (
+                    {isConnected && hasRuntimeName && tag.writable ? (
                       <select
                         value=""
                         onChange={(e) => {

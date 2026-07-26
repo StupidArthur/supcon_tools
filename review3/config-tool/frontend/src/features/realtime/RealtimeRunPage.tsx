@@ -51,7 +51,7 @@ export function RealtimeRunPage() {
     void refreshSession()
   }, [refreshStatus, refreshSession])
 
-  // generation guard + runtime token bootstrap
+  // generation guard + runtime connection bootstrap
   useEffect(() => {
     const rtStore = useRuntimeStore.getState()
     const myGen = ++useRealtimeRunSessionStore.getState().bootstrapGen
@@ -70,7 +70,7 @@ export function RealtimeRunPage() {
           ) {
             return
           }
-          setError(`无法获取运行 token：${String(e)}。请重新启动实时工程。`)
+          setError(`无法获取运行连接信息：${String(e)}。请重新启动实时工程。`)
           return
         }
         if (

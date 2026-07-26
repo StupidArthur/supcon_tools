@@ -3,27 +3,17 @@ package bindings
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"config-tool/internal/realtime"
 )
 
 // ServiceRealtimeCompiler 通过常驻服务 API 执行校验和编译（todo.md §7.1）。
 type ServiceRealtimeCompiler struct {
-	client      *DataFactoryServiceClient
-	mu          sync.Mutex
-	projectFile string
+	client *DataFactoryServiceClient
 }
 
 func NewServiceRealtimeCompiler(client *DataFactoryServiceClient) *ServiceRealtimeCompiler {
 	return &ServiceRealtimeCompiler{client: client}
-}
-
-// SetProjectFile 设置当前工程文件路径，校验/编译时传给服务端。
-func (c *ServiceRealtimeCompiler) SetProjectFile(path string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.projectFile = path
 }
 
 type inspectSource struct {
@@ -33,25 +23,19 @@ type inspectSource struct {
 }
 
 type inspectRequest struct {
-	Sources     []inspectSource `json:"sources"`
-	ProjectFile string          `json:"projectFile,omitempty"`
+	Sources []inspectSource `json:"sources"`
 }
 
 type inspectResponse struct {
-	OK         bool                        `json:"ok"`
-	Valid      bool                        `json:"valid"`
-	Instances  []realtime.ExpandedInstance  `json:"instances"`
+	OK         bool                         `json:"ok"`
+	Valid      bool                         `json:"valid"`
+	Instances  []realtime.ExpandedInstance   `json:"instances"`
 	Duplicates []realtime.DuplicateInstance `json:"duplicates"`
 }
 
 func (c *ServiceRealtimeCompiler) Validate(ctx context.Context, sources []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
-	c.mu.Lock()
-	pf := c.projectFile
-	c.mu.Unlock()
-
 	req := inspectRequest{
-		Sources:     make([]inspectSource, len(sources)),
-		ProjectFile: pf,
+		Sources: make([]inspectSource, len(sources)),
 	}
 	for i, s := range sources {
 		req.Sources[i] = inspectSource{
@@ -81,9 +65,8 @@ func (c *ServiceRealtimeCompiler) Validate(ctx context.Context, sources []realti
 }
 
 type compileRequest struct {
-	Sources     []inspectSource `json:"sources"`
-	Output      string          `json:"output"`
-	ProjectFile string          `json:"projectFile,omitempty"`
+	Sources []inspectSource `json:"sources"`
+	Output  string          `json:"output"`
 }
 
 type compileResponse struct {
@@ -92,14 +75,9 @@ type compileResponse struct {
 }
 
 func (c *ServiceRealtimeCompiler) Compile(ctx context.Context, sources []realtime.CompilerSourceSpec, outputPath string) (string, error) {
-	c.mu.Lock()
-	pf := c.projectFile
-	c.mu.Unlock()
-
 	req := compileRequest{
-		Sources:     make([]inspectSource, len(sources)),
-		Output:      outputPath,
-		ProjectFile: pf,
+		Sources: make([]inspectSource, len(sources)),
+		Output:  outputPath,
 	}
 	for i, s := range sources {
 		req.Sources[i] = inspectSource{

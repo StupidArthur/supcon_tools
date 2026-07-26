@@ -655,10 +655,15 @@ def _inspect_project_sources(project_file: Optional[str], source_overrides: Opti
         sfile = item.get("file", "")
         if not sid or not sfile:
             raise HTTPException(status_code=400, detail=f"source 缺少 id 或 file: {item}")
-        # file 可能是工程内相对路径；与工程目录拼接得到绝对路径
-        if os.path.isabs(sfile) or project_dir is None:
+        if os.path.isabs(sfile):
             abs_path = sfile
         else:
+            # 相对路径必须借助 projectFile 或当前工程目录解析；禁止使用 cwd。
+            if project_dir is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"source file 是相对路径且未指定 projectFile: {sfile}",
+                )
             abs_path = os.path.join(project_dir, sfile)
         replicas = int(item.get("replicas", 1))
         specs.append(SourceSpec(source_id=sid, source_file=abs_path, replicas=replicas))
