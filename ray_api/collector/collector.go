@@ -171,6 +171,12 @@ func assessRisk(p model.PerfMetrics, summaryEvery, detailEvery int) string {
 }
 
 func (c *Collector) Start(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logx.L().Error("collector panic", "cluster", c.opts.ClusterID, "panic", r)
+			logx.Event("error", "collector_panic", "cluster", c.opts.ClusterID, "panic", fmt.Sprint(r))
+		}
+	}()
 	summaryEvery := c.opts.SummaryEvery
 	detailEvery := c.opts.DetailEvery
 	if summaryEvery <= 0 {
@@ -342,6 +348,14 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		return
 	}
 
+	// 诊断：记录 detail 开始时的内存与 goroutine 数，用于排查崩溃
+	var memStart runtime.MemStats
+	runtime.ReadMemStats(&memStart)
+	logx.L().Info("detail starting", "cluster", c.opts.ClusterID,
+		"nodes", len(nodes), "concurrency", c.concurrency(),
+		"goroutines", runtime.NumGoroutine(),
+		"heapMB", memStart.HeapAlloc/1024/1024)
+
 	c.mu.Lock()
 	c.health.LastDetailAttemptTs = now
 	c.mu.Unlock()
@@ -363,6 +377,12 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		wg.Add(1)
 		go func(idx int, id string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					results[idx] = nodeResult{nodeID: id, ok: false, err: fmt.Errorf("panic: %v", r)}
+					logx.L().Error("node detail goroutine panic", "cluster", c.opts.ClusterID, "node", id, "panic", r)
+				}
+			}()
 
 			select {
 			case sem <- struct{}{}:

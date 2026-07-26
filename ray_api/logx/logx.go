@@ -130,6 +130,11 @@ func Event(dimension, message string, attrs ...any) {
 	entry.logger.Info(message, attrs...)
 }
 
+// NowStr 返回当前时间的可读字符串，供 crash.log 等非 slog 场景使用。
+func NowStr() string {
+	return nowFunc().Format("2006-01-02 15:04:05.000")
+}
+
 func Close() {
 	logMu.Lock()
 	defer logMu.Unlock()

@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	stdruntime "runtime"
 
 	"github.com/wailsapp/wails/v2"
@@ -17,6 +20,16 @@ import (
 var assets embed.FS
 
 func main() {
+	// 捕获 stderr 到 crash.log：Go runtime panic / OOM / unrecovered goroutine
+	// panic 都走 stderr，不捕获就看不到崩溃原因。
+	if exe, err := os.Executable(); err == nil {
+		crashPath := filepath.Join(filepath.Dir(exe), "crash.log")
+		if f, err := os.OpenFile(crashPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+			fmt.Fprintf(f, "\n===== %s =====\n", logx.NowStr())
+			os.Stderr = f
+		}
+	}
+
 	app := NewApp()
 	err := wails.Run(&options.App{
 		Title:     "Ray 集群监控",
