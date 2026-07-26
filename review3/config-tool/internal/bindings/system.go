@@ -1445,27 +1445,33 @@ func isFiniteNonZeroPositive(f float64) bool {
 
 // ExportBatch 导出批量仿真结果
 func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath string) error {
-	if err := b.ensureDataFactory(); err != nil {
-		return err
-	}
 	if exportPath == "" {
 		return fmt.Errorf("导出路径不能为空")
 	}
 	if cycles <= 0 {
 		return fmt.Errorf("周期数必须大于 0")
 	}
-	if err := b.beginBatch(); err != nil {
-		return err
-	}
-	defer b.endBatch()
 
-	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", exportPath}
-	cmd := b.dfLaunch.command(b.commandFactory, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("DataFactory 运行失败: %w\n%s", err, string(output))
+	// §八：通过服务 API 执行 batch + 导出
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("DataFactoryService 未初始化")
 	}
-	return validateBatchCSV(exportPath)
+
+	// 1. batch via service
+	batchResult, err := b.runBatchViaService(client, configPath, cycles)
+	if err != nil {
+		return fmt.Errorf("批量仿真失败: %w", err)
+	}
+
+	// 2. export via service
+	if err := b.exportViaService(client, batchResult.Columns, batchResult.Rows, exportPath, "csv", ""); err != nil {
+		return fmt.Errorf("导出失败: %w", err)
+	}
+
+	return nil
 }
 
 // ExportBatchFormatted 重跑批量仿真并按引擎模板导出（时间列 + 表头，csv/xlsx）。

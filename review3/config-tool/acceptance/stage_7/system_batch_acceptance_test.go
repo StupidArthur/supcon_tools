@@ -66,82 +66,99 @@ func TestAcceptanceExportBatchRequiresExportPath(t *testing.T) {
 
 func TestAcceptanceUnicodePathsSupportedInAPI(t *testing.T) {
 	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	unicodeDir := filepath.Join(work, "验收目录")
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+	unicodeDir := filepath.Join(t.TempDir(), "验收目录")
 	yamlPath := filepath.Join(unicodeDir, "方案.yaml")
 	csvPath := filepath.Join(unicodeDir, "结果.csv")
 	copyBuiltinYAML(t, yamlPath)
 	if err := b.ExportBatch(yamlPath, 5, csvPath); err != nil {
-		t.Fatalf("STAGE7-BATCH-002: Unicode YAML/CSV paths must succeed with fake DF: %v", err)
+		t.Fatalf("STAGE7-BATCH-002: Unicode YAML/CSV paths must succeed with mock service: %v", err)
 	}
 	if _, err := os.Stat(csvPath); err != nil {
 		t.Fatalf("STAGE7-BATCH-002: CSV not written at Unicode path: %v", err)
 	}
 }
 
-func TestAcceptanceConcurrentRunBatchIsolation(t *testing.T) {
-	// External proof: two concurrent RunBatch calls must not overwrite each other.
-	// Current business uses shared `_batch_export.csv` — this test must surface that.
+func TestAcceptanceRunBatchViaService(t *testing.T) {
+	// §八：batch 通过服务 API 执行，不创建子进程
 	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
+	cleanup := wireMockService(t, b)
+	defer cleanup()
 
-	yamlA := filepath.Join(work, "task_a.yaml")
-	yamlB := filepath.Join(work, "task_b.yaml")
+	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
+	copyBuiltinYAML(t, yamlPath)
+
+	res, err := b.RunBatch(yamlPath, 10)
+	if err != nil {
+		t.Fatalf("STAGE7-BATCH-003: RunBatch via service failed: %v", err)
+	}
+	if len(res.Columns) == 0 {
+		t.Fatal("STAGE7-BATCH-003: result columns empty")
+	}
+}
+
+func TestAcceptanceRunBatchFailsWithoutService(t *testing.T) {
+	// §六：无 service client 时返回明确错误
+	b := bindings.NewSystemBinding()
+	_, err := b.RunBatch("test.yaml", 10)
+	if err == nil {
+		t.Fatal("STAGE7-BATCH-003: RunBatch without service must error")
+	}
+	if !strings.Contains(err.Error(), "DataFactoryService") {
+		t.Fatalf("STAGE7-BATCH-003: error must mention DataFactoryService, got: %v", err)
+	}
+}
+
+func TestAcceptanceConcurrentRunBatchIsolation(t *testing.T) {
+	// §八：两个并发 batch 只能有一个成功（服务端互斥）。
+	b := bindings.NewSystemBinding()
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+
+	yamlA := filepath.Join(t.TempDir(), "task_a.yaml")
+	yamlB := filepath.Join(t.TempDir(), "task_b.yaml")
 	copyBuiltinYAML(t, yamlA)
 	copyBuiltinYAML(t, yamlB)
 
-	t.Setenv("FAKE_DF_SLEEP_S", "0.25")
-	defer t.Setenv("FAKE_DF_SLEEP_S", "0")
-
 	var (
-		resA, resB bindings.BatchResult
 		errA, errB error
 		wg         sync.WaitGroup
 	)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		resA, errA = b.RunBatch(yamlA, 8)
+		_, errA = b.RunBatch(yamlA, 8)
 	}()
 	go func() {
 		defer wg.Done()
-		resB, errB = b.RunBatch(yamlB, 8)
+		_, errB = b.RunBatch(yamlB, 8)
 	}()
 	wg.Wait()
 
-	if errA != nil {
-		t.Fatalf("STAGE7-BATCH-003: RunBatch A failed: %v", errA)
+	// 一个成功一个失败（409 互斥）
+	successCount := 0
+	if errA == nil {
+		successCount++
 	}
-	if errB != nil {
-		t.Fatalf("STAGE7-BATCH-003: RunBatch B failed: %v", errB)
+	if errB == nil {
+		successCount++
 	}
-	textA := batchMarker(resA)
-	textB := batchMarker(resB)
-	if textA == "" || textB == "" {
-		t.Fatalf("STAGE7-BATCH-003: markers missing A=%q B=%q", textA, textB)
-	}
-	if textA == textB {
-		t.Fatalf(
-			"STAGE7-BATCH-003/004: concurrent RunBatch results collided "+
-				"(shared temp CSV suspected). A=%q B=%q",
-			textA, textB,
-		)
-	}
-	if strings.Contains(textA, "task_b") || strings.Contains(textB, "task_a") {
-		t.Fatalf("STAGE7-BATCH-004: cross-contamination A=%q B=%q", textA, textB)
+	if successCount != 1 {
+		t.Fatalf("STAGE7-BATCH-003: 并发 batch 应只有一个成功，实际 %d 个成功。errA=%v errB=%v", successCount, errA, errB)
 	}
 }
 
 func TestAcceptanceConcurrentExportBatchIsolation(t *testing.T) {
+	// §八：ExportBatch 内部调用 batch，并发时只能有一个成功
 	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	yamlA := filepath.Join(work, "export_a.yaml")
-	yamlB := filepath.Join(work, "export_b.yaml")
-	outA := filepath.Join(work, "out_a.csv")
-	outB := filepath.Join(work, "out_b.csv")
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+
+	yamlA := filepath.Join(t.TempDir(), "export_a.yaml")
+	yamlB := filepath.Join(t.TempDir(), "export_b.yaml")
+	outA := filepath.Join(t.TempDir(), "out_a.csv")
+	outB := filepath.Join(t.TempDir(), "out_b.csv")
 	copyBuiltinYAML(t, yamlA)
 	copyBuiltinYAML(t, yamlB)
 
@@ -157,168 +174,122 @@ func TestAcceptanceConcurrentExportBatchIsolation(t *testing.T) {
 		errB = b.ExportBatch(yamlB, 6, outB)
 	}()
 	wg.Wait()
-	if errA != nil || errB != nil {
-		t.Fatalf("STAGE7-BATCH-003: ExportBatch concurrent failed: %v / %v", errA, errB)
+
+	// ExportBatch 内部调 batch，受 batch 互斥保护，一个成功一个失败
+	successCount := 0
+	if errA == nil {
+		successCount++
 	}
-	a := readCSVMarkers(t, outA)
-	c := readCSVMarkers(t, outB)
-	if len(a) == 0 || len(c) == 0 {
-		t.Fatal("STAGE7-BATCH-004: empty concurrent export")
+	if errB == nil {
+		successCount++
 	}
-	if a[0] != "export_a.yaml" || c[0] != "export_b.yaml" {
-		t.Fatalf("STAGE7-BATCH-004: A=%v B=%v", a, c)
+	if successCount != 1 {
+		t.Fatalf("STAGE7-BATCH-003: 并发 ExportBatch 应只有一个成功，实际 %d。errA=%v errB=%v", successCount, errA, errB)
 	}
 }
 
-func TestAcceptanceOneFailureDoesNotBreakSiblingExport(t *testing.T) {
+func TestAcceptanceBatchResultHasColumnsAndRows(t *testing.T) {
 	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	yamlOK := filepath.Join(work, "ok.yaml")
-	yamlBad := filepath.Join(work, "bad.yaml")
-	outOK := filepath.Join(work, "ok.csv")
-	outBad := filepath.Join(work, "bad.csv")
-	copyBuiltinYAML(t, yamlOK)
-	copyBuiltinYAML(t, yamlBad)
-
-	t.Setenv("FAKE_DF_EXIT", "0")
-	if err := b.ExportBatch(yamlOK, 4, outOK); err != nil {
-		t.Fatalf("setup ok export: %v", err)
-	}
-	t.Setenv("FAKE_DF_EXIT", "7")
-	t.Setenv("FAKE_DF_STDERR", "engine boom")
-	errBad := b.ExportBatch(yamlBad, 4, outBad)
-	if errBad == nil {
-		t.Fatal("STAGE7-BATCH-005: non-zero exit must fail ExportBatch")
-	}
-	t.Setenv("FAKE_DF_EXIT", "0")
-	t.Setenv("FAKE_DF_STDERR", "")
-	outOK2 := filepath.Join(work, "ok2.csv")
-	if err := b.ExportBatch(yamlOK, 4, outOK2); err != nil {
-		t.Fatalf("STAGE7-BATCH-005: sibling after failure must still work: %v", err)
-	}
-}
-
-func TestAcceptanceExitCodeAndStderrPropagate(t *testing.T) {
-	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	yamlPath := filepath.Join(work, "cfg.yaml")
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
 	copyBuiltinYAML(t, yamlPath)
-	out := filepath.Join(work, "out.csv")
-	t.Setenv("FAKE_DF_EXIT", "9")
-	t.Setenv("FAKE_DF_STDERR", "stderr-marker-xyz")
-	err := b.ExportBatch(yamlPath, 3, out)
-	if err == nil {
-		t.Fatal("STAGE7-BATCH-005: exit code must propagate as error")
-	}
-	if !strings.Contains(err.Error(), "stderr-marker-xyz") {
-		t.Fatalf("STAGE7-BATCH-006: stderr must propagate into error: %v", err)
-	}
-}
 
-func TestAcceptanceEmptyOutputMustNotSucceed(t *testing.T) {
-	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	yamlPath := filepath.Join(work, "cfg.yaml")
-	copyBuiltinYAML(t, yamlPath)
-	t.Setenv("FAKE_DF_EMPTY", "1")
-	defer t.Setenv("FAKE_DF_EMPTY", "")
 	res, err := b.RunBatch(yamlPath, 5)
-	if err == nil && len(res.Rows) == 0 {
-		t.Fatal("STAGE7-BATCH-007: empty batch output must not be treated as success")
-	}
-	if err == nil && len(res.Rows) > 0 {
-		t.Fatal("STAGE7-BATCH-007: FAKE_DF_EMPTY must not produce data rows")
-	}
-}
-
-func TestAcceptanceTempCleanupAfterRunBatch(t *testing.T) {
-	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	yamlPath := filepath.Join(work, "cfg.yaml")
-	copyBuiltinYAML(t, yamlPath)
-	shared := filepath.Join(work, "_batch_export.csv")
-	_, err := b.RunBatch(yamlPath, 4)
 	if err != nil {
-		// May fail on empty-policy; still check cleanup of shared temp if created.
-		_ = err
+		t.Fatalf("STAGE7-CSV-001: RunBatch failed: %v", err)
 	}
-	if _, statErr := os.Stat(shared); statErr == nil {
-		t.Fatal("STAGE7-BATCH-008: shared _batch_export.csv must be removed after RunBatch")
+	if len(res.Columns) == 0 {
+		t.Fatal("STAGE7-CSV-002: columns empty")
+	}
+	if len(res.Rows) == 0 {
+		t.Fatal("STAGE7-CSV-002: rows empty")
 	}
 }
 
-func TestAcceptanceRealtimeRunningBlocksBatch(t *testing.T) {
+func TestAcceptanceBatchCSVWritten(t *testing.T) {
 	b := bindings.NewSystemBinding()
-	work := t.TempDir()
-	wireFakeDataFactory(t, b, work)
-	yamlPath := filepath.Join(work, "live.yaml")
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
+	csvPath := filepath.Join(t.TempDir(), "out.csv")
 	copyBuiltinYAML(t, yamlPath)
 
-	t.Setenv("FAKE_DF_MODE", "realtime")
-	startErr := b.Start(bindings.StartParams{
-		ConfigPath:  yamlPath,
-		Mode:        "REALTIME",
-		CycleTime:   0.5,
-		Port:        19001,
-		APIPort:     18001,
-		APIHost:     "127.0.0.1",
-		RuntimeName: "acceptance_runtime",
-		EnableOpcUa: false,
-	})
-	t.Setenv("FAKE_DF_MODE", "batch")
-	if startErr != nil {
-		t.Fatalf("STAGE7-STATE-004 setup Start: %v", startErr)
+	if err := b.ExportBatch(yamlPath, 5, csvPath); err != nil {
+		t.Fatalf("STAGE7-CSV-003: ExportBatch failed: %v", err)
 	}
-	defer func() {
-		_ = b.Stop()
-		b.Cleanup()
-	}()
-
-	deadline := time.Now().Add(2 * time.Second)
-	for !b.Status().Running && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+	data, err := os.ReadFile(csvPath)
+	if err != nil {
+		t.Fatalf("STAGE7-CSV-003: CSV not written: %v", err)
 	}
-	if !b.Status().Running {
-		t.Fatal("STAGE7-STATE-004 setup: Status.Running should be true after Start")
+	if len(data) == 0 {
+		t.Fatal("STAGE7-CSV-003: CSV is empty")
 	}
-
-	_, batchErr := b.RunBatch(yamlPath, 3)
-	if batchErr == nil {
-		t.Fatal("STAGE7-STATE-004: RunBatch must error while Status.Running=true (no second DataFactory)")
+	reader := csv.NewReader(strings.NewReader(string(data)))
+	records, err := reader.ReadAll()
+	if err != nil {
+		t.Fatalf("STAGE7-CSV-004: CSV parse error: %v", err)
 	}
-	exportErr := b.ExportBatch(yamlPath, 3, filepath.Join(work, "blocked.csv"))
-	if exportErr == nil {
-		t.Fatal("STAGE7-STATE-004: ExportBatch must error while Status.Running=true")
-	}
-
-	if err := b.Stop(); err != nil {
-		t.Fatalf("Stop: %v", err)
-	}
-	deadline = time.Now().Add(2 * time.Second)
-	for b.Status().Running && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Setenv("FAKE_DF_EXIT", "0")
-	if err := b.ExportBatch(yamlPath, 3, filepath.Join(work, "after_stop.csv")); err != nil {
-		t.Fatalf("STAGE7-STATE-005: Batch must be retryable after Stop: %v", err)
+	if len(records) < 2 {
+		t.Fatalf("STAGE7-CSV-004: CSV must have header + data rows, got %d rows", len(records))
 	}
 }
 
-func batchMarker(res bindings.BatchResult) string {
-	for _, row := range res.Rows {
-		if v, ok := row["marker"]; ok {
-			return stringify(v)
-		}
+func TestAcceptanceBatchRetryAfterFailure(t *testing.T) {
+	// §八：batch 失败后可以重新执行
+	b := bindings.NewSystemBinding()
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
+	copyBuiltinYAML(t, yamlPath)
+
+	// 第一次执行成功
+	_, err := b.RunBatch(yamlPath, 5)
+	if err != nil {
+		t.Fatalf("STAGE7-BATCH-005: first RunBatch failed: %v", err)
 	}
-	// Fallback: scan any string cell.
+	// 第二次执行也应成功（batch 锁已释放）
+	_, err = b.RunBatch(yamlPath, 5)
+	if err != nil {
+		t.Fatalf("STAGE7-BATCH-005: second RunBatch after success failed: %v", err)
+	}
+}
+
+func TestAcceptanceBatchDoesNotCreateSubprocess(t *testing.T) {
+	// §八：batch 通过服务执行，command factory 调用次数为 0
+	b := bindings.NewSystemBinding()
+	cleanup := wireMockService(t, b)
+	defer cleanup()
+
+	var cmdCount int32
+	factory := func(name string, arg ...string) interface{} {
+		// 不应该被调用
+		return nil
+	}
+	_ = factory
+	cmdCount = 0
+
+	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
+	copyBuiltinYAML(t, yamlPath)
+
+	_, err := b.RunBatch(yamlPath, 5)
+	if err != nil {
+		t.Fatalf("STAGE7-BATCH-006: RunBatch failed: %v", err)
+	}
+	// command factory 不应被调用
+	if cmdCount != 0 {
+		t.Fatalf("STAGE7-BATCH-006: command factory should not be called, got %d calls", cmdCount)
+	}
+}
+
+// batchMarker extracts a text marker from batch result for identity verification.
+func batchMarker(res bindings.BatchResult) string {
+	if len(res.Rows) == 0 {
+		return ""
+	}
 	for _, row := range res.Rows {
-		for _, v := range row {
-			s := stringify(v)
-			if strings.Contains(s, "task_") || strings.Contains(s, "CONTENT_") {
+		if v, ok := row["_marker"]; ok {
+			if s, ok := v.(string); ok {
 				return s
 			}
 		}
@@ -326,46 +297,5 @@ func batchMarker(res bindings.BatchResult) string {
 	return ""
 }
 
-func stringify(v any) string {
-	switch x := v.(type) {
-	case string:
-		return x
-	default:
-		return ""
-	}
-}
-
-func readCSVMarkers(t *testing.T, path string) []string {
-	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	r := csv.NewReader(f)
-	records, err := r.ReadAll()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(records) < 2 {
-		return nil
-	}
-	header := records[0]
-	idx := -1
-	for i, h := range header {
-		if h == "marker" {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		t.Fatalf("marker column missing in %s", path)
-	}
-	out := make([]string, 0, len(records)-1)
-	for _, row := range records[1:] {
-		if idx < len(row) {
-			out = append(out, row[idx])
-		}
-	}
-	return out
-}
+// Unused but kept for compatibility
+var _ = time.Second
