@@ -407,6 +407,70 @@ func (b *SystemBinding) endBatch() {
 // Start 启动 DataFactory 并等待 API ready
 // 只有在 API 真正 ready 且 instance_name 匹配后才返回成功
 func (b *SystemBinding) Start(params StartParams) error {
+	// todo.md §14.3：Start 全部代理常驻服务
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+
+	if client != nil {
+		return b.startViaService(client, params)
+	}
+
+	// 降级：旧子进程模式（仅兼容旧测试）
+	return b.startViaSubprocess(params)
+}
+
+// startViaService 通过 /api/runtime/start 启动运行时（todo.md §14.3）。
+// 不再创建 DataFactory 子进程。
+func (b *SystemBinding) startViaService(client *DataFactoryServiceClient, params StartParams) error {
+	// 检查服务 health ready
+	if _, err := client.CheckHealth(b.ctx); err != nil {
+		return fmt.Errorf("服务未就绪: %w", err)
+	}
+	// 检查 runtime 状态
+	runtimeState, err := b.getRuntimeStatusViaService(client)
+	if err != nil {
+		return fmt.Errorf("查询运行状态失败: %w", err)
+	}
+	if runtimeState == "running" || runtimeState == "starting" {
+		return fmt.Errorf("已有实时运行在进行中")
+	}
+
+	// 调用 /api/runtime/start
+	req := map[string]any{
+		"configPath":  params.ConfigPath,
+		"runtimeName": params.RuntimeName,
+		"cycleTime":   params.CycleTime,
+		"opcUaHost":   params.OPCHost,
+		"opcUaPort":   params.Port,
+	}
+	var resp struct {
+		OK           bool    `json:"ok"`
+		RuntimeState string  `json:"runtimeState"`
+	}
+	if err := client.DoJSON(b.ctx, "POST", "/api/runtime/start", req, &resp); err != nil {
+		return fmt.Errorf("服务启动失败: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("服务启动返回 ok=false")
+	}
+	return nil
+}
+
+// getRuntimeStatusViaService 复用 RealtimeRuntimeBinding 的状态查询。
+func (b *SystemBinding) getRuntimeStatusViaService(client *DataFactoryServiceClient) (string, error) {
+	var resp struct {
+		OK           bool   `json:"ok"`
+		RuntimeState string `json:"runtimeState"`
+	}
+	if err := client.DoJSON(b.ctx, "GET", "/api/runtime/status", nil, &resp); err != nil {
+		return "", err
+	}
+	return resp.RuntimeState, nil
+}
+
+// startViaSubprocess 旧子进程模式（仅兼容旧测试）。
+func (b *SystemBinding) startViaSubprocess(params StartParams) error {
 	b.mu.Lock()
 	if b.proc != nil {
 		b.mu.Unlock()
@@ -422,7 +486,7 @@ func (b *SystemBinding) Start(params StartParams) error {
 	}
 
 	// 从检查到 cmd.Start/proc 注册始终持锁。这样并发 Start 不能越过检查，
-	// Cleanup/Stop 也不会在“进程已启动但尚未注册”的窗口错误返回。
+	// Cleanup/Stop 也不会在"进程已启动但尚未注册"的窗口错误返回。
 	hash, err := fileHashSHA256(params.ConfigPath)
 	if err != nil {
 		b.mu.Unlock()
@@ -787,6 +851,42 @@ func (b *SystemBinding) getRecentLogsLocked() []string {
 
 // Stop 停止 DataFactory
 func (b *SystemBinding) Stop() error {
+	// todo.md §14.3：Stop 全部代理常驻服务
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+
+	if client != nil {
+		return b.stopViaService(client)
+	}
+
+	// 降级：旧子进程模式（仅兼容旧测试）
+	return b.stopViaSubprocess()
+}
+
+// stopViaService 通过 /api/runtime/stop 停止运行时（todo.md §14.3）。
+// 不停止 DataFactoryService 进程。
+func (b *SystemBinding) stopViaService(client *DataFactoryServiceClient) error {
+	req := map[string]any{}
+	var resp struct {
+		OK           bool   `json:"ok"`
+		RuntimeState string `json:"runtimeState"`
+	}
+	if err := client.DoJSON(b.ctx, "POST", "/api/runtime/stop", req, &resp); err != nil {
+		return fmt.Errorf("服务停止失败: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("服务停止返回 ok=false")
+	}
+	b.mu.Lock()
+	b.proc = nil
+	b.lastError = ""
+	b.mu.Unlock()
+	return nil
+}
+
+// stopViaSubprocess 旧子进程模式（仅兼容旧测试）。
+func (b *SystemBinding) stopViaSubprocess() error {
 	b.mu.Lock()
 	proc := b.proc
 	if proc == nil {
@@ -845,11 +945,44 @@ func (b *SystemBinding) processAliveForCleanup(proc *managedProcess) bool {
 	}
 }
 
-// Status 获取系统状态
+// Status 获取系统状态（todo.md §14.2）
 func (b *SystemBinding) Status() SystemStatus {
+	// todo.md §14.3：Status 全部代理常驻服务
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+
+	if client != nil {
+		return b.statusViaService(client)
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buildStatus()
+}
+
+// statusViaService 从服务查询状态（todo.md §14.3）。
+// APIReady 表示常驻服务 ready；Running 表示 runtime Engine 正在运行。
+func (b *SystemBinding) statusViaService(client *DataFactoryServiceClient) SystemStatus {
+	st := SystemStatus{}
+
+	// 服务 health
+	if _, err := client.CheckHealth(b.ctx); err == nil {
+		st.APIReady = true
+	}
+
+	// runtime 状态
+	if resp, err := b.getRuntimeStatusViaService(client); err == nil {
+		if resp == "running" || resp == "starting" {
+			st.Running = true
+		}
+	}
+
+	b.mu.Lock()
+	st.BatchRunning = b.activeBatches > 0
+	st.ActiveBatches = b.activeBatches
+	st.LastError = b.lastError
+	b.mu.Unlock()
+	return st
 }
 
 // buildStatus 构建状态（需要持有锁）

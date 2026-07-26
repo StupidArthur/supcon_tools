@@ -104,7 +104,6 @@ export namespace bindings {
 	    apiHost: string;
 	    apiPort: number;
 	    runtimeName: string;
-	    apiToken: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new RealtimeConnectionInfo(source);
@@ -115,7 +114,6 @@ export namespace bindings {
 	        this.apiHost = source["apiHost"];
 	        this.apiPort = source["apiPort"];
 	        this.runtimeName = source["runtimeName"];
-	        this.apiToken = source["apiToken"];
 	    }
 	}
 	export class RecentProjectEntry {

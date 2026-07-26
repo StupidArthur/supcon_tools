@@ -223,20 +223,16 @@ func recAsSession(s *realtime.RealtimeRunSession, r realtime.SessionRecord) *rea
 	return &cp
 }
 
-// RealtimeConnectionInfo 暴露给前端的当前运行期连接信息。
-// 关键约束：
-//   - APIToken 仅在内存中，不进入任何持久化记录（session.json / metadata.json / 日志）。
-//   - 没有运行会话时调用方会得到空字符串 token，前端必须把它视为"未运行"。
-//   - 进入此结构体的 token 与当前 run 的 process 一一对应；进程退出 / 异常停止会被清空。
+// RealtimeConnectionInfo 暴露给前端的当前运行期连接信息（todo.md §13.2）。
+// 不再返回 APIToken。前端不需要 Token，所有 runtime API 由 Go 代理。
 type RealtimeConnectionInfo struct {
 	APIHost     string `json:"apiHost"`
 	APIPort     int    `json:"apiPort"`
 	RuntimeName string `json:"runtimeName"`
-	APIToken    string `json:"apiToken"`
 }
 
-// GetConnectionInfo 返回当前实时运行的连接信息（todo.md §9 过渡实现）。
-// Phase E 将进一步删除前端 Token 暴露，由 Go 代理所有 runtime API。
+// GetConnectionInfo 返回当前实时运行的连接信息（todo.md §13.2）。
+// 不再返回 Token（由 Go 代理所有 runtime API）。
 func (b *RealtimeRuntimeBinding) GetConnectionInfo() (RealtimeConnectionInfo, error) {
 	b.mu.Lock()
 	s := b.current
@@ -260,12 +256,10 @@ func (b *RealtimeRuntimeBinding) GetConnectionInfo() (RealtimeConnectionInfo, er
 		}
 	}
 
-	// todo.md §13.2 过渡：仍返回 Token，Phase E 将删除
 	return RealtimeConnectionInfo{
 		APIHost:     host,
 		APIPort:     port,
 		RuntimeName: s.RuntimeName,
-		APIToken:    CurrentAPIToken(), // Phase E 将删除此行
 	}, nil
 }
 

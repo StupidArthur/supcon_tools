@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"os"
 
 	"config-tool/internal/bindings"
 	"config-tool/internal/config"
@@ -23,10 +25,19 @@ type Container struct {
 	Service *bindings.DataFactoryServiceManager
 }
 
-// NewContainer 创建容器（生产模式）。
+// NewContainer 创建容器（默认开发模式）。
+// wails generate module 时会运行 main 包以生成 TypeScript 绑定，
+// 此时不需要启动服务（standalone_main.py 也找不到），
+// 通过 wails_generate=true 参数跳过服务启动。
 func NewContainer() (*Container, error) {
-	return NewContainerWithDevMode(false)
+	if os.Getenv("WAILS_GENERATE") == "1" {
+		// wails generate module 模式：只生成绑定，不启动服务
+		return NewContainerWithMode(true, true)
+	}
+	return NewContainerWithMode(true, false)
 }
+
+// NewContainerWithMode 创建容器，可显式控制是否跳过服务启动。
 
 // NewContainerWithDevMode 创建容器（todo.md §3.1）。
 //
@@ -41,26 +52,47 @@ func NewContainer() (*Container, error) {
 //  8. 创建 lifecycle
 //
 // devMode 控制是否走源码 Python --service（生产模式必须 devMode=false）。
+//
+// wails_generate_mode 跳过服务启动（仅用于 wails generate module 生成绑定）。
 func NewContainerWithDevMode(devMode bool) (*Container, error) {
+	return NewContainerWithMode(devMode, false)
+}
+
+// NewContainerWithMode 创建容器，可显式控制是否跳过服务启动。
+func NewContainerWithMode(devMode bool, wailsGenerateMode bool) (*Container, error) {
 	// 1. 确保工作目录（todo.md §4.2：失败时不继续启动服务和 UI）
-	if _, err := bindings.EnsureAppWorkspaceDirs(); err != nil {
-		return nil, fmt.Errorf("应用工作目录初始化失败: %w", err)
+	if !wailsGenerateMode {
+		if _, err := bindings.EnsureAppWorkspaceDirs(); err != nil {
+			return nil, fmt.Errorf("应用工作目录初始化失败: %w", err)
+		}
 	}
 
 	// 2-3. 创建并启动 DataFactoryServiceManager（todo.md §3.1）
-	service, err := bindings.NewDataFactoryServiceManager(devMode)
-	if err != nil {
-		return nil, fmt.Errorf("DataFactoryService 启动失败: %w", err)
+	var service *bindings.DataFactoryServiceManager
+	if !wailsGenerateMode {
+		var err error
+		service, err = bindings.NewDataFactoryServiceManager(devMode)
+		if err != nil {
+			return nil, fmt.Errorf("DataFactoryService 启动失败: %w", err)
+		}
 	}
 
 	// 4. 创建 ServiceRealtimeCompiler（todo.md §7.1）
-	compiler := bindings.NewServiceRealtimeCompiler(service.Client())
+	var compiler realtime.RealtimeCompiler
+	if service != nil {
+		compiler = bindings.NewServiceRealtimeCompiler(service.Client())
+	} else {
+		// wails generate mode 或服务未启动：使用 noop compiler
+		compiler = &noopCompiler{}
+	}
 
 	// 5. 创建 realtime manager
 	// 注意：storage 仍使用旧路径作为 fallback（兼容旧工程），但新工程走 locations map
 	realtimeDir, err := bindings.ResolveRealtimeProjectsDir()
 	if err != nil {
-		service.Stop()
+		if service != nil {
+			service.Stop()
+		}
 		return nil, err
 	}
 	storage := realtime.NewProjectStorage(realtimeDir)
@@ -69,7 +101,9 @@ func NewContainerWithDevMode(devMode bool) (*Container, error) {
 	// 6. 创建 bindings
 	metadata, err := config.LoadComponentMetadata()
 	if err != nil {
-		service.Stop()
+		if service != nil {
+			service.Stop()
+		}
 		return nil, err
 	}
 	configService := config.NewService()
@@ -82,17 +116,21 @@ func NewContainerWithDevMode(devMode bool) (*Container, error) {
 
 	sessionRoot, err := realtime.ResolveSessionRoot()
 	if err != nil {
-		service.Stop()
+		if service != nil {
+			service.Stop()
+		}
 		return nil, err
 	}
 	sessionManager := realtime.NewSessionManager(sessionRoot)
 	runtimeBinding := bindings.NewRealtimeRuntimeBinding(manager, systemBinding, sessionManager)
 
 	// 7. 注入统一服务客户端（todo.md §5.2 / §8 / §9 / §14）
-	runtimeBinding.SetServiceEndpoint(service.Host(), service.Port(), service.Token())
-	runtimeBinding.SetServiceClient(service.Client())
-	realtimeBinding.SetServiceClient(service.Client())
-	systemBinding.SetServiceClient(service.Client())
+	if service != nil {
+		runtimeBinding.SetServiceEndpoint(service.Host(), service.Port(), service.Token())
+		runtimeBinding.SetServiceClient(service.Client())
+		realtimeBinding.SetServiceClient(service.Client())
+		systemBinding.SetServiceClient(service.Client())
+	}
 
 	// 8. 创建 lifecycle
 	lifecycle := NewLifecycle(componentBinding, configBinding, systemBinding, templateBinding, realtimeBinding, runtimeBinding)
@@ -115,6 +153,18 @@ func NewContainerWithDevMode(devMode bool) (*Container, error) {
 // 保留此方法仅为兼容旧调用，实际为 no-op。
 func (c *Container) InitService(devMode bool) error {
 	return nil
+}
+
+// noopCompiler 不调用任何外部依赖的 compiler。
+// 用于 wails generate mode 或服务不可用的场景。
+type noopCompiler struct{}
+
+func (n *noopCompiler) Validate(_ context.Context, _ []realtime.CompilerSourceSpec) (realtime.ValidationResult, error) {
+	return realtime.ValidationResult{Valid: true}, nil
+}
+
+func (n *noopCompiler) Compile(_ context.Context, _ []realtime.CompilerSourceSpec, _ string) (string, error) {
+	return "", nil
 }
 
 // ShutdownService 优雅停止 DataFactoryService（todo.md §6）。

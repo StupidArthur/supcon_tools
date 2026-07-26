@@ -1,3 +1,5 @@
+//go:build !wails_generate
+
 package main
 
 import (
