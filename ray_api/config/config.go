@@ -48,9 +48,13 @@ type Config struct {
 	Thresholds           Thresholds      `json:"thresholds"`
 	WebhookURL           string          `json:"webhookUrl,omitempty"`
 	DetailNodeConcurrency int            `json:"detailNodeConcurrency,omitempty"`
+	RequestTimeoutSec    int             `json:"requestTimeoutSec,omitempty"`
 }
 
-const defaultDetailNodeConcurrency = 50
+const (
+	defaultDetailNodeConcurrency = 50
+	defaultRequestTimeoutSec     = 20
+)
 
 func Default() Config {
 	return Config{
@@ -63,6 +67,7 @@ func Default() Config {
 		SampleEvery:           10,
 		Thresholds:            DefaultThresholds(),
 		DetailNodeConcurrency: defaultDetailNodeConcurrency,
+		RequestTimeoutSec:     defaultRequestTimeoutSec,
 	}
 }
 
@@ -160,6 +165,9 @@ func Load() (Config, error) {
 	if cfg.DetailNodeConcurrency <= 0 {
 		cfg.DetailNodeConcurrency = defaultDetailNodeConcurrency
 	}
+	if cfg.RequestTimeoutSec <= 0 {
+		cfg.RequestTimeoutSec = defaultRequestTimeoutSec
+	}
 	return cfg, nil
 }
 
@@ -252,6 +260,9 @@ func Validate(cfg Config) error {
 	}
 	if cfg.DetailNodeConcurrency < 1 || cfg.DetailNodeConcurrency > 200 {
 		return fmt.Errorf("detailNodeConcurrency must be 1~200")
+	}
+	if cfg.RequestTimeoutSec < 1 || cfg.RequestTimeoutSec > 60 {
+		return fmt.Errorf("requestTimeoutSec must be 1~60")
 	}
 	if cfg.WebhookURL != "" {
 		u, err := url.Parse(cfg.WebhookURL)

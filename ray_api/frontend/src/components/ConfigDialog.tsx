@@ -78,6 +78,12 @@ export function ConfigDialog({
                 onChange={(e) => setCfg({ ...cfg, detailNodeConcurrency: Number(e.target.value) })} />
             </Field>
           </div>
+          <div className="mt-3">
+            <Field label="单接口超时（秒，1~60）">
+              <input type="number" min={1} max={60} className="input" value={cfg.requestTimeoutSec ?? 20}
+                onChange={(e) => setCfg({ ...cfg, requestTimeoutSec: Number(e.target.value) })} />
+            </Field>
+          </div>
         </div>
 
         {/* 全局报警阈值 */}

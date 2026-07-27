@@ -19,7 +19,9 @@ import (
 
 const maxResponseBytes = 64 * 1024 * 1024
 
-// DefaultTimeoutSec 是 HTTP 请求的默认秒级超时。未对用户暴露，需要调整时改这里。
+// DefaultTimeoutSec 是 opts.TimeoutSec <= 0 时的最后兜底。
+// 正常路径下从 Config.RequestTimeoutSec 读（默认 20），此常量仅在测试或直接构造
+// CollectorOpts 时生效。
 const DefaultTimeoutSec = 10
 
 // DefaultDetailNodeConcurrency 是单集群内同时发起的 /nodes/{id} 请求数默认上限。

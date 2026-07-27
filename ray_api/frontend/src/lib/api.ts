@@ -56,6 +56,7 @@ export interface Config {
   thresholds: Thresholds
   webhookUrl?: string
   detailNodeConcurrency?: number
+  requestTimeoutSec?: number
 }
 
 export const api = {

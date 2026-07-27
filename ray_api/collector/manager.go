@@ -81,12 +81,16 @@ func NewManager(store Store, cfg config.Config) *CollectorManager {
 
 func (m *CollectorManager) optsForCluster(cl config.ClusterConfig) CollectorOpts {
 	interval := m.cfg.SampleInterval()
+	timeoutSec := m.cfg.RequestTimeoutSec
+	if timeoutSec <= 0 {
+		timeoutSec = DefaultTimeoutSec
+	}
 	return CollectorOpts{
 		ClusterID:    cl.ID,
 		PlatformURL:  cl.PlatformURL,
 		SummaryEvery: interval,
 		DetailEvery:  interval,
-		TimeoutSec:   DefaultTimeoutSec,
+		TimeoutSec:   timeoutSec,
 		Concurrency:  m.cfg.DetailNodeConcurrency,
 	}
 }

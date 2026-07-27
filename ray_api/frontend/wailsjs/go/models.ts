@@ -90,6 +90,7 @@ export namespace config {
 	    thresholds: Thresholds;
 	    webhookUrl?: string;
 	    detailNodeConcurrency?: number;
+	    requestTimeoutSec?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -105,6 +106,7 @@ export namespace config {
 	        this.thresholds = this.convertValues(source["thresholds"], Thresholds);
 	        this.webhookUrl = source["webhookUrl"];
 	        this.detailNodeConcurrency = source["detailNodeConcurrency"];
+	        this.requestTimeoutSec = source["requestTimeoutSec"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
