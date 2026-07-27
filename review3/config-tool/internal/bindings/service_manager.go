@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -68,6 +69,7 @@ const (
 	serviceStopTimeout     = 5 * time.Second
 	serviceHealthInterval  = 200 * time.Millisecond
 	serviceMaxPortRetries  = 5 // todo.md §5.4
+	serviceHealthProbeTimeout = 1 * time.Second // 单次 /api/health 探测超时
 )
 
 // NewDataFactoryServiceManager 创建并启动常驻服务。
@@ -137,9 +139,16 @@ func NewDataFactoryServiceManager(devMode bool) (*DataFactoryServiceManager, err
 		)
 
 		cmd := exec.Command(serviceExe, args...)
+		// 把工作目录设到 EXE 同级，让 service 通过相对路径找 config/、
+		// 写出 service-stdout.log / service-stderr.log 时也落在 EXE 目录。
+		cmd.Dir = exeDir
 		configureBackgroundProcess(cmd) // todo.md §5.5
 		// todo.md §13.2：前端不持有 Token，由 Go 代理。设置 DATAFACTORY_NO_AUTH=1 让 Python 服务跳过前端鉴权。
 		cmd.Env = append(os.Environ(), "DATAFACTORY_NO_AUTH=1")
+
+		healthURL := fmt.Sprintf("http://%s:%d/api/health", m.host, port)
+		log.Printf("[service-manager] attempt=%d serviceExe=%s cmd.Dir=%s host=%s port=%d healthURL=%s",
+			attempt+1, serviceExe, exeDir, m.host, port, healthURL)
 
 		// stdout/stderr 直接重定向到文件：避免 Windows pipe 4KB buffer 满
 		// 后子进程 write 阻塞，health 永远等不到。
@@ -167,13 +176,16 @@ func NewDataFactoryServiceManager(devMode bool) (*DataFactoryServiceManager, err
 		}
 		m.cmd = cmd
 		m.pid = cmd.Process.Pid
+		log.Printf("[service-manager] attempt=%d started PID=%d port=%d healthURL=%s",
+			attempt+1, m.pid, m.port, healthURL)
 
 		go m.monitorExit()
 
 		// 等待 /api/health 就绪（JSON 解析，todo.md §5.3）
 		m.client = NewDataFactoryServiceClient(m.host, m.port, m.token)
 		if err := m.waitForHealth(serviceStartTimeout); err != nil {
-			// 启动失败回收进程
+			// 启动失败回收进程。kill 前 dump 当前快照，便于事后定位。
+			m.dumpStartupDiag(attempt+1, err)
 			_ = m.killProcess()
 			<-m.exitCh
 			lastErr = fmt.Errorf("等待服务 health 超时: %w\n最近日志:\n%s", err, m.RecentLogs())
@@ -307,10 +319,18 @@ func (m *DataFactoryServiceManager) setState(s string) {
 }
 
 // waitForHealth 轮询 /api/health 直到返回 ok=true 或超时（todo.md §5.3）。
+//
+// 每次 CheckHealth 单独用 1s context timeout，避免被 http.Client 的
+// 30s 总超时或网络层 hang 拖死。失败时保存最后一次错误，调用方可在
+// dumpStartupDiag 里看到。
 func (m *DataFactoryServiceManager) waitForHealth(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	var lastErr error
 	for {
 		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return fmt.Errorf("超过 %s 仍未就绪，最后一次 CheckHealth 错误: %w", timeout, lastErr)
+			}
 			return fmt.Errorf("超过 %s 仍未就绪", timeout)
 		}
 		// 检查进程是否已退出
@@ -319,12 +339,30 @@ func (m *DataFactoryServiceManager) waitForHealth(timeout time.Duration) error {
 			return fmt.Errorf("服务进程已退出 exit code %d", m.exitCode)
 		default:
 		}
-		// JSON 解析 health（todo.md §5.3）
-		if _, err := m.client.CheckHealth(m.shutdownCtx); err == nil {
+		// 单次探测 1s timeout（不依赖 http.Client 的 30s 总超时）
+		probeCtx, cancel := context.WithTimeout(m.shutdownCtx, serviceHealthProbeTimeout)
+		_, err := m.client.CheckHealth(probeCtx)
+		cancel()
+		if err == nil {
 			return nil
 		}
+		lastErr = err
 		time.Sleep(serviceHealthInterval)
 	}
+}
+
+// dumpStartupDiag 在 health 超时、kill 进程前输出诊断快照到启动日志。
+// 字段：PID、port、最后一次 CheckHealth 错误、RecentLogs、进程是否已退出、exit code。
+func (m *DataFactoryServiceManager) dumpStartupDiag(attempt int, healthErr error) {
+	m.mu.Lock()
+	pid := m.pid
+	port := m.port
+	exitCode := m.exitCode
+	exited := pid == 0
+	m.mu.Unlock()
+	log.Printf("[service-manager] startup failure attempt=%d PID=%d port=%d exited=%t exitCode=%d lastHealthErr=%v",
+		attempt, pid, port, exited, exitCode, healthErr)
+	log.Printf("[service-manager] recent service logs:\n%s", m.RecentLogs())
 }
 
 // Stop 优雅停止服务（todo.md §6）。
