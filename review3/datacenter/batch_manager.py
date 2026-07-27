@@ -303,7 +303,7 @@ class BatchManager:
             limit = 1000
         if offset < 0:
             offset = 0
-        store = BatchStore(batch_id)
+        store = BatchStore(batch_id, columns=meta.get("columns", []))
         rows = store.read_rows(offset, limit)
         total = store.count_rows()
         return {
@@ -364,7 +364,7 @@ class BatchManager:
         if meta.get("status") == STATUS_RUNNING:
             raise BatchConflictError("任务正在运行，无法导出")
 
-        store = BatchStore(batch_id)
+        store = BatchStore(batch_id, columns=meta.get("columns", []))
         all_columns = meta.get("columns", [])
         if not columns:
             columns = all_columns

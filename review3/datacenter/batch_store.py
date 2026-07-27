@@ -56,17 +56,22 @@ def list_batch_dirs() -> List[Path]:
     return [d for d in root.iterdir() if d.is_dir()]
 
 
+def _quote_ident(name: str) -> str:
+    """SQLite identifier quoting：用双引号包裹，内部双引号转义为两个双引号。"""
+    return '"' + name.replace('"', '""') + '"'
+
+
 class BatchStore:
     """单个 batch 任务的 SQLite 存储。"""
 
-    def __init__(self, batch_id: str) -> None:
+    def __init__(self, batch_id: str, columns: Optional[List[str]] = None) -> None:
         self.batch_id = batch_id
         self.dir = batch_dir(batch_id)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.dir / "data.sqlite"
         self.meta_path = self.dir / "meta.json"
         self._conn: Optional[sqlite3.Connection] = None
-        self._columns: List[str] = []
+        self._columns: List[str] = list(columns) if columns else []
         self._buffer: List[tuple] = []
         self._cycles_completed = 0
 
@@ -141,8 +146,12 @@ class BatchStore:
         """分页读取行（用于预览）。返回前端期望的 row 格式。"""
         conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         try:
-            col_names = ["cycle_index", "sim_time", "need_sample"] + self._columns
-            sql = f"SELECT {', '.join(col_names)} FROM samples ORDER BY cycle_index LIMIT ? OFFSET ?"
+            base_cols = "cycle_index, sim_time, need_sample"
+            if self._columns:
+                dyn_cols = ", ".join(_quote_ident(k) for k in self._columns)
+                sql = f"SELECT {base_cols}, {dyn_cols} FROM samples ORDER BY cycle_index LIMIT ? OFFSET ?"
+            else:
+                sql = f"SELECT {base_cols} FROM samples ORDER BY cycle_index LIMIT ? OFFSET ?"
             rows = conn.execute(sql, (limit, offset)).fetchall()
             result = []
             for row in rows:
@@ -178,8 +187,12 @@ class BatchStore:
         """流式迭代采样行（用于导出）。逐行 yield，不加载全部到内存。"""
         conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         try:
-            col_names = ["cycle_index", "sim_time", "need_sample"] + self._columns
-            sql = f"SELECT {', '.join(col_names)} FROM samples WHERE need_sample=1 ORDER BY cycle_index"
+            base_cols = "cycle_index, sim_time, need_sample"
+            if self._columns:
+                dyn_cols = ", ".join(_quote_ident(k) for k in self._columns)
+                sql = f"SELECT {base_cols}, {dyn_cols} FROM samples WHERE need_sample=1 ORDER BY cycle_index"
+            else:
+                sql = f"SELECT {base_cols} FROM samples WHERE need_sample=1 ORDER BY cycle_index"
             cursor = conn.execute(sql)
             for row in cursor:
                 d: Dict[str, Any] = {

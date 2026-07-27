@@ -156,7 +156,20 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     }
     const stale = currentYamlHash !== s.boundYamlHash
     const columnSet = new Set(columns)
-    const selectedColumns = (displayColumns ?? []).filter((c) => columnSet.has(c))
+    let selectedColumns = (displayColumns ?? []).filter((c) => columnSet.has(c))
+    // 兜底：displayColumns 为空或无效时，自动选前 1~8 个数值业务列
+    if (selectedColumns.length === 0 && previewRows.length > 0) {
+      const businessCols = columns.filter(
+        (c) => !c.startsWith('_') && c !== '_cycle' && c !== '_sim_time' && c !== '_need_sample',
+      )
+      selectedColumns = businessCols.slice(0, 8).filter((c) => {
+        for (const row of previewRows.slice(0, 50)) {
+          const v = row[c]
+          if (typeof v === 'number' && Number.isFinite(v)) return true
+        }
+        return false
+      })
+    }
     const plotScalesFiltered: Record<string, number> = {}
     if (plotScales) {
       for (const c of columns) {
