@@ -1,5 +1,25 @@
 export namespace collector {
 	
+	export class APILogEntry {
+	    ts: number;
+	    source: string;
+	    cluster: string;
+	    phase: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new APILogEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ts = source["ts"];
+	        this.source = source["source"];
+	        this.cluster = source["cluster"];
+	        this.phase = source["phase"];
+	        this.message = source["message"];
+	    }
+	}
 	export class Snapshot {
 	    cluster: model.ClusterMetric;
 	    nodes: model.NodeMetric[];

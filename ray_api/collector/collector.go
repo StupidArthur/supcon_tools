@@ -70,6 +70,7 @@ type Collector struct {
 	limiter RequestLimiter
 
 	detailLock RequestLimiter // capacity=1，集群间 detail 排队
+	apiLog     *APILog         // 共享 ring buffer，生命周期事件记这里
 
 	mu     sync.RWMutex
 	status model.CollectorStatus
@@ -116,6 +117,18 @@ func NewCollector(client *Client, store Store, opts CollectorOpts) *Collector {
 		nodeState:        map[string]*model.NodeCollectionState{},
 		prevActorsByNode: map[string]map[string]model.ActorSnapshot{},
 		prevJobs:         map[string]model.JobSnapshot{},
+	}
+}
+
+// SetAPILog 注入共享的 ring buffer，由 manager 在创建 collector 时设置。
+func (c *Collector) SetAPILog(l *APILog) {
+	c.apiLog = l
+}
+
+// logEvent 便捷方法：nil buffer 时静默忽略。
+func (c *Collector) logEvent(phase, message string) {
+	if c.apiLog != nil {
+		c.apiLog.Append("backend", c.opts.ClusterID, phase, message)
 	}
 }
 
@@ -377,6 +390,7 @@ func (c *Collector) collectSummary(ctx context.Context) {
 		}
 		return
 	}
+	c.logEvent("summary", "start")
 	nodes, err := c.client.FetchNodes(ctx)
 	c.releaseLimiter()
 
@@ -404,6 +418,7 @@ func (c *Collector) collectSummary(ctx context.Context) {
 	summaryMs := time.Since(start).Milliseconds()
 	c.recordOK()
 	c.refreshSnapshotNodes(nodes)
+	c.logEvent("summary", fmt.Sprintf("done (%dms, %d nodes)", summaryMs, len(nodes)))
 
 	c.mu.Lock()
 	c.perf.SummaryMs = summaryMs
@@ -465,6 +480,8 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		logx.L().Warn("detail skipped: no nodes in snapshot", "cluster", c.opts.ClusterID)
 		return
 	}
+
+	c.logEvent("detail", fmt.Sprintf("start (%d nodes, concurrency=%d)", len(nodes), c.nodeConcurrency()))
 
 	// 诊断：记录 detail 开始时的内存与 goroutine 数
 	var memStart runtime.MemStats
@@ -590,6 +607,18 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		}(i, nid)
 	}
 	wg.Wait()
+
+	// 统计结果用于事件
+	var doneCount, failedCount int
+	for _, r := range results {
+		if r.ok {
+			doneCount++
+		} else {
+			failedCount++
+		}
+	}
+	detailElapsed := time.Since(detailStart).Milliseconds()
+	c.logEvent("detail", fmt.Sprintf("done (%dms, %d ok, %d failed)", detailElapsed, doneCount, failedCount))
 
 	if ctx.Err() != nil {
 		return

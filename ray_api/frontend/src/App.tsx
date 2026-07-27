@@ -8,6 +8,7 @@ import { OverviewView } from '@/components/views/OverviewView'
 import { NodesView } from '@/components/views/NodesView'
 import { WorkersView } from '@/components/views/WorkersView'
 import { AlertsView } from '@/components/views/AlertsView'
+import { APILogView } from '@/components/views/APILogView'
 import {
   api,
   type ClusterConfig,
@@ -42,6 +43,8 @@ export default function App() {
   const [showControl, setShowControl] = useState(false)
   const [running, setRunning] = useState(false)
   const [globalAlertCount, setGlobalAlertCount] = useState(0)
+  const [lastRefreshed, setLastRefreshed] = useState<number>(0)
+  const [now, setNow] = useState<number>(Date.now())
 
   // 按页数据（不再拉完整 Snapshot）
   const [overview, setOverview] = useState<Overview | null>(null)
@@ -97,6 +100,9 @@ export default function App() {
         }
         // alerts 页自己拉数据（AlertsView 内部有 5s 轮询）
       }
+
+      setLastRefreshed(Date.now())
+      api.logFrontendEvent(clusterID, 'refresh', `page refreshed (tab=${tab})`).catch(() => {})
     } catch {
       // Wails 未就绪
     }
@@ -112,6 +118,12 @@ export default function App() {
     return () => clearInterval(t)
   }, [running, refresh])
 
+  // 每秒更新一次"now"，让"最后刷新 Xs 前"显示走字
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
   const toggleSort = useCallback(async () => {
     const next: 'cpu' | 'gpu' = sortBy === 'cpu' ? 'gpu' : 'cpu'
     setSortBy(next)
@@ -125,17 +137,23 @@ export default function App() {
       Promise.all([api.getOverview(clusterID), api.getPerf(clusterID)]).then(([ov, pf]) => {
         setOverview(ov)
         setPerf(pf)
+        setLastRefreshed(Date.now())
+        api.logFrontendEvent(clusterID, 'tab', `switched to ${tab} page`).catch(() => {})
       }).catch(() => {})
     } else if (tab === 'nodes') {
       Promise.all([api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ns, h]) => {
         setNodes(ns ?? [])
         setHealth(h)
+        setLastRefreshed(Date.now())
+        api.logFrontendEvent(clusterID, 'tab', `switched to ${tab} page`).catch(() => {})
       }).catch(() => {})
     } else if (tab === 'workers') {
       Promise.all([api.getWorkers(clusterID), api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ws, ns, h]) => {
         setWorkers(ws ?? [])
         setNodes(ns ?? [])
         setHealth(h)
+        setLastRefreshed(Date.now())
+        api.logFrontendEvent(clusterID, 'tab', `switched to ${tab} page`).catch(() => {})
       }).catch(() => {})
     }
   }, [clusterID, tab])
@@ -143,7 +161,12 @@ export default function App() {
   const title =
     selection.kind === 'global-alerts'
       ? '全局报警'
-      : clusters.find((c) => c.id === clusterID)?.platformUrl?.replace(/^https?:\/\//, '') || clusterID
+      : selection.kind === 'api-log'
+        ? '接口日志'
+        : clusters.find((c) => c.id === clusterID)?.platformUrl?.replace(/^https?:\/\//, '') || clusterID
+
+  // "最后刷新 Xs 前" 文案
+  const elapsedSec = lastRefreshed > 0 ? Math.max(0, Math.floor((now - lastRefreshed) / 1000)) : null
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
@@ -155,6 +178,13 @@ export default function App() {
         onSelect={(s) => {
           setSelection(s)
           setTab('overview')
+          if (s.kind === 'cluster') {
+            api.logFrontendEvent(s.id, 'cluster', `switched to cluster ${s.id}`).catch(() => {})
+          } else if (s.kind === 'api-log') {
+            api.logFrontendEvent('', 'page', 'opened API log view').catch(() => {})
+          } else if (s.kind === 'global-alerts') {
+            api.logFrontendEvent('', 'page', 'opened global alerts view').catch(() => {})
+          }
         }}
       />
       <main className="flex flex-1 flex-col min-w-0">
@@ -169,20 +199,25 @@ export default function App() {
         />
         {selection.kind === 'cluster' ? (
           <>
-            <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-7">
-              {TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`-mb-px border-b-2 px-3 py-2.5 text-sm transition-colors ${
-                    tab === t.key
-                      ? 'border-primary font-medium text-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-border bg-card px-7">
+              <div className="flex gap-1">
+                {TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`-mb-px border-b-2 px-3 py-2.5 text-sm transition-colors ${
+                      tab === t.key
+                        ? 'border-primary font-medium text-foreground'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {elapsedSec !== null && (
+                <span className="py-2.5 text-xs text-muted-foreground">最后刷新 {elapsedSec}s 前</span>
+              )}
             </div>
             <CollectionHealthNotice health={health} />
             <div className="flex-1 overflow-y-auto p-7">
@@ -198,7 +233,8 @@ export default function App() {
           </>
         ) : (
           <div className="flex-1 overflow-y-auto p-7">
-            <AlertsView clusterID="" clusterName="" />
+            {selection.kind === 'global-alerts' && <AlertsView clusterID="" clusterName="" />}
+            {selection.kind === 'api-log' && <APILogView />}
           </div>
         )}
       </main>

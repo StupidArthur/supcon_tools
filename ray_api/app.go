@@ -572,6 +572,22 @@ func (a *App) GetDBPath() string {
 	return a.resolveDBPath(a.cfg.DBPath)
 }
 
+// GetRecentAPILogs 返回最近 limit 条 API 日志（最新在前）。
+func (a *App) GetRecentAPILogs(limit int) []collector.APILogEntry {
+	if a.manager == nil {
+		return nil
+	}
+	return a.manager.RecentAPILogs(limit)
+}
+
+// LogFrontendEvent 由前端调用，记录用户操作/页面刷新等事件。
+func (a *App) LogFrontendEvent(cluster, phase, message string) {
+	if a.manager == nil {
+		return
+	}
+	a.manager.LogFrontendEvent(cluster, phase, message)
+}
+
 // ---- Webhook 推送 ----
 
 // webhookClient 从给定的 WebhookURL 构造 wecom 客户端。

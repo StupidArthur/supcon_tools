@@ -78,6 +78,10 @@ export function GetPerf(arg1) {
   return window['go']['main']['App']['GetPerf'](arg1);
 }
 
+export function GetRecentAPILogs(arg1) {
+  return window['go']['main']['App']['GetRecentAPILogs'](arg1);
+}
+
 export function GetSnapshot(arg1) {
   return window['go']['main']['App']['GetSnapshot'](arg1);
 }
@@ -92,6 +96,10 @@ export function ListAlerts(arg1) {
 
 export function ListClusterIDs() {
   return window['go']['main']['App']['ListClusterIDs']();
+}
+
+export function LogFrontendEvent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['LogFrontendEvent'](arg1, arg2, arg3);
 }
 
 export function OpenInFolder(arg1) {

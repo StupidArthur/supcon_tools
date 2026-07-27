@@ -43,6 +43,8 @@ export function GetOverview(arg1:string):Promise<model.Overview>;
 
 export function GetPerf(arg1:string):Promise<model.PerfMetrics>;
 
+export function GetRecentAPILogs(arg1:number):Promise<Array<collector.APILogEntry>>;
+
 export function GetSnapshot(arg1:string):Promise<collector.Snapshot>;
 
 export function GetWorkers(arg1:string):Promise<Array<model.WorkerSnapshot>>;
@@ -50,6 +52,8 @@ export function GetWorkers(arg1:string):Promise<Array<model.WorkerSnapshot>>;
 export function ListAlerts(arg1:string):Promise<Array<model.Alert>>;
 
 export function ListClusterIDs():Promise<Array<string>>;
+
+export function LogFrontendEvent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function OpenInFolder(arg1:string):Promise<void>;
 

@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ScrollText } from 'lucide-react'
 import type { ClusterConfig, CollectorStatus } from '@/lib/api'
 
 export type Selection =
   | { kind: 'global-alerts' }
+  | { kind: 'api-log' }
   | { kind: 'cluster'; id: string }
 
 // displayName 从 URL 提取 host:port 作为集群名。
@@ -48,6 +49,20 @@ export function Sidebar({
           {globalAlertCount > 0 ? (
             <span className="ml-auto rounded-full bg-destructive px-1.5 text-xs text-white">{globalAlertCount}</span>
           ) : null}
+        </button>
+
+        {/* 接口日志 */}
+        <button
+          onClick={() => onSelect({ kind: 'api-log' })}
+          className={cn(
+            'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
+            selection.kind === 'api-log'
+              ? 'bg-secondary font-medium text-foreground'
+              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+          )}
+        >
+          <ScrollText className="h-4 w-4" />
+          接口日志
         </button>
 
         <div className="my-1 px-3 text-[11px] font-medium text-muted-foreground">集群</div>

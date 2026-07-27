@@ -51,6 +51,7 @@ type CollectorManager struct {
 	store      Store
 	cfg        config.Config
 	detailLock *semaphoreLimiter // capacity=1，集群间 detail 排队
+	apiLog     *APILog           // 共享 ring buffer
 	alerts     AlertChecker
 }
 
@@ -62,11 +63,13 @@ type collectorEntry struct {
 }
 
 func NewManager(store Store, cfg config.Config) *CollectorManager {
+	apiLog := NewAPILog()
 	m := &CollectorManager{
 		collectors: map[string]*collectorEntry{},
 		store:      store,
 		cfg:        cfg,
 		detailLock: newSemaphoreLimiter(1), // 同一时间只有一个集群做 detail
+		apiLog:     apiLog,
 	}
 	for _, cl := range cfg.Clusters {
 		if cl.ID == "" || cl.PlatformURL == "" {
@@ -100,6 +103,7 @@ func (m *CollectorManager) newCollectorFor(cl config.ClusterConfig) *Collector {
 	client := NewClient(opts)
 	coll := NewCollector(client, m.store, opts)
 	coll.SetDetailLock(m.detailLock)
+	coll.SetAPILog(m.apiLog)
 	coll.SetOnAlert(m.dispatchAlert)
 	return coll
 }
@@ -450,6 +454,22 @@ func (m *CollectorManager) Health(clusterID string) model.CollectionHealth {
 		return model.CollectionHealth{}
 	}
 	return e.coll.Health()
+}
+
+// RecentAPILogs 返回最近 limit 条 API 日志（最新在前）。limit<=0 返全部。
+func (m *CollectorManager) RecentAPILogs(limit int) []APILogEntry {
+	if m.apiLog == nil {
+		return nil
+	}
+	return m.apiLog.Recent(limit)
+}
+
+// LogFrontendEvent 由前端调用，记录用户操作/页面刷新等事件。
+func (m *CollectorManager) LogFrontendEvent(cluster, phase, message string) {
+	if m.apiLog == nil {
+		return
+	}
+	m.apiLog.Append("frontend", cluster, phase, message)
 }
 
 func (m *CollectorManager) GlobalPerf() model.GlobalPerf {

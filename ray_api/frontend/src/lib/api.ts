@@ -11,6 +11,7 @@ import {
   ListAlerts, AckAlert, CountAlerts,
   OpenInFolder, GetLogPath, GetDBPath,
   ExportSnapshot, ExportSnapshotAndPush, TestWebhook,
+  GetRecentAPILogs, LogFrontendEvent,
 } from '../../wailsjs/go/main/App'
 import type { model, config, collector, main } from '../../wailsjs/go/models'
 
@@ -32,6 +33,7 @@ export type SaveConfigResult = main.SaveConfigResult
 export type ExportSnapshotResult = main.ExportSnapshotResult
 export type PushSnapshotResult = main.PushSnapshotResult
 export type TestWebhookResult = main.TestWebhookResult
+export type APILogEntry = collector.APILogEntry
 
 // Config/ClusterConfig/Thresholds 用纯 interface（剥离 Wails 生成的 convertValues 方法），
 // 便于前端用对象字面量构造与 setState。
@@ -92,4 +94,6 @@ export const api = {
   exportSnapshot: ExportSnapshot as (nameBase: string, headers: string[], rows: string[][]) => Promise<ExportSnapshotResult>,
   exportSnapshotAndPush: ExportSnapshotAndPush as (nameBase: string, headers: string[], rows: string[][]) => Promise<PushSnapshotResult>,
   testWebhook: TestWebhook as (url: string) => Promise<TestWebhookResult>,
+  getRecentAPILogs: GetRecentAPILogs as (limit: number) => Promise<APILogEntry[]>,
+  logFrontendEvent: LogFrontendEvent as (cluster: string, phase: string, message: string) => Promise<void>,
 }
