@@ -83,18 +83,15 @@ func NewManager(store Store, cfg config.Config) *CollectorManager {
 }
 
 func (m *CollectorManager) optsForCluster(cl config.ClusterConfig) CollectorOpts {
-	interval := m.cfg.SampleInterval()
 	timeoutSec := m.cfg.RequestTimeoutSec
 	if timeoutSec <= 0 {
 		timeoutSec = DefaultTimeoutSec
 	}
 	return CollectorOpts{
-		ClusterID:    cl.ID,
-		PlatformURL:  cl.PlatformURL,
-		SummaryEvery: interval,
-		DetailEvery:  interval,
-		TimeoutSec:   timeoutSec,
-		Concurrency:  m.cfg.DetailNodeConcurrency,
+		ClusterID:   cl.ID,
+		PlatformURL: cl.PlatformURL,
+		TimeoutSec:  timeoutSec,
+		Concurrency: m.cfg.DetailNodeConcurrency,
 	}
 }
 
@@ -269,7 +266,23 @@ func (m *CollectorManager) ReloadAll(cfg config.Config) {
 func (m *CollectorManager) ApplyConfig(cfg config.Config) {
 	m.mu.Lock()
 	old := m.cfg
-	rebuildAll := old.SampleEvery != cfg.SampleEvery
+	// SampleEvery 已删除。配置变更（集群增减、URL 变、并发/超时变）触发重建。
+	clusterChanged := len(old.Clusters) != len(cfg.Clusters)
+	if !clusterChanged {
+		oldByID := map[string]string{}
+		for _, cl := range old.Clusters {
+			oldByID[cl.ID] = cl.PlatformURL
+		}
+		for _, cl := range cfg.Clusters {
+			if oldByID[cl.ID] != cl.PlatformURL {
+				clusterChanged = true
+				break
+			}
+		}
+	}
+	tuningChanged := old.DetailNodeConcurrency != cfg.DetailNodeConcurrency ||
+		old.RequestTimeoutSec != cfg.RequestTimeoutSec
+	rebuildAll := clusterChanged || tuningChanged
 
 	if rebuildAll {
 		started := make(map[string]bool, len(m.collectors))

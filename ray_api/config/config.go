@@ -44,7 +44,6 @@ type Config struct {
 	DBPath               string          `json:"dbPath"`
 	LogDir               string          `json:"logDir"`
 	SortBy               string          `json:"sortBy"`
-	SampleEvery          int             `json:"sampleEvery"`
 	Thresholds           Thresholds      `json:"thresholds"`
 	WebhookURL           string          `json:"webhookUrl,omitempty"`
 	DetailNodeConcurrency int            `json:"detailNodeConcurrency,omitempty"`
@@ -64,7 +63,6 @@ func Default() Config {
 		DBPath:                "ray_monitor.db",
 		LogDir:                "logs",
 		SortBy:                "cpu",
-		SampleEvery:           10,
 		Thresholds:            DefaultThresholds(),
 		DetailNodeConcurrency: defaultDetailNodeConcurrency,
 		RequestTimeoutSec:     defaultRequestTimeoutSec,
@@ -80,13 +78,6 @@ func DefaultThresholds() Thresholds {
 
 func (c *Config) ResolveThresholds(clusterID string) Thresholds {
 	return c.Thresholds
-}
-
-func (c *Config) SampleInterval() int {
-	if c.SampleEvery > 0 {
-		return c.SampleEvery
-	}
-	return 10
 }
 
 func Path() string {
@@ -188,15 +179,6 @@ func migrateFromLegacy(b []byte) Config {
 		}
 	}
 
-	if cfg.SampleEvery == 0 {
-		if leg.SummaryEvery > 0 {
-			cfg.SampleEvery = leg.SummaryEvery
-		} else if leg.DetailEvery > 0 {
-			cfg.SampleEvery = leg.DetailEvery
-		} else {
-			cfg.SampleEvery = 10
-		}
-	}
 	if cfg.Thresholds == (Thresholds{}) {
 		cfg.Thresholds = DefaultThresholds()
 	}
@@ -255,9 +237,6 @@ func SaveClusters(clusters []ClusterConfig) error {
 }
 
 func Validate(cfg Config) error {
-	if cfg.SampleEvery < 1 || cfg.SampleEvery > 3600 {
-		return fmt.Errorf("sampleEvery must be 1~3600")
-	}
 	if cfg.DetailNodeConcurrency < 1 || cfg.DetailNodeConcurrency > 200 {
 		return fmt.Errorf("detailNodeConcurrency must be 1~200")
 	}

@@ -1,4 +1,4 @@
-package collector
+﻿package collector
 
 import (
 	"bytes"
@@ -418,7 +418,7 @@ func TestFetchNodeDetail_WithGPU(t *testing.T) {
 }
 
 func TestCollector_StatusBeforeStart(t *testing.T) {
-	col := NewCollector(nil, &fakeStore{}, CollectorOpts{SummaryEvery: 15, DetailEvery: 60})
+	col := NewCollector(nil, &fakeStore{}, CollectorOpts{})
 	st := col.Status()
 	if st.Running {
 		t.Errorf("should not be running before start")
@@ -545,7 +545,7 @@ func TestCollectDetailRetainsLastGoodNodeDataOnPartialFailure(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	store := &fakeStore{}
-	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)
 
@@ -658,7 +658,7 @@ func TestCollectDetailMarksMissingNodeWithoutFabricatingData(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	store := &fakeStore{}
-	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)
 
@@ -781,7 +781,7 @@ func TestClusterFailureKeepsPreviousClusterMetric(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	store := &fakeStore{}
-	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)
 
@@ -844,7 +844,7 @@ func TestJobsFailureKeepsPreviousJobsAndDiffBaseline(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	store := &fakeStore{}
-	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)
 
@@ -899,7 +899,7 @@ func TestSnapshotStillUpdatesWhenStorageFails(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	store := &fakeStore{failWriteNodes: true}
-	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 2, Concurrency: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)
 
@@ -968,7 +968,7 @@ func TestStopDoesNotIncrementFailureForContextCanceled(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	store := &fakeStore{}
-	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 30, Concurrency: 5, SummaryEvery: 5, DetailEvery: 5}
+	opts := CollectorOpts{ClusterID: "test", PlatformURL: srv.URL, TimeoutSec: 30, Concurrency: 5}
 	client := NewClient(opts)
 	col := NewCollector(client, store, opts)
 
@@ -1012,3 +1012,5 @@ func TestParseClusterStatus(t *testing.T) {
 		})
 	}
 }
+
+

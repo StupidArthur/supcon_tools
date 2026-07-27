@@ -102,7 +102,7 @@ export default function App() {
       }
 
       setLastRefreshed(Date.now())
-      api.logFrontendEvent(clusterID, 'refresh', `page refreshed (tab=${tab})`).catch(() => {})
+      api.logFrontendEvent(clusterID, '刷新', `页面刷新（当前页 ${tab}）`).catch(() => {})
     } catch {
       // Wails 未就绪
     }
@@ -138,14 +138,14 @@ export default function App() {
         setOverview(ov)
         setPerf(pf)
         setLastRefreshed(Date.now())
-        api.logFrontendEvent(clusterID, 'tab', `switched to ${tab} page`).catch(() => {})
+        api.logFrontendEvent(clusterID, '切页', `切换到 ${tab} 页`).catch(() => {})
       }).catch(() => {})
     } else if (tab === 'nodes') {
       Promise.all([api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ns, h]) => {
         setNodes(ns ?? [])
         setHealth(h)
         setLastRefreshed(Date.now())
-        api.logFrontendEvent(clusterID, 'tab', `switched to ${tab} page`).catch(() => {})
+        api.logFrontendEvent(clusterID, '切页', `切换到 ${tab} 页`).catch(() => {})
       }).catch(() => {})
     } else if (tab === 'workers') {
       Promise.all([api.getWorkers(clusterID), api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ws, ns, h]) => {
@@ -153,7 +153,7 @@ export default function App() {
         setNodes(ns ?? [])
         setHealth(h)
         setLastRefreshed(Date.now())
-        api.logFrontendEvent(clusterID, 'tab', `switched to ${tab} page`).catch(() => {})
+        api.logFrontendEvent(clusterID, '切页', `切换到 ${tab} 页`).catch(() => {})
       }).catch(() => {})
     }
   }, [clusterID, tab])
@@ -179,11 +179,11 @@ export default function App() {
           setSelection(s)
           setTab('overview')
           if (s.kind === 'cluster') {
-            api.logFrontendEvent(s.id, 'cluster', `switched to cluster ${s.id}`).catch(() => {})
+            api.logFrontendEvent(s.id, '切集群', `切换到集群 ${s.id}`).catch(() => {})
           } else if (s.kind === 'api-log') {
-            api.logFrontendEvent('', 'page', 'opened API log view').catch(() => {})
+            api.logFrontendEvent('', '页面', '打开接口日志页').catch(() => {})
           } else if (s.kind === 'global-alerts') {
-            api.logFrontendEvent('', 'page', 'opened global alerts view').catch(() => {})
+            api.logFrontendEvent('', '页面', '打开全局报警页').catch(() => {})
           }
         }}
       />

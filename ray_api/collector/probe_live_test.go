@@ -32,12 +32,10 @@ func TestProbeLiveClusterOneRound(t *testing.T) {
 	}
 
 	opts := CollectorOpts{
-		ClusterID:    "probe",
-		PlatformURL:  base,
-		SummaryEvery: 600,
-		DetailEvery:  600,
-		TimeoutSec:   60,
-		Concurrency:  50,
+		ClusterID:   "probe",
+		PlatformURL: base,
+		TimeoutSec:  60,
+		Concurrency: 50,
 	}
 
 	client := NewClient(opts)
@@ -104,12 +102,10 @@ func TestProbeDetailSerial20(t *testing.T) {
 	}
 
 	opts := CollectorOpts{
-		ClusterID:    "probe",
-		PlatformURL:  base,
-		SummaryEvery: 600,
-		DetailEvery:  600,
-		TimeoutSec:   60,
-		Concurrency:  50,
+		ClusterID:   "probe",
+		PlatformURL: base,
+		TimeoutSec:  60,
+		Concurrency: 50,
 	}
 	client := NewClient(opts)
 	coll := NewCollector(client, noopStore{}, opts)

@@ -44,8 +44,6 @@ type CollectorOpts struct {
 	ClusterID    string
 	PlatformURL  string
 	Cookie       string
-	SummaryEvery int
-	DetailEvery  int
 	TimeoutSec   int
 	Concurrency  int
 }
@@ -274,15 +272,10 @@ func (c *Collector) concurrency() int {
 	return c.nodeConcurrency()
 }
 
-func assessRisk(p model.PerfMetrics, summaryEvery, detailEvery int) string {
-	period := summaryEvery
-	if detailEvery < period {
-		period = detailEvery
-	}
-	periodMs := int64(period) * 1000
-	if p.DetailMs > periodMs*80/100 && p.DetailMs > 0 {
-		return "danger"
-	}
+// assessRisk 串行模型下没有固定周期，按绝对阈值判断：
+//   - 单次 detail > 3s 视为"忙"（之前看的是占周期的 80%）
+//   - 进程内存 > 500MB 视为内存压力
+func assessRisk(p model.PerfMetrics) string {
 	if p.DetailMaxNodeMs > 3000 || p.ProcMemBytes > 500*1024*1024 {
 		return "warn"
 	}
@@ -296,41 +289,54 @@ func (c *Collector) Start(ctx context.Context) {
 			logx.Event("error", "collector_panic", "cluster", c.opts.ClusterID, "panic", fmt.Sprint(r))
 		}
 	}()
-	summaryEvery := c.opts.SummaryEvery
-	detailEvery := c.opts.DetailEvery
-	if summaryEvery <= 0 {
-		summaryEvery = 15
-	}
-	if detailEvery <= 0 {
-		detailEvery = 60
-	}
 	c.mu.Lock()
 	c.status.Running = true
 	c.mu.Unlock()
-	logx.L().Info("collector started", "cluster", c.opts.ClusterID, "summary", summaryEvery, "detail", detailEvery)
+	logx.L().Info("collector started", "cluster", c.opts.ClusterID)
 
-	c.collectSummary(ctx)
-	c.collectDetail(ctx)
+	cycle := func() bool {
+		if ctx.Err() != nil {
+			return false
+		}
+		// 整轮（summary + detail）在同一把集群间锁下串行
+		if c.detailLock != nil {
+			if err := c.detailLock.Acquire(ctx); err != nil {
+				return false
+			}
+			defer c.detailLock.Release()
+		}
+		c.logEvent("周期", "开始")
+		c.collectSummary(ctx)
+		c.collectDetail(ctx)
+		c.logEvent("周期", "结束")
+		return true
+	}
 
-	summaryTick := time.NewTicker(time.Duration(summaryEvery) * time.Second)
-	detailTick := time.NewTicker(time.Duration(detailEvery) * time.Second)
+	// 立即跑一次首轮
+	cycle()
+
 	defer func() {
-		summaryTick.Stop()
-		detailTick.Stop()
 		c.mu.Lock()
 		c.status.Running = false
 		c.mu.Unlock()
 		logx.L().Info("collector stopped", "cluster", c.opts.ClusterID)
 	}()
 
+	// 连续循环：跑完一轮立即跑下一轮，无 tick 间隔。
+	// 如果一轮耗时 0（不太可能），用 50ms 退避避免空转。
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-summaryTick.C:
-			c.collectSummary(ctx)
-		case <-detailTick.C:
-			c.collectDetail(ctx)
+		default:
+		}
+		if !cycle() {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(50 * time.Millisecond):
 		}
 	}
 }
@@ -390,7 +396,7 @@ func (c *Collector) collectSummary(ctx context.Context) {
 		}
 		return
 	}
-	c.logEvent("summary", "start")
+	c.logEvent("summary", "开始")
 	nodes, err := c.client.FetchNodes(ctx)
 	c.releaseLimiter()
 
@@ -418,12 +424,12 @@ func (c *Collector) collectSummary(ctx context.Context) {
 	summaryMs := time.Since(start).Milliseconds()
 	c.recordOK()
 	c.refreshSnapshotNodes(nodes)
-	c.logEvent("summary", fmt.Sprintf("done (%dms, %d nodes)", summaryMs, len(nodes)))
+	c.logEvent("summary", fmt.Sprintf("完成 (%dms, %d 节点)", summaryMs, len(nodes)))
 
 	c.mu.Lock()
 	c.perf.SummaryMs = summaryMs
 	c.perf.NodeCount = len(nodes)
-	c.perf.Risk = assessRisk(c.perf, c.opts.SummaryEvery, c.opts.DetailEvery)
+	c.perf.Risk = assessRisk(c.perf)
 	c.mu.Unlock()
 
 	logx.L().Info("summary collected", "cluster", c.opts.ClusterID, "nodes", len(nodes), "ms", summaryMs)
@@ -458,16 +464,8 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		return
 	}
 
-	// 集群间排队：同一时间只有一个集群做 detail
-	if c.detailLock != nil {
-		if err := c.detailLock.Acquire(ctx); err != nil {
-			if !errors.Is(err, context.Canceled) {
-				logx.L().Warn("detail lock acquire failed", "cluster", c.opts.ClusterID, "err", err)
-			}
-			return
-		}
-		defer c.detailLock.Release()
-	}
+	// 集群间锁在 Start() 层的 cycle 闭包里已经获取，本函数不再重复获取。
+	// 这也意味着 collectDetail 必须从 Start() 的 cycle 调用，不能独立调用。
 
 	detailStart := time.Now()
 	now := model.NowMs()
@@ -481,7 +479,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		return
 	}
 
-	c.logEvent("detail", fmt.Sprintf("start (%d nodes, concurrency=%d)", len(nodes), c.nodeConcurrency()))
+	c.logEvent("detail", fmt.Sprintf("开始 (%d 节点, 并发=%d)", len(nodes), c.nodeConcurrency()))
 
 	// 诊断：记录 detail 开始时的内存与 goroutine 数
 	var memStart runtime.MemStats
@@ -618,7 +616,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		}
 	}
 	detailElapsed := time.Since(detailStart).Milliseconds()
-	c.logEvent("detail", fmt.Sprintf("done (%dms, %d ok, %d failed)", detailElapsed, doneCount, failedCount))
+	c.logEvent("detail", fmt.Sprintf("完成 (%dms, %d 成功, %d 失败)", detailElapsed, doneCount, failedCount))
 
 	if ctx.Err() != nil {
 		return
@@ -933,7 +931,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		SlowNodeID:      slowNodeID,
 		SlowNodeMs:      maxNodeMs,
 	}
-	p.Risk = assessRisk(p, c.opts.SummaryEvery, c.opts.DetailEvery)
+	p.Risk = assessRisk(p)
 	c.mu.Lock()
 	c.perf = p
 	c.mu.Unlock()

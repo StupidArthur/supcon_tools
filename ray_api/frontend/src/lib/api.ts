@@ -54,7 +54,6 @@ export interface Config {
   dbPath: string
   logDir: string
   sortBy: string
-  sampleEvery: number
   thresholds: Thresholds
   webhookUrl?: string
   detailNodeConcurrency?: number

@@ -106,7 +106,6 @@ export namespace config {
 	    dbPath: string;
 	    logDir: string;
 	    sortBy: string;
-	    sampleEvery: number;
 	    thresholds: Thresholds;
 	    webhookUrl?: string;
 	    detailNodeConcurrency?: number;
@@ -122,7 +121,6 @@ export namespace config {
 	        this.dbPath = source["dbPath"];
 	        this.logDir = source["logDir"];
 	        this.sortBy = source["sortBy"];
-	        this.sampleEvery = source["sampleEvery"];
 	        this.thresholds = this.convertValues(source["thresholds"], Thresholds);
 	        this.webhookUrl = source["webhookUrl"];
 	        this.detailNodeConcurrency = source["detailNodeConcurrency"];

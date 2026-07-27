@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { api, type Config } from '@/lib/api'
 
@@ -65,13 +65,9 @@ export function ConfigDialog({
       <div className="max-h-[85vh] w-[520px] overflow-y-auto rounded-xl bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <h2 className="mb-4 text-base font-semibold">配置</h2>
 
-        {/* 采样间隔 */}
+        {/* 采集设置 */}
         <div className="mb-5">
-          <div className="mb-2 text-xs font-medium text-muted-foreground">采样设置</div>
-          <Field label="采样间隔（秒）">
-            <input type="number" className="input" value={cfg.sampleEvery}
-              onChange={(e) => setCfg({ ...cfg, sampleEvery: Number(e.target.value) })} />
-          </Field>
+          <div className="mb-2 text-xs font-medium text-muted-foreground">采集设置</div>
           <div className="mt-3">
             <Field label="单集群节点并发数（1~200）">
               <input type="number" min={1} max={200} className="input" value={cfg.detailNodeConcurrency ?? 50}

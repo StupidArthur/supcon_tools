@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// 测试 v1 旧配置迁移到简化格式（集群只填 URL，采样间隔提全局）。
+// 测试 v1 旧配置迁移到简化格式（集群只填 URL，sampleEvery 保留）。
 func TestMigrateFromLegacy(t *testing.T) {
 	legacy := `{
 		"platformUrl": "http://10.30.144.41:32549",
@@ -26,13 +26,8 @@ func TestMigrateFromLegacy(t *testing.T) {
 	if c.PlatformURL != "http://10.30.144.41:32549" {
 		t.Errorf("platformUrl not migrated: %s", c.PlatformURL)
 	}
-	// 集群不再有 cookie/间隔字段
 	if c.ID == "" {
 		t.Errorf("cluster should have ID")
-	}
-	// 采样间隔迁移到全局
-	if cfg.SampleEvery != 15 {
-		t.Errorf("sampleEvery should migrate from summaryEvery=15, got %d", cfg.SampleEvery)
 	}
 	if cfg.DBPath != "ray_monitor.db" {
 		t.Errorf("dbPath lost: %s", cfg.DBPath)
@@ -58,23 +53,9 @@ func TestClusterDisplayName(t *testing.T) {
 			t.Errorf("DisplayName(%q) = %q, want %q", c.url, got, c.want)
 		}
 	}
-	// 空 URL 回退到 ID
 	cl := ClusterConfig{ID: "abc", PlatformURL: ""}
 	if cl.DisplayName() != "abc" {
 		t.Errorf("empty url should fallback to id, got %s", cl.DisplayName())
-	}
-}
-
-// 测试统一采样间隔解析。
-func TestSampleInterval(t *testing.T) {
-	cfg := Config{SampleEvery: 7}
-	if cfg.SampleInterval() != 7 {
-		t.Errorf("want 7, got %d", cfg.SampleInterval())
-	}
-	// 非正兜底 10
-	cfg2 := Config{}
-	if cfg2.SampleInterval() != 10 {
-		t.Errorf("want default 10, got %d", cfg2.SampleInterval())
 	}
 }
 
@@ -85,7 +66,6 @@ func TestParseV2(t *testing.T) {
 			{"id": "c1", "platformUrl": "http://1.2.3.4:32549"}
 		],
 		"dbPath": "x.db",
-		"sampleEvery": 10,
 		"thresholds": {"nodeCpu": 90, "nodeMem": 85, "nodeGpu": 95, "workerCpu": 70, "workerMem": 70, "workerGpu": 90}
 	}`
 	var parsed Config
@@ -94,9 +74,6 @@ func TestParseV2(t *testing.T) {
 	}
 	if len(parsed.Clusters) != 1 || parsed.Clusters[0].PlatformURL != "http://1.2.3.4:32549" {
 		t.Errorf("v2 clusters not parsed: %+v", parsed.Clusters)
-	}
-	if parsed.SampleEvery != 10 {
-		t.Errorf("sampleEvery not parsed: %d", parsed.SampleEvery)
 	}
 	if parsed.Thresholds.NodeCPU != 90 {
 		t.Errorf("thresholds not parsed: %+v", parsed.Thresholds)

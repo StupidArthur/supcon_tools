@@ -71,7 +71,6 @@ func (a *App) startup(ctx context.Context) {
 	logx.Event("app", "app_starting",
 		"clusters", len(cfg.Clusters),
 		"cluster_ids", clusterIDs(cfg.Clusters),
-		"sample_every_sec", cfg.SampleInterval(),
 		"timeout_sec", cfg.RequestTimeoutSec,
 		"concurrency", cfg.DetailNodeConcurrency,
 		"global_concurrency", collector.DefaultGlobalConcurrency,
@@ -443,11 +442,10 @@ func (a *App) SaveConfig(cfg config.Config) SaveConfigResult {
 	a.cfg = cfg
 	a.mu.Unlock()
 
-	logx.L().Info("config saved", "clusters", len(cfg.Clusters), "sampleEvery", cfg.SampleEvery)
+	logx.L().Info("config saved", "clusters", len(cfg.Clusters))
 	logx.Event("app", "config_saved",
 		"clusters", len(cfg.Clusters),
 		"cluster_ids", clusterIDs(cfg.Clusters),
-		"sample_every_sec", cfg.SampleInterval(),
 		"timeout_sec", cfg.RequestTimeoutSec,
 		"concurrency", cfg.DetailNodeConcurrency,
 		"global_concurrency", collector.DefaultGlobalConcurrency,
