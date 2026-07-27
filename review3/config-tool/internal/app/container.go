@@ -25,16 +25,21 @@ type Container struct {
 	Service *bindings.DataFactoryServiceManager
 }
 
-// NewContainer 创建容器（默认开发模式）。
-// wails generate module 时会运行 main 包以生成 TypeScript 绑定，
-// 此时不需要启动服务（standalone_main.py 也找不到），
-// 通过 wails_generate=true 参数跳过服务启动。
+// NewContainer 创建容器。
+//
+// devMode 选择规则（todo.md §3.1）：
+//   - 生产 EXE（go:build !wails_generate）默认 devMode=false，使用 <exe>/DataFactoryService.exe
+//   - WAILS_GENERATE=1 模式 devMode=true + wailsGenerateMode=true，只生成绑定、不启动服务
+//
+// 旧版本默认 devMode=true，会在生产 EXE 上找 standalone_main.py 失败导致
+// "DataFactory 组态工具启�? 之后窗口静默退出。这里切到 devMode=false 让
+// 生产 EXE 真正能用；开发模式请通过 NewContainerWithDevMode 显式开启。
 func NewContainer() (*Container, error) {
 	if os.Getenv("WAILS_GENERATE") == "1" {
 		// wails generate module 模式：只生成绑定，不启动服务
 		return NewContainerWithMode(true, true)
 	}
-	return NewContainerWithMode(true, false)
+	return NewContainerWithMode(false, false)
 }
 
 // NewContainerWithMode 创建容器，可显式控制是否跳过服务启动。
