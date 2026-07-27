@@ -19,21 +19,31 @@ func TestPickFreePort(t *testing.T) {
 	}
 }
 
-func TestLineBuffer_CapacityAndOrder(t *testing.T) {
-	buf := newLineBuffer(3)
-	for i := 0; i < 5; i++ {
-		buf.Append("line" + string(rune('0'+i)))
+func TestTailFile_ReturnsLastNLines(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "service-stderr.log")
+	content := "line0\nline1\nline2\nline3\nline4\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	got := buf.String()
-	for _, want := range []string{"line2", "line3", "line4"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected %q in buffer, got %q", want, got)
-		}
+	got := tailFile(path, 3)
+	want := "line2\nline3\nline4"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
 	}
-	for _, unwanted := range []string{"line0", "line1"} {
-		if strings.Contains(got, unwanted) {
-			t.Errorf("did not expect %q in buffer, got %q", unwanted, got)
-		}
+}
+
+func TestTailFile_EmptyAndMissing(t *testing.T) {
+	if tailFile("Z:/non-existent-path/should-not-exist.log", 10) != "" {
+		t.Fatal("expected empty string for missing file")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.log")
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if tailFile(path, 5) != "" {
+		t.Fatal("expected empty string for empty file")
 	}
 }
 
@@ -60,6 +70,8 @@ func TestResolveRepoRootForDevService_NotFound(t *testing.T) {
 }
 
 func TestConfigureBackgroundProcess_Compiles(t *testing.T) {
-	// 在所有平台上验证函数存在；行为在 Windows 上才有意义
 	_ = configureBackgroundProcess
 }
+
+// 保留 strings import，避免外部 import 路径误删
+var _ = strings.Contains

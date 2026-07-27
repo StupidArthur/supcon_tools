@@ -1,16 +1,17 @@
 package bindings
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,9 +41,12 @@ type DataFactoryServiceManager struct {
 	exitCode  int
 	exitErr   error
 
-	// logs 缓存最近 N 行 stderr/stdout，便于错误展示
-	stderrBuf *lineBuffer
-	stdoutBuf *lineBuffer
+	// logs 子进程 stdout/stderr 直接重定向到文件，避免 pipe buffer 满导致
+	// 启动阻塞（Windows pipe 默认 4KB，uvicorn 启动 banner + 自带 access log
+	// 容易打满）。错误诊断时 RecentLogs() 读文件最后若干行。
+	stdoutPath string
+	stderrPath string
+	tmpFiles   []*os.File
 
 	// client 统一服务客户端（todo.md §5.2）
 	client *DataFactoryServiceClient
@@ -80,10 +84,10 @@ func NewDataFactoryServiceManager(devMode bool) (*DataFactoryServiceManager, err
 		host:      "127.0.0.1",
 		state:     "starting",
 		stateTime: time.Now(),
-		stderrBuf: newLineBuffer(50),
-		stdoutBuf: newLineBuffer(50),
 		exitCh:    make(chan struct{}),
 	}
+	m.stdoutPath = filepath.Join(exeDir, "service-stdout.log")
+	m.stderrPath = filepath.Join(exeDir, "service-stderr.log")
 	m.shutdownCtx, m.shutdownCancel = context.WithCancel(context.Background())
 
 	// 解析 service EXE / python
@@ -137,26 +141,33 @@ func NewDataFactoryServiceManager(devMode bool) (*DataFactoryServiceManager, err
 		// todo.md §13.2：前端不持有 Token，由 Go 代理。设置 DATAFACTORY_NO_AUTH=1 让 Python 服务跳过前端鉴权。
 		cmd.Env = append(os.Environ(), "DATAFACTORY_NO_AUTH=1")
 
-		stdout, err := cmd.StdoutPipe()
+		// stdout/stderr 直接重定向到文件：避免 Windows pipe 4KB buffer 满
+		// 后子进程 write 阻塞，health 永远等不到。
+		stdoutFile, err := os.OpenFile(m.stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
-			lastErr = fmt.Errorf("创建 stdout 管道失败: %w", err)
+			lastErr = fmt.Errorf("打开 service-stdout.log 失败: %w", err)
 			continue
 		}
-		stderr, err := cmd.StderrPipe()
+		stderrFile, err := os.OpenFile(m.stderrPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
-			lastErr = fmt.Errorf("创建 stderr 管道失败: %w", err)
+			stdoutFile.Close()
+			lastErr = fmt.Errorf("打开 service-stderr.log 失败: %w", err)
 			continue
 		}
+		cmd.Stdout = stdoutFile
+		cmd.Stderr = stderrFile
+		// 由 exec 在 Start 后自动管理文件句柄；这里保留引用防止 GC
+		m.tmpFiles = append(m.tmpFiles, stdoutFile, stderrFile)
 
 		if err := cmd.Start(); err != nil {
+			stdoutFile.Close()
+			stderrFile.Close()
 			lastErr = fmt.Errorf("启动 DataFactoryService 失败: %w", err)
 			continue
 		}
 		m.cmd = cmd
 		m.pid = cmd.Process.Pid
 
-		go m.pumpOutput(stdout, m.stdoutBuf)
-		go m.pumpOutput(stderr, m.stderrBuf)
 		go m.monitorExit()
 
 		// 等待 /api/health 就绪（JSON 解析，todo.md §5.3）
@@ -229,15 +240,56 @@ func (m *DataFactoryServiceManager) State() string {
 }
 
 // RecentLogs 返回服务最近输出（用于错误诊断）。
+//
+// 直接读取 service-stdout.log / service-stderr.log 尾部若干行。
+// 这两个文件由 cmd.Stdout / cmd.Stderr 重定向，跨进程依然能读到。
 func (m *DataFactoryServiceManager) RecentLogs() string {
-	out := m.stdoutBuf.String()
-	if s := m.stderrBuf.String(); s != "" {
-		if out != "" {
-			out += "\n"
+	const maxLines = 60
+	var parts []string
+	for _, p := range []string{m.stdoutPath, m.stderrPath} {
+		if p == "" {
+			continue
 		}
-		out += s
+		body := tailFile(p, maxLines)
+		if body == "" {
+			continue
+		}
+		parts = append(parts, "=== "+filepath.Base(p)+" ===\n"+body)
 	}
-	return out
+	return strings.Join(parts, "\n")
+}
+
+// tailFile 读取 path 末尾 maxLines 行（实现简单：先取文件总行数，再 seek 起点）。
+func tailFile(path string, maxLines int) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	ring := make([]string, maxLines)
+	n := 0
+	for scanner.Scan() {
+		ring[n%maxLines] = scanner.Text()
+		n++
+	}
+	if n == 0 {
+		return ""
+	}
+	start := 0
+	if n > maxLines {
+		start = n % maxLines
+	}
+	var out []string
+	for i := 0; i < maxLines; i++ {
+		idx := (start + i) % maxLines
+		if ring[idx] == "" {
+			break
+		}
+		out = append(out, ring[idx])
+	}
+	return strings.Join(out, "\n")
 }
 
 // SetOnExit 设置异常退出回调（todo.md §5.6）。
@@ -331,13 +383,6 @@ func (m *DataFactoryServiceManager) killProcess() error {
 	return m.cmd.Process.Kill()
 }
 
-func (m *DataFactoryServiceManager) pumpOutput(r io.Reader, buf *lineBuffer) {
-	scanner := newLineScanner(r)
-	for scanner.Scan() {
-		buf.Append(scanner.Text())
-	}
-}
-
 // pickFreePort 让 OS 在 127.0.0.1 上挑一个可用端口（todo.md §5.2）。
 func pickFreePort(host string) (int, error) {
 	l, err := net.Listen("tcp", host+":0")
@@ -365,91 +410,4 @@ func resolveRepoRootForDevService(exeDir string) (string, error) {
 		dir = parent
 	}
 	return "", errors.New("未找到 standalone_main.py")
-}
-
-// lineBuffer 是线程安全的环形行缓冲（保留最近 N 行）。
-type lineBuffer struct {
-	mu   sync.Mutex
-	cap  int
-	ring []string
-	idx  int
-	full bool
-}
-
-func newLineBuffer(cap int) *lineBuffer {
-	return &lineBuffer{cap: cap, ring: make([]string, cap)}
-}
-
-func (b *lineBuffer) Append(line string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.ring[b.idx] = line
-	b.idx = (b.idx + 1) % b.cap
-	if b.idx == 0 {
-		b.full = true
-	}
-}
-
-func (b *lineBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.full {
-		return joinLines(b.ring[:b.idx])
-	}
-	out := make([]string, 0, b.cap)
-	start := b.idx
-	for i := 0; i < b.cap; i++ {
-		out = append(out, b.ring[(start+i)%b.cap])
-	}
-	return joinLines(out)
-}
-
-func joinLines(parts []string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += "\n"
-		}
-		out += p
-	}
-	return out
-}
-
-// lineScanner 是 bufio.Scanner 的最小子集。
-type lineScanner struct {
-	r   io.Reader
-	buf []byte
-}
-
-func newLineScanner(r io.Reader) *lineScanner { return &lineScanner{r: r} }
-
-func (s *lineScanner) Scan() bool {
-	for {
-		b, err := s.readByte()
-		if err != nil {
-			if len(s.buf) > 0 {
-				return true
-			}
-			return false
-		}
-		if b == '\n' {
-			return true
-		}
-		s.buf = append(s.buf, b)
-	}
-}
-
-func (s *lineScanner) Text() string {
-	out := string(s.buf)
-	s.buf = s.buf[:0]
-	return out
-}
-
-func (s *lineScanner) readByte() (byte, error) {
-	var b [1]byte
-	n, err := s.r.Read(b[:])
-	if n > 0 {
-		return b[0], nil
-	}
-	return 0, err
 }
