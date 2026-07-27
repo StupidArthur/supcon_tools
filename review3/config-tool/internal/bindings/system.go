@@ -58,17 +58,27 @@ type SystemStatus struct {
 	ActiveBatches int     `json:"activeBatches"`
 }
 
-// BatchResult 批量仿真结果
+// BatchResult 批量仿真任务信息（不含 rows）。
+// 大量仿真结果由 Python 服务保存在本地 SQLite 中，不再通过接口一次性传输。
 type BatchResult struct {
-	Columns []string         `json:"columns"`
-	Rows    []map[string]any `json:"rows"`
-	// DisplayColumns 是 DSL display_args 声明的默认绘图列（来自引擎 get_display_variables），
-	// 已过滤为 Columns 中实际存在的列；YAML 未写 display_args 时为空。
-	DisplayColumns []string `json:"displayColumns"`
-	// PlotScales 是 DSL display_args 中声明的绘图缩放（[ref]），
-	// 计算规则：plotValue = raw × 100 / ref。仅保留 CSV 中实际存在、有限且 ref > 0 的列；
-	// sidecar 缺失/损坏或字段非法时为空，不阻断 Batch。
-	PlotScales map[string]float64 `json:"plotScales"`
+	BatchID         string             `json:"batchId"`
+	Status          string             `json:"status"`
+	CyclesRequested int                `json:"cyclesRequested"`
+	CyclesCompleted int                `json:"cyclesCompleted"`
+	Columns         []string           `json:"columns"`
+	DisplayColumns  []string           `json:"displayColumns"`
+	PlotScales      map[string]float64 `json:"plotScales"`
+	Error           string             `json:"error"`
+}
+
+// BatchRowsResult 批量仿真预览行（分页）。
+type BatchRowsResult struct {
+	OK     bool              `json:"ok"`
+	BatchID string           `json:"batchId"`
+	Rows   []map[string]any  `json:"rows"`
+	Offset int               `json:"offset"`
+	Limit  int               `json:"limit"`
+	Total  int               `json:"total"`
 }
 
 // commandFactory 创建命令的工厂函数（用于测试注入）
@@ -1283,86 +1293,166 @@ func (b *SystemBinding) SaveExportFile(format string) (string, error) {
 	})
 }
 
-// RunBatch 运行批量仿真
+// RunBatch 异步启动批量仿真，立即返回 batchId。
+// 不再等待全部仿真完成，不再接收完整 rows。
 func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, error) {
 	if cycles <= 0 {
 		return BatchResult{}, fmt.Errorf("周期数必须大于 0")
 	}
 
-	// todo.md §11.5：优先使用服务 API
 	b.mu.Lock()
 	client := b.serviceClient
 	b.mu.Unlock()
 
-	if client != nil {
-		return b.runBatchViaService(client, configPath, cycles)
+	if client == nil {
+		return BatchResult{}, fmt.Errorf("DataFactoryService 未初始化")
 	}
 
-	return BatchResult{}, fmt.Errorf("DataFactoryService 未初始化")
-}
-
-// runBatchViaService 通过服务 API 执行 batch（todo.md §11.5）。
-func (b *SystemBinding) runBatchViaService(client *DataFactoryServiceClient, configPath string, cycles int) (BatchResult, error) {
 	req := map[string]any{
 		"configPath": configPath,
 		"cycles":     cycles,
 	}
+	ctx, cancel := context.WithTimeout(b.ctx, 15*time.Second)
+	defer cancel()
 	var resp struct {
-		OK             bool                `json:"ok"`
-		Columns        []string            `json:"columns"`
-		Rows           []map[string]any    `json:"rows"`
-		DisplayColumns []string            `json:"displayColumns"`
-		PlotScales     map[string]float64  `json:"plotScales"`
-		Cycles         int                 `json:"cycles"`
+		OK      bool   `json:"ok"`
+		BatchID string `json:"batchId"`
+		Status  string `json:"status"`
 	}
-	if err := client.DoJSON(b.ctx, "POST", "/api/batch/run", req, &resp); err != nil {
+	if err := client.DoJSON(ctx, "POST", "/api/batch/run", req, &resp); err != nil {
 		return BatchResult{}, fmt.Errorf("服务 batch 失败: %w", err)
 	}
 	if !resp.OK {
 		return BatchResult{}, fmt.Errorf("服务 batch 返回 ok=false")
 	}
 	return BatchResult{
-		Columns:        resp.Columns,
-		Rows:           resp.Rows,
-		DisplayColumns: resp.DisplayColumns,
-		PlotScales:     resp.PlotScales,
+		BatchID: resp.BatchID,
+		Status:  resp.Status,
 	}, nil
 }
 
-// runBatchViaSubprocess 旧子进程模式（兼容测试）。
-func (b *SystemBinding) runBatchViaSubprocess(configPath string, cycles int) (BatchResult, error) {
-	if err := b.ensureDataFactory(); err != nil {
-		return BatchResult{}, err
+// GetBatchStatus 查询 batch 任务状态。
+func (b *SystemBinding) GetBatchStatus(batchId string) (BatchResult, error) {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return BatchResult{}, fmt.Errorf("DataFactoryService 未初始化")
 	}
-	if err := b.beginBatch(); err != nil {
-		return BatchResult{}, err
+	ctx, cancel := context.WithTimeout(b.ctx, 5*time.Second)
+	defer cancel()
+	var resp BatchResult
+	if err := client.DoJSON(ctx, "GET", "/api/batch/runs/"+batchId, nil, &resp); err != nil {
+		return BatchResult{}, fmt.Errorf("查询 batch 状态失败: %w", err)
 	}
-	defer b.endBatch()
+	return resp, nil
+}
 
-	workDir, err := os.MkdirTemp("", "review3-batch-*")
-	if err != nil {
-		return BatchResult{}, fmt.Errorf("创建批量临时目录失败: %w", err)
+// GetBatchRows 分页读取 batch 预览行。
+func (b *SystemBinding) GetBatchRows(batchId string, offset int, limit int) (BatchRowsResult, error) {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return BatchRowsResult{}, fmt.Errorf("DataFactoryService 未初始化")
 	}
-	defer os.RemoveAll(workDir)
-	csvPath := filepath.Join(workDir, "result.csv")
+	path := fmt.Sprintf("/api/batch/runs/%s/rows?offset=%d&limit=%d", batchId, offset, limit)
+	ctx, cancel := context.WithTimeout(b.ctx, 10*time.Second)
+	defer cancel()
+	var resp BatchRowsResult
+	if err := client.DoJSON(ctx, "GET", path, nil, &resp); err != nil {
+		return BatchRowsResult{}, fmt.Errorf("读取 batch 预览行失败: %w", err)
+	}
+	return resp, nil
+}
 
-	args := []string{"-c", configPath, "--batch", fmt.Sprintf("%d", cycles), "--export", csvPath}
-	cmd := b.dfLaunch.command(b.commandFactory, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return BatchResult{}, fmt.Errorf("DataFactory 运行失败: %w\n%s", err, string(output))
+// CancelBatch 取消正在运行的 batch 任务。
+func (b *SystemBinding) CancelBatch(batchId string) error {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("DataFactoryService 未初始化")
+	}
+	ctx, cancel := context.WithTimeout(b.ctx, 5*time.Second)
+	defer cancel()
+	var resp struct {
+		OK bool `json:"ok"`
+	}
+	if err := client.DoJSON(ctx, "POST", "/api/batch/runs/"+batchId+"/cancel", nil, &resp); err != nil {
+		return fmt.Errorf("取消 batch 失败: %w", err)
+	}
+	return nil
+}
+
+// DeleteBatch 删除 batch 结果。
+func (b *SystemBinding) DeleteBatch(batchId string) error {
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("DataFactoryService 未初始化")
+	}
+	ctx, cancel := context.WithTimeout(b.ctx, 10*time.Second)
+	defer cancel()
+	var resp struct {
+		OK bool `json:"ok"`
+	}
+	if err := client.DoJSON(ctx, "DELETE", "/api/batch/runs/"+batchId, nil, &resp); err != nil {
+		return fmt.Errorf("删除 batch 失败: %w", err)
+	}
+	return nil
+}
+
+// ExportBatchResult 从 SQLite 流式导出 batch 结果。
+func (b *SystemBinding) ExportBatchResult(batchId string, columns []string, exportPath string, format string, sheetName string) error {
+	if strings.TrimSpace(exportPath) == "" {
+		return fmt.Errorf("导出路径不能为空")
+	}
+	fmtLower := strings.ToLower(strings.TrimSpace(format))
+	switch fmtLower {
+	case "csv", "xlsx":
+	case "xls":
+		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
+	default:
+		return fmt.Errorf("不支持的导出格式: %s", format)
 	}
 
-	if err := validateBatchCSV(csvPath); err != nil {
-		return BatchResult{}, err
+	b.mu.Lock()
+	client := b.serviceClient
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("DataFactoryService 未初始化")
 	}
-	result, err := parseCSV(csvPath)
-	if err != nil {
-		return BatchResult{}, err
+
+	req := map[string]any{
+		"batchId":    batchId,
+		"columns":    columns,
+		"exportPath": exportPath,
+		"format":     fmtLower,
+		"sheetName":  sheetName,
 	}
-	result.DisplayColumns, result.PlotScales =
-		readDisplayMetadata(csvPath, result.Columns)
-	return result, nil
+	// 导出可能较慢（20000 行写 XLSX），给 5 分钟超时
+	ctx, cancel := context.WithTimeout(b.ctx, 5*time.Minute)
+	defer cancel()
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Path   string `json:"path"`
+		Rows   int    `json:"rows"`
+		Format string `json:"format"`
+	}
+	if err := client.DoJSON(ctx, "POST", "/api/export/convert", req, &resp); err != nil {
+		return fmt.Errorf("服务导出失败: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("服务导出返回 ok=false")
+	}
+	if info, err := os.Stat(exportPath); err != nil {
+		return fmt.Errorf("导出文件未生成: %w", err)
+	} else if info.Size() == 0 {
+		return fmt.Errorf("导出文件为空")
+	}
+	return nil
 }
 
 // readDisplayMetadata 读取批量导出 CSV 旁的 sidecar（<csv>.display.json）。
@@ -1443,85 +1533,25 @@ func isFiniteNonZeroPositive(f float64) bool {
 	return !math.IsNaN(f) && !math.IsInf(f, 0) && f > 0
 }
 
-// ExportBatch 导出批量仿真结果
+// ExportBatch 旧接口：重跑 batch + 导出 CSV。
+// 已废弃：batch 现在异步执行，请用 RunBatch + ExportBatchResult。
 func (b *SystemBinding) ExportBatch(configPath string, cycles int, exportPath string) error {
-	if exportPath == "" {
-		return fmt.Errorf("导出路径不能为空")
-	}
-	if cycles <= 0 {
-		return fmt.Errorf("周期数必须大于 0")
-	}
-
-	// §八：通过服务 API 执行 batch + 导出
-	b.mu.Lock()
-	client := b.serviceClient
-	b.mu.Unlock()
-	if client == nil {
-		return fmt.Errorf("DataFactoryService 未初始化")
-	}
-
-	// 1. batch via service
-	batchResult, err := b.runBatchViaService(client, configPath, cycles)
-	if err != nil {
-		return fmt.Errorf("批量仿真失败: %w", err)
-	}
-
-	// 2. export via service
-	if err := b.exportViaService(client, batchResult.Columns, batchResult.Rows, exportPath, "csv", ""); err != nil {
-		return fmt.Errorf("导出失败: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("ExportBatch 已废弃，请用 RunBatch + ExportBatchResult")
 }
 
-// ExportBatchFormatted 重跑批量仿真并按引擎模板导出（时间列 + 表头，csv/xlsx）。
-// columns 为空时用 DSL display_args；sheetName 仅对 Excel 生效。
-// 注：本方法为旧的重跑导出路径，当前主流程不使用（主流程用 ExportRowsFormatted 导出内存结果）；
-// xls 暂未启用（运行环境缺 xlwt）。
+// ExportBatchFormatted 旧接口：重跑 batch + 格式化导出。
+// 已废弃：batch 现在异步执行，请用 RunBatch + ExportBatchResult。
 func (b *SystemBinding) ExportBatchFormatted(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) error {
-	fmtLower := strings.ToLower(strings.TrimSpace(format))
-	switch fmtLower {
-	case "csv", "xlsx":
-	case "xls":
-		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
-	default:
-		return fmt.Errorf("不支持的导出格式: %s", format)
-	}
-	if exportPath == "" {
-		return fmt.Errorf("导出路径不能为空")
-	}
-	if cycles <= 0 {
-		return fmt.Errorf("周期数必须大于 0")
-	}
-
-	// §九：通过服务 API 执行 batch + 导出
-	b.mu.Lock()
-	client := b.serviceClient
-	b.mu.Unlock()
-	if client == nil {
-		return fmt.Errorf("DataFactoryService 未初始化")
-	}
-
-	batchResult, err := b.runBatchViaService(client, configPath, cycles)
-	if err != nil {
-		return fmt.Errorf("批量仿真失败: %w", err)
-	}
-
-	cols := columns
-	if len(cols) == 0 {
-		cols = batchResult.Columns
-	}
-
-	if err := b.exportViaService(client, cols, batchResult.Rows, exportPath, fmtLower, sheetName); err != nil {
-		return fmt.Errorf("导出失败: %w", err)
-	}
-	return nil
+	return fmt.Errorf("ExportBatchFormatted 已废弃，请用 RunBatch + ExportBatchResult")
 }
 
-// buildBatchExportArgs 构造模板导出的 CLI 参数（纯函数，便于测试）。
-//
-// format 调用方已规范化（trim + lowercase）。此处再做一次防御性 trim + lowercase，
-// 保证最终参数中 --format 不会带前后空格。
+// ExportRowsFormatted 旧接口：从内存 rows 导出。
+// 已废弃：batch 结果不再全量传到前端，请用 ExportBatchResult。
+func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]any, exportPath string, format string, sheetName string) error {
+	return fmt.Errorf("ExportRowsFormatted 已废弃，请用 ExportBatchResult")
+}
+
+// buildBatchExportArgs 构造模板导出的 CLI 参数（纯函数，仅旧测试使用）。
 func buildBatchExportArgs(configPath string, cycles int, exportPath string, format string, columns []string, sheetName string) []string {
 	fmtLower := strings.ToLower(strings.TrimSpace(format))
 	args := []string{
@@ -1539,135 +1569,10 @@ func buildBatchExportArgs(configPath string, cycles int, exportPath string, form
 	return args
 }
 
-// ExportRowsFormatted 将冻结的仿真结果按 prediction 模板导出为 csv/xlsx。
-// columns 只包含用户选择的业务信号（前端 sanitizeExportColumns 已过滤内部列），
-// rows 是当前内存结果快照（包含 _sim_time / _need_sample 等内部元数据）。
-// CSV 与 XLSX 均通过常驻服务 /api/export/convert 生成（todo.md §12）：
-//   - 两行表头（timeStamp / 时间戳 + 某工业数据）
-//   - 时间列使用 datetime.fromtimestamp 格式化为 %Y-%m-%d %H:%M:%S
-//   - 仅导出 need_sample=true 的行
-//   - 列顺序与采样筛选在两种格式之间一致
-//   - 导出失败不得留下损坏目标文件（原子替换）
-//
-// xls 当前版本暂不支持（运行环境缺 xlwt），返回明确错误。
-// 导出是格式转换任务，不是批量仿真任务：不调用 beginBatch，不增加 activeBatches。
-func (b *SystemBinding) ExportRowsFormatted(columns []string, rows []map[string]any, exportPath string, format string, sheetName string) error {
-	if strings.TrimSpace(exportPath) == "" {
-		return fmt.Errorf("导出路径不能为空")
-	}
-	if len(columns) == 0 {
-		return fmt.Errorf("列为空，无法导出")
-	}
-	fmtLower := strings.ToLower(strings.TrimSpace(format))
-	switch fmtLower {
-	case "csv", "xlsx":
-	case "xls":
-		return fmt.Errorf("当前版本暂不支持 xls，请使用 xlsx 或 csv")
-	default:
-		return fmt.Errorf("不支持的导出格式: %s", format)
-	}
-
-	// todo.md §12：优先使用服务 API
-	b.mu.Lock()
-	client := b.serviceClient
-	b.mu.Unlock()
-
-	if client != nil {
-		return b.exportViaService(client, columns, rows, exportPath, fmtLower, sheetName)
-	}
-
-	return fmt.Errorf("DataFactoryService 未初始化")
-}
-
-// exportViaService 通过 /api/export/convert 导出（todo.md §12）。
-// 原子替换：先写入临时文件，成功后 rename 覆盖目标文件，失败时不留损坏目标。
-func (b *SystemBinding) exportViaService(
-	client *DataFactoryServiceClient,
-	columns []string, rows []map[string]any,
-	exportPath, format, sheetName string,
-) error {
-	req := map[string]any{
-		"columns":   columns,
-		"rows":      rows,
-		"exportPath": exportPath,
-		"format":    format,
-		"sheetName": sheetName,
-	}
-	var resp struct {
-		OK      bool   `json:"ok"`
-		Path    string `json:"path"`
-		Rows    int    `json:"rows"`
-		Format  string `json:"format"`
-	}
-	if err := client.DoJSON(b.ctx, "POST", "/api/export/convert", req, &resp); err != nil {
-		return fmt.Errorf("服务导出失败: %w", err)
-	}
-	if !resp.OK {
-		return fmt.Errorf("服务导出返回 ok=false")
-	}
-	if info, err := os.Stat(exportPath); err != nil {
-		return fmt.Errorf("导出文件未生成: %w", err)
-	} else if info.Size() == 0 {
-		return fmt.Errorf("导出文件为空")
-	}
-	return nil
-}
-
-// exportViaSubprocess 旧子进程模式（仅兼容旧测试）。
-func (b *SystemBinding) exportViaSubprocess(columns []string, rows []map[string]any, exportPath, format, sheetName string) error {
-	if err := b.ensureDataFactory(); err != nil {
-		return err
-	}
-	workDir, err := os.MkdirTemp("", "review3-export-*")
-	if err != nil {
-		return fmt.Errorf("创建导出临时目录失败: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-
-	rowsJSON := filepath.Join(workDir, "rows.json")
-	payload := map[string]any{"columns": columns, "rows": rows}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("序列化导出行失败: %w", err)
-	}
-	if err := os.WriteFile(rowsJSON, data, 0o644); err != nil {
-		return fmt.Errorf("写入导出临时文件失败: %w", err)
-	}
-
-	args := buildConvertExportArgs(rowsJSON, exportPath, format, sheetName)
-	cmd := b.dfLaunch.command(b.commandFactory, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("DataFactory 导出失败（转换器: %s）: %s", b.dfLaunch.displayPath(), convertExportErrorMessage(err, output))
-	}
-
-	info, err := os.Stat(exportPath)
-	if err != nil {
-		return fmt.Errorf("导出文件未生成（转换器: %s）: %w", b.dfLaunch.displayPath(), err)
-	}
-	if info.Size() == 0 {
-		return fmt.Errorf("导出文件为空（转换器: %s）", b.dfLaunch.displayPath())
-	}
-	return nil
-}
-
-// convertExportErrorMessage 生成导出转换失败信息：
-// 识别旧版 DataFactory 不支持 --convert-export 的情况（argparse 报 unrecognized arguments），
-// 给出明确升级提示；否则原样返回底层错误与输出，便于定位实际调用的运行时。
-func convertExportErrorMessage(err error, output []byte) string {
-	text := string(output)
-	if strings.Contains(text, "convert-export") && strings.Contains(text, "unrecognized arguments") {
-		return "当前 DataFactory 版本不支持内存结果导出，请更新 DataFactory.exe"
-	}
-	return fmt.Sprintf("%v\n%s", err, text)
-}
-
-// defaultExportTemplate 是当前唯一的导出模板（data_factory_server 标准）。
-// 不依赖 Python argparse 的隐含默认值，避免未来默认值变化导致格式漂移。
+// defaultExportTemplate 是当前唯一的导出模板。
 const defaultExportTemplate = "prediction"
 
-// buildConvertExportArgs 构造 --convert-export 的 CLI 参数（纯函数，便于测试）。
-// 显式传入 --template prediction + 仅在 xlsx 时传 --sheet-name（CSV 不需要工作表名）。
+// buildConvertExportArgs 构造 --convert-export 的 CLI 参数（纯函数，仅旧测试使用）。
 func buildConvertExportArgs(rowsJSON string, exportPath string, format string, sheetName string) []string {
 	args := []string{
 		"--convert-export",
@@ -1680,6 +1585,15 @@ func buildConvertExportArgs(rowsJSON string, exportPath string, format string, s
 		args = append(args, "--sheet-name", sheetName)
 	}
 	return args
+}
+
+// convertExportErrorMessage 生成导出转换失败信息（仅旧测试使用）。
+func convertExportErrorMessage(err error, output []byte) string {
+	text := string(output)
+	if strings.Contains(text, "convert-export") && strings.Contains(text, "unrecognized arguments") {
+		return "当前 DataFactory 版本不支持内存结果导出，请更新 DataFactory.exe"
+	}
+	return fmt.Sprintf("%v\n%s", err, text)
 }
 
 // validateBatchCSV 确认目标 CSV 存在、非空、且至少有一行数据（不只表头）。
@@ -1710,17 +1624,23 @@ func validateBatchCSV(path string) error {
 	return nil
 }
 
-func parseCSV(path string) (BatchResult, error) {
+// csvParseResult 是 parseCSV 的返回类型（仅用于旧测试）。
+type csvParseResult struct {
+	Columns []string
+	Rows    []map[string]any
+}
+
+func parseCSV(path string) (csvParseResult, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return BatchResult{}, fmt.Errorf("读取 CSV 失败: %w", err)
+		return csvParseResult{}, fmt.Errorf("读取 CSV 失败: %w", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	headers, err := reader.Read()
 	if err != nil {
-		return BatchResult{}, fmt.Errorf("解析 CSV 表头失败: %w", err)
+		return csvParseResult{}, fmt.Errorf("解析 CSV 表头失败: %w", err)
 	}
 
 	var rows []map[string]any
@@ -1731,7 +1651,7 @@ func parseCSV(path string) (BatchResult, error) {
 			break
 		}
 		if err != nil {
-			return BatchResult{}, fmt.Errorf("解析 CSV 失败: %w", err)
+			return csvParseResult{}, fmt.Errorf("解析 CSV 失败: %w", err)
 		}
 		row := map[string]any{"_cycle": rowIdx}
 		for i, value := range record {
@@ -1740,7 +1660,7 @@ func parseCSV(path string) (BatchResult, error) {
 			}
 			parsed, err := parseBatchCell(headers[i], value)
 			if err != nil {
-				return BatchResult{}, fmt.Errorf("第 %d 行字段 %s 解析失败: %w", rowIdx+1, headers[i], err)
+				return csvParseResult{}, fmt.Errorf("第 %d 行字段 %s 解析失败: %w", rowIdx+1, headers[i], err)
 			}
 			row[headers[i]] = parsed
 		}
@@ -1749,10 +1669,10 @@ func parseCSV(path string) (BatchResult, error) {
 	}
 
 	if len(rows) == 0 {
-		return BatchResult{}, fmt.Errorf("CSV 无数据行")
+		return csvParseResult{}, fmt.Errorf("CSV 无数据行")
 	}
 
-	return BatchResult{
+	return csvParseResult{
 		Columns: append([]string{"_cycle"}, headers...),
 		Rows:    rows,
 	}, nil

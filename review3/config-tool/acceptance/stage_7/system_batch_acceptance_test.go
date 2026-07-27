@@ -65,6 +65,7 @@ func TestAcceptanceExportBatchRequiresExportPath(t *testing.T) {
 }
 
 func TestAcceptanceUnicodePathsSupportedInAPI(t *testing.T) {
+	// 新流程：RunBatch + ExportBatchResult
 	b := bindings.NewSystemBinding()
 	cleanup := wireMockService(t, b)
 	defer cleanup()
@@ -72,8 +73,12 @@ func TestAcceptanceUnicodePathsSupportedInAPI(t *testing.T) {
 	yamlPath := filepath.Join(unicodeDir, "方案.yaml")
 	csvPath := filepath.Join(unicodeDir, "结果.csv")
 	copyBuiltinYAML(t, yamlPath)
-	if err := b.ExportBatch(yamlPath, 5, csvPath); err != nil {
-		t.Fatalf("STAGE7-BATCH-002: Unicode YAML/CSV paths must succeed with mock service: %v", err)
+	res, err := b.RunBatch(yamlPath, 5)
+	if err != nil {
+		t.Fatalf("STAGE7-BATCH-002: RunBatch with Unicode path failed: %v", err)
+	}
+	if err := b.ExportBatchResult(res.BatchID, nil, csvPath, "csv", ""); err != nil {
+		t.Fatalf("STAGE7-BATCH-002: ExportBatchResult with Unicode path failed: %v", err)
 	}
 	if _, err := os.Stat(csvPath); err != nil {
 		t.Fatalf("STAGE7-BATCH-002: CSV not written at Unicode path: %v", err)
@@ -81,7 +86,7 @@ func TestAcceptanceUnicodePathsSupportedInAPI(t *testing.T) {
 }
 
 func TestAcceptanceRunBatchViaService(t *testing.T) {
-	// §八：batch 通过服务 API 执行，不创建子进程
+	// 新异步 batch：RunBatch 立即返回 batchId
 	b := bindings.NewSystemBinding()
 	cleanup := wireMockService(t, b)
 	defer cleanup()
@@ -93,8 +98,8 @@ func TestAcceptanceRunBatchViaService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("STAGE7-BATCH-003: RunBatch via service failed: %v", err)
 	}
-	if len(res.Columns) == 0 {
-		t.Fatal("STAGE7-BATCH-003: result columns empty")
+	if res.BatchID == "" {
+		t.Fatal("STAGE7-BATCH-003: batchId empty")
 	}
 }
 
@@ -150,15 +155,13 @@ func TestAcceptanceConcurrentRunBatchIsolation(t *testing.T) {
 }
 
 func TestAcceptanceConcurrentExportBatchIsolation(t *testing.T) {
-	// §八：ExportBatch 内部调用 batch，并发时只能有一个成功
+	// 新流程：并发 RunBatch，一个成功一个 409
 	b := bindings.NewSystemBinding()
 	cleanup := wireMockService(t, b)
 	defer cleanup()
 
 	yamlA := filepath.Join(t.TempDir(), "export_a.yaml")
 	yamlB := filepath.Join(t.TempDir(), "export_b.yaml")
-	outA := filepath.Join(t.TempDir(), "out_a.csv")
-	outB := filepath.Join(t.TempDir(), "out_b.csv")
 	copyBuiltinYAML(t, yamlA)
 	copyBuiltinYAML(t, yamlB)
 
@@ -167,15 +170,14 @@ func TestAcceptanceConcurrentExportBatchIsolation(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		errA = b.ExportBatch(yamlA, 6, outA)
+		_, errA = b.RunBatch(yamlA, 6)
 	}()
 	go func() {
 		defer wg.Done()
-		errB = b.ExportBatch(yamlB, 6, outB)
+		_, errB = b.RunBatch(yamlB, 6)
 	}()
 	wg.Wait()
 
-	// ExportBatch 内部调 batch，受 batch 互斥保护，一个成功一个失败
 	successCount := 0
 	if errA == nil {
 		successCount++
@@ -184,7 +186,7 @@ func TestAcceptanceConcurrentExportBatchIsolation(t *testing.T) {
 		successCount++
 	}
 	if successCount != 1 {
-		t.Fatalf("STAGE7-BATCH-003: 并发 ExportBatch 应只有一个成功，实际 %d。errA=%v errB=%v", successCount, errA, errB)
+		t.Fatalf("STAGE7-BATCH-003: 并发 RunBatch 应只有一个成功，实际 %d。errA=%v errB=%v", successCount, errA, errB)
 	}
 }
 
@@ -199,11 +201,16 @@ func TestAcceptanceBatchResultHasColumnsAndRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("STAGE7-CSV-001: RunBatch failed: %v", err)
 	}
-	if len(res.Columns) == 0 {
-		t.Fatal("STAGE7-CSV-002: columns empty")
+	if res.BatchID == "" {
+		t.Fatal("STAGE7-CSV-002: batchId empty")
 	}
-	if len(res.Rows) == 0 {
-		t.Fatal("STAGE7-CSV-002: rows empty")
+	// 查询状态获取 columns
+	status, err := b.GetBatchStatus(res.BatchID)
+	if err != nil {
+		t.Fatalf("STAGE7-CSV-002: GetBatchStatus failed: %v", err)
+	}
+	if len(status.Columns) == 0 {
+		t.Fatal("STAGE7-CSV-002: columns empty")
 	}
 }
 
@@ -215,8 +222,12 @@ func TestAcceptanceBatchCSVWritten(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "out.csv")
 	copyBuiltinYAML(t, yamlPath)
 
-	if err := b.ExportBatch(yamlPath, 5, csvPath); err != nil {
-		t.Fatalf("STAGE7-CSV-003: ExportBatch failed: %v", err)
+	res, err := b.RunBatch(yamlPath, 5)
+	if err != nil {
+		t.Fatalf("STAGE7-CSV-003: RunBatch failed: %v", err)
+	}
+	if err := b.ExportBatchResult(res.BatchID, nil, csvPath, "csv", ""); err != nil {
+		t.Fatalf("STAGE7-CSV-003: ExportBatchResult failed: %v", err)
 	}
 	data, err := os.ReadFile(csvPath)
 	if err != nil {
@@ -284,17 +295,7 @@ func TestAcceptanceBatchDoesNotCreateSubprocess(t *testing.T) {
 
 // batchMarker extracts a text marker from batch result for identity verification.
 func batchMarker(res bindings.BatchResult) string {
-	if len(res.Rows) == 0 {
-		return ""
-	}
-	for _, row := range res.Rows {
-		if v, ok := row["_marker"]; ok {
-			if s, ok := v.(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
+	return res.BatchID
 }
 
 // Unused but kept for compatibility

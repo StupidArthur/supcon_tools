@@ -26,6 +26,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('config', 'config'),
+        ('components/export_templates/templates', 'components/export_templates/templates'),
     ],
     hiddenimports=[
         # 第三方依赖
@@ -72,8 +73,12 @@ a = Analysis(
         'datacenter',
         'datacenter.opcua_server',
         'datacenter.engine_api',
+        'datacenter.batch_store',
+        'datacenter.batch_manager',
         'datacenter.force_manager',
         'datacenter.quality_manager',
+        # SQLite（batch_store 依赖）
+        'sqlite3',
     ],
     hookspath=[],
     hooksconfig={},

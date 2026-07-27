@@ -7,17 +7,27 @@ export function AllocateTempYAMLPath():Promise<string>;
 
 export function BrowseExe():Promise<string>;
 
+export function CancelBatch(arg1:string):Promise<void>;
+
 export function Cleanup():Promise<void>;
 
 export function CleanupTempYAML(arg1:string):Promise<void>;
+
+export function DeleteBatch(arg1:string):Promise<void>;
 
 export function ExportBatch(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function ExportBatchFormatted(arg1:string,arg2:number,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<void>;
 
+export function ExportBatchResult(arg1:string,arg2:Array<string>,arg3:string,arg4:string,arg5:string):Promise<void>;
+
 export function ExportCSVRows(arg1:Array<string>,arg2:Array<Record<string, any>>,arg3:string):Promise<void>;
 
 export function ExportRowsFormatted(arg1:Array<string>,arg2:Array<Record<string, any>>,arg3:string,arg4:string,arg5:string):Promise<void>;
+
+export function GetBatchRows(arg1:string,arg2:number,arg3:number):Promise<bindings.BatchRowsResult>;
+
+export function GetBatchStatus(arg1:string):Promise<bindings.BatchResult>;
 
 export function GetDataFactoryPath():Promise<string>;
 
@@ -38,6 +48,8 @@ export function SaveExportFile(arg1:string):Promise<string>;
 export function SaveYAMLFile():Promise<string>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
+
+export function SetServiceClient(arg1:bindings.DataFactoryServiceClient):Promise<void>;
 
 export function Start(arg1:bindings.StartParams):Promise<void>;
 

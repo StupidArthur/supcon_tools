@@ -1053,6 +1053,10 @@ def _run_service_mode(args) -> None:
     set_runtime_state(binding, RUNTIME_STATE_STOPPED)
     set_api_token(args.api_token)
 
+    # 初始化 batch manager：注入实时状态检查 + 启动扫描
+    from datacenter.engine_api import _init_batch_manager
+    _init_batch_manager()
+
     # 监听地址：todo.md §7.2 仅 127.0.0.1；端口由调用方传入（Go 端动态选择）
     api_host = args.api_host or "127.0.0.1"
     api_port = args.api_port or 0  # 0 = 由 uvicorn 选端口；生产模式下 Go 端传入固定值

@@ -114,6 +114,10 @@ export function SaveDashboard(arg1, arg2) {
   return window['go']['bindings']['RealtimeProjectBinding']['SaveDashboard'](arg1, arg2);
 }
 
+export function SetCompiler(arg1) {
+  return window['go']['bindings']['RealtimeProjectBinding']['SetCompiler'](arg1);
+}
+
 export function SetContext(arg1) {
   return window['go']['bindings']['RealtimeProjectBinding']['SetContext'](arg1);
 }
@@ -128,6 +132,10 @@ export function SetQuality(arg1, arg2, arg3, arg4) {
 
 export function SetRuntimeValue(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['bindings']['RealtimeProjectBinding']['SetRuntimeValue'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function SetServiceClient(arg1) {
+  return window['go']['bindings']['RealtimeProjectBinding']['SetServiceClient'](arg1);
 }
 
 export function UpdateAlarmRule(arg1, arg2) {

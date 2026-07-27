@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useCanvasStore } from './store/useCanvasStore'
 import { AppNav } from './features/app/AppNav'
+import { ServiceLoadingScreen } from './features/app/ServiceLoadingScreen'
 import { DslShell } from './features/dsl/DslShell'
 import { RealtimeConfigPage } from './features/realtime/RealtimeConfigPage'
 import { RealtimeRunPage } from './features/realtime/RealtimeRunPage'
@@ -11,6 +12,7 @@ import { useRealtimeRunSessionStore } from './features/realtime/useRealtimeRunSe
 import { useRuntimeStore } from './features/runtime/useRuntimeStore'
 
 function App() {
+  const [serviceReady, setServiceReady] = useState(false)
   const init = useCanvasStore((s) => s.init)
   const view = useCanvasStore((s) => s.view) as AppView
 
@@ -18,9 +20,20 @@ function App() {
     init()
   }, [init])
 
+  // 监听 service ready 事件（Go 侧异步启动 service 后发射）
   useEffect(() => {
     if (!(window as any).runtime?.EventsOnMultiple) {
       console.warn('wails runtime unavailable; skip df event subscriptions')
+      return
+    }
+    const offReady = EventsOn('df:service-ready', () => {
+      setServiceReady(true)
+    })
+    return () => { offReady() }
+  }, [])
+
+  useEffect(() => {
+    if (!(window as any).runtime?.EventsOnMultiple) {
       return
     }
     const offLog = EventsOn('df:log', (log: string) => {
@@ -43,13 +56,9 @@ function App() {
       }
     })
     return () => {
-      try {
-        offLog()
-        offStatus()
-        offExited()
-      } catch (err) {
-        console.warn('EventsOff failed:', err)
-      }
+      offLog()
+      offStatus()
+      offExited()
     }
   }, [])
 
@@ -69,6 +78,7 @@ function App() {
           )}
         </div>
       </div>
+      {!serviceReady && <ServiceLoadingScreen />}
     </ReactFlowProvider>
   )
 }

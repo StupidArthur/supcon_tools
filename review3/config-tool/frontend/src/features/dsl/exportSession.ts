@@ -1,11 +1,8 @@
 /**
- * 导出会话（ExportSession）：打开导出对话框时，对当前仿真结果的身份与数据做不可变快照。
+ * 导出会话（ExportSession）：打开导出对话框时，对当前仿真结果的身份做不可变快照。
  *
- * 目的：避免「打开结果 A 的导出窗口 → 同一工程运行出结果 B → 最终导出 B」。
- * - rows / columns / selectedColumns 全部复制（rows 逐行浅复制），不再引用 Store 中可变数组；
- * - 对话框展示的行数、列、默认选项全部来自会话快照；
- * - 确认导出前用 validateExportSession 复查身份（projectId/runId/yamlHash/stale），
- *   任一不匹配即取消，不创建文件。
+ * 批量仿真结果本地化改造：不再在会话中保存完整 rows。
+ * 只保存 batchId + columns + 预览行（用于列类型检测）。
  */
 
 import type { ExportFormat } from '../../lib/exportTypes'
@@ -16,9 +13,11 @@ export interface ExportSession {
   projectId: string
   runId: string
   yamlHash: string
+  batchId: string
   columns: string[]
   selectedColumns: string[]
-  rows: Array<Record<string, unknown>>
+  /** 预览行（仅用于列类型检测，不用于导出） */
+  previewRows: Array<Record<string, unknown>>
   rowCount: number
 }
 
@@ -26,23 +25,24 @@ interface ExportSessionSource {
   projectId: string
   boundRunId: string | null
   boundYamlHash: string | null
+  batchId: string | null
   columns: string[]
   selectedColumns: string[]
-  rows: Array<Record<string, unknown>>
+  previewRows: Array<Record<string, unknown>>
 }
 
-/** 从当前结果创建不可变导出会话；无有效运行身份（runId/yamlHash 缺失）时返回 null。 */
+/** 从当前结果创建不可变导出会话；无有效运行身份时返回 null。 */
 export function createExportSession(src: ExportSessionSource): ExportSession | null {
-  if (!src.boundRunId || !src.boundYamlHash) return null
-  const rows = src.rows.map((row) => ({ ...row }))
+  if (!src.boundRunId || !src.boundYamlHash || !src.batchId) return null
   return {
     projectId: src.projectId,
     runId: src.boundRunId,
     yamlHash: src.boundYamlHash,
+    batchId: src.batchId,
     columns: [...src.columns],
     selectedColumns: [...src.selectedColumns],
-    rows,
-    rowCount: rows.length,
+    previewRows: src.previewRows.map((row) => ({ ...row })),
+    rowCount: src.previewRows.length,
   }
 }
 
@@ -51,7 +51,6 @@ interface ExportSessionCurrent {
   boundRunId: string | null
   boundYamlHash: string | null
   stale: boolean
-  /** 当前结果是否仍属于当前工程（boundProjectId===projectId 且 success 且有行）。 */
   hasDisplayResult: boolean
 }
 
@@ -83,7 +82,7 @@ export function isNumericColumn(rows: Array<Record<string, unknown>>, col: strin
 /** 会话内可供勾选的列：排除 _cycle 与 _ 前缀内部字段，仅保留数值列。 */
 export function sessionNumericColumns(session: ExportSession): string[] {
   return session.columns.filter(
-    (c) => c !== '_cycle' && !c.startsWith('_') && isNumericColumn(session.rows, c),
+    (c) => c !== '_cycle' && !c.startsWith('_') && isNumericColumn(session.previewRows, c),
   )
 }
 

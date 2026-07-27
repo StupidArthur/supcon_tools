@@ -56,24 +56,21 @@ export const systemApi = {
   saveYAMLFile: () => SystemBinding.SaveYAMLFile(),
   runBatch: (configPath: string, cycles: number) =>
     SystemBinding.RunBatch(configPath, cycles),
-  exportBatch: (configPath: string, cycles: number, exportPath: string) =>
-    SystemBinding.ExportBatch(configPath, cycles, exportPath),
-  exportBatchFormatted: (
-    configPath: string,
-    cycles: number,
-    exportPath: string,
-    format: ExportFormat,
+  getBatchStatus: (batchId: string) =>
+    SystemBinding.GetBatchStatus(batchId),
+  getBatchRows: (batchId: string, offset: number, limit: number) =>
+    SystemBinding.GetBatchRows(batchId, offset, limit),
+  cancelBatch: (batchId: string) =>
+    SystemBinding.CancelBatch(batchId),
+  deleteBatch: (batchId: string) =>
+    SystemBinding.DeleteBatch(batchId),
+  exportBatchResult: (
+    batchId: string,
     columns: string[],
-    sheetName: string,
-  ) => SystemBinding.ExportBatchFormatted(configPath, cycles, exportPath, format, columns, sheetName),
-  // 用当前内存结果行导出（不重新仿真、不占 Batch lease）。
-  exportRowsFormatted: (
-    columns: string[],
-    rows: Array<Record<string, any>>,
     exportPath: string,
     format: ExportFormat,
     sheetName: string,
-  ) => SystemBinding.ExportRowsFormatted(columns, rows, exportPath, format, sheetName),
+  ) => SystemBinding.ExportBatchResult(batchId, columns, exportPath, format, sheetName),
   saveCSVFile: () => SystemBinding.SaveCSVFile(),
   saveExportFile: (format: ExportFormat) => SystemBinding.SaveExportFile(format),
   readTextFile: (path: string) => SystemBinding.ReadTextFile(path),
@@ -81,8 +78,6 @@ export const systemApi = {
   allocateTempYAMLPath: () => SystemBinding.AllocateTempYAMLPath(),
   writeTextFile: (path: string, content: string) => SystemBinding.WriteTextFile(path, content),
   cleanupTempYAML: (path: string) => SystemBinding.CleanupTempYAML(path),
-  exportCSVRows: (columns: string[], rows: Array<Record<string, any>>, exportPath: string) =>
-    SystemBinding.ExportCSVRows(columns, rows, exportPath),
 }
 
 export const realtimeProjectApi = {

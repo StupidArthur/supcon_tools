@@ -60,6 +60,8 @@ export function RenameProject(arg1:string,arg2:string):Promise<realtime.Project>
 
 export function SaveDashboard(arg1:string,arg2:realtime.Dashboard):Promise<realtime.Dashboard>;
 
+export function SetCompiler(arg1:realtime.RealtimeCompiler):Promise<void>;
+
 export function SetContext(arg1:context.Context):Promise<void>;
 
 export function SetForce(arg1:string,arg2:number,arg3:string,arg4:string,arg5:any,arg6:any):Promise<void>;
@@ -67,6 +69,8 @@ export function SetForce(arg1:string,arg2:number,arg3:string,arg4:string,arg5:an
 export function SetQuality(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SetRuntimeValue(arg1:string,arg2:number,arg3:string,arg4:string,arg5:number):Promise<void>;
+
+export function SetServiceClient(arg1:bindings.DataFactoryServiceClient):Promise<void>;
 
 export function UpdateAlarmRule(arg1:string,arg2:realtime.AlarmRule):Promise<Array<realtime.AlarmRule>>;
 

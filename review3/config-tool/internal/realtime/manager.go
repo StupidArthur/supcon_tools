@@ -30,6 +30,13 @@ func NewManager(storage *ProjectStorage, compiler RealtimeCompiler) *Manager {
 	}
 }
 
+// SetCompiler 替换编译器（容器启动后用服务就绪后的 real compiler 替换 noop）。
+func (m *Manager) SetCompiler(compiler RealtimeCompiler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.compiler = compiler
+}
+
 func (m *Manager) ListProjects(_ context.Context) ([]ProjectSummary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

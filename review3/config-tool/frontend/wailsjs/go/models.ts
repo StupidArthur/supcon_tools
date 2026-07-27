@@ -35,10 +35,14 @@ export namespace bindings {
 	    }
 	}
 	export class BatchResult {
+	    batchId: string;
+	    status: string;
+	    cyclesRequested: number;
+	    cyclesCompleted: number;
 	    columns: string[];
-	    rows: any[];
 	    displayColumns: string[];
 	    plotScales: Record<string, number>;
+	    error: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchResult(source);
@@ -46,10 +50,48 @@ export namespace bindings {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.batchId = source["batchId"];
+	        this.status = source["status"];
+	        this.cyclesRequested = source["cyclesRequested"];
+	        this.cyclesCompleted = source["cyclesCompleted"];
 	        this.columns = source["columns"];
-	        this.rows = source["rows"];
 	        this.displayColumns = source["displayColumns"];
 	        this.plotScales = source["plotScales"];
+	        this.error = source["error"];
+	    }
+	}
+	export class BatchRowsResult {
+	    ok: boolean;
+	    batchId: string;
+	    rows: any[];
+	    offset: number;
+	    limit: number;
+	    total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchRowsResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.batchId = source["batchId"];
+	        this.rows = source["rows"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	        this.total = source["total"];
+	    }
+	}
+	export class DataFactoryServiceClient {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new DataFactoryServiceClient(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
 	    }
 	}
 	export class ForceEntry {

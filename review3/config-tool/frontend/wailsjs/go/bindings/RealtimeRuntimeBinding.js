@@ -50,6 +50,10 @@ export function SetContext(arg1) {
   return window['go']['bindings']['RealtimeRuntimeBinding']['SetContext'](arg1);
 }
 
+export function SetServiceClient(arg1) {
+  return window['go']['bindings']['RealtimeRuntimeBinding']['SetServiceClient'](arg1);
+}
+
 export function SetServiceEndpoint(arg1, arg2, arg3) {
   return window['go']['bindings']['RealtimeRuntimeBinding']['SetServiceEndpoint'](arg1, arg2, arg3);
 }

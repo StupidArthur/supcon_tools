@@ -102,10 +102,15 @@ func (c *DataFactoryServiceClient) DoJSON(ctx context.Context, method, path stri
 	}
 	defer resp.Body.Close()
 
-	// 限制响应体大小（10 MB）
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	// 限制响应体大小：读取 maxBytes+1，超过 maxBytes 则报错。
+	// 避免截断后的 JSON 被误报为解析失败。
+	const maxBytes int64 = 10 * 1024 * 1024
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return fmt.Errorf("读取响应失败 [%s]: %w", path, err)
+	}
+	if int64(len(body)) > maxBytes {
+		return fmt.Errorf("服务响应超过限制 [%s]: >%d bytes", path, maxBytes)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

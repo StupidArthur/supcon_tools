@@ -1,15 +1,14 @@
 /**
- * 通用离线仿真一体面板 —— 运行控制 + 列配置 + 趋势大图 + 导出 + 统计。
+ * 通用离线仿真一体面板 -- 运行控制 + 列配置 + 趋势大图 + 导出 + 统计。
  *
- * 供 generic YAML 工程的右栏使用：图表占满剩余高度（flex-1），
- * 不再是固定 256px 的小图。合并了原 仿真运行 / 结果趋势 / 导出 三个 Tab。
- *
- * 业务规则与原 SimControlPanel / GenericSimTrendPanel / SimExportPanel 完全一致：
- * - 点击运行时冻结 YAML 快照，运行中编辑不影响本次结果
- * - 完成后与当前草稿 hash 比较，不一致标记 stale 并禁止导出
- * - 结果按 projectId / runId / epoch 归属，迟到结果丢弃
+ * 批量仿真结果本地化改造：
+ * - RunBatch 异步启动，立即返回 batchId
+ * - 每 800ms 轮询 GetBatchStatus，显示进度
+ * - 完成后只加载最多 500 行预览数据
+ * - 导出只传 batchId，由 Python 从 SQLite 流式导出
+ * - 不再将完整 rows 放入 Zustand
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -42,6 +41,9 @@ import {
 } from './useGenericSimStore'
 
 const COLORS = ['#3b82f6', '#06b6d4', '#f97316', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#6366f1']
+
+const POLL_INTERVAL_MS = 800
+const PREVIEW_LIMIT = 500
 
 interface ColumnStat {
   min: number
@@ -82,7 +84,7 @@ export function GenericSimPanel() {
   const completedCycles = useGenericSimStore((s) => s.completedCycles)
   const error = useGenericSimStore((s) => s.error)
   const columns = useGenericSimStore((s) => s.columns)
-  const rows = useGenericSimStore((s) => s.rows)
+  const previewRows = useGenericSimStore((s) => s.previewRows)
   const selectedColumns = useGenericSimStore((s) => s.selectedColumns)
   const stale = useGenericSimStore((s) => s.stale)
   const boundProjectId = useGenericSimStore((s) => s.boundProjectId)
@@ -104,15 +106,16 @@ export function GenericSimPanel() {
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportSession, setExportSession] = useState<ExportSession | null>(null)
 
+  // 轮询控制
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const owned = boundProjectId === projectId
   const running = status === 'running' && owned
   const yamlText = useDslProjectStore((s) => s.yamlText)
-  // Batch 占用 = 本地 lease（即时反馈） || 后端权威状态（跨刷新/跨页面）。
   const batchBusy = globalBatchRunning || backendBatchBusy(dfStatus)
   const canStart = !running && !dfRunning && !batchBusy && Boolean(yamlText.trim())
   const displayError = preflightError || (owned ? error : null)
 
-  // 进入页面刷新一次后端状态；仅在 Batch 占用期间短周期轮询，结束后停止。
   useEffect(() => {
     refreshStatus()
   }, [refreshStatus])
@@ -122,8 +125,16 @@ export function GenericSimPanel() {
     return () => clearInterval(id)
   }, [batchBusy, refreshStatus])
 
-  // 切换工程、重新开始仿真、清空结果都会改变结果身份（projectId/runId/yamlHash）：
-  // 此时关闭并废弃当前导出会话，避免导出到已变化的结果。
+  // 页面卸载时停止轮询
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [])
+
   useEffect(() => {
     if (!exportSession) return
     if (
@@ -139,39 +150,37 @@ export function GenericSimPanel() {
   const numericColumns = useMemo(
     () =>
       owned && hasDisplay
-        ? columns.filter((c) => c !== '_cycle' && !c.startsWith('_') && isNumericColumn(rows, c))
+        ? columns.filter((c) => c !== '_cycle' && !c.startsWith('_') && isNumericColumn(previewRows, c))
         : [],
-    [columns, rows, owned, hasDisplay],
+    [columns, previewRows, owned, hasDisplay],
   )
 
   const chartData = useMemo(() => {
     if (!owned || !hasDisplay) return []
-    return rows.map((row, idx) => {
+    return previewRows.map((row, idx) => {
       const point: Record<string, number | string> = {
         _cycle: typeof row._cycle === 'number' ? row._cycle : idx,
       }
       for (const col of selectedColumns) {
         const v = row[col]
         if (typeof v === 'number' && Number.isFinite(v)) {
-          // 绘图缩放：按当前结果身份保存的 [ref]，不修改原始 rows / session.rows / 导出数据。
           point[col] = scalePlotValue(v, plotScales[col])
         }
       }
       return point
     })
-  }, [rows, selectedColumns, plotScales, owned, hasDisplay])
+  }, [previewRows, selectedColumns, plotScales, owned, hasDisplay])
 
   const stats = useMemo(() => {
     if (!owned || !hasDisplay) return [] as Array<{ col: string; stat: ColumnStat }>
     return selectedColumns
-      .map((col) => ({ col, stat: columnStats(rows, col) }))
+      .map((col) => ({ col, stat: columnStats(previewRows, col) }))
       .filter((x): x is { col: string; stat: ColumnStat } => x.stat !== null)
-  }, [rows, selectedColumns, owned, hasDisplay])
+  }, [previewRows, selectedColumns, owned, hasDisplay])
 
   const handleStart = async () => {
     setPreflightError(null)
     setExportError(null)
-    // 点击时再次读取最新状态，避免只依赖渲染时的旧值。
     const latestDf = useCanvasStore.getState().dfStatus
     if (latestDf.running) {
       setPreflightError('实时运行进行中，禁止启动离线仿真')
@@ -190,11 +199,8 @@ export function GenericSimPanel() {
     const epoch = useGenericSimStore.getState().epoch
     const yamlHash = hashYamlText(yamlSnapshot)
     const runId = beginRun({ projectId, yamlHash, cycles: n, epoch })
-    // 全局批量占用 lease：真正结束后才在 finally 释放（按 runId 匹配）。
     useGenericSimStore.getState().beginGlobalBatch(runId)
 
-    // 临时路径只属于本次异步任务（局部变量），在 finally 中自行清理；
-    // 不写任何全局 Store，旧任务不会清理或覆盖其他任务的路径与 lease。
     let tempPath: string | null = null
     try {
       const exe = await systemApi.getDataFactoryPath()
@@ -203,34 +209,73 @@ export function GenericSimPanel() {
       }
       tempPath = await materializeYamlTextToTemp(yamlSnapshot)
       const result = await systemApi.runBatch(tempPath, n)
-      const resultColumns = result.columns ?? []
-      const resultRows = (result.rows ?? []) as Array<Record<string, unknown>>
-      const displayColumns = result.displayColumns ?? []
-      const resultPlotScales = result.plotScales ?? {}
-      const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
-      succeed({
-        projectId,
-        runId,
-        epoch,
-        columns: resultColumns,
-        rows: resultRows,
-        completedCycles: resultRows.length,
-        currentYamlHash,
-        displayColumns,
-        plotScales: resultPlotScales,
+      const batchId = result.batchId
+      if (!batchId) {
+        throw new Error('后端未返回 batchId')
+      }
+      useGenericSimStore.getState().setBatchId(batchId)
+
+      // 开始轮询
+      await new Promise<void>((resolve) => {
+        pollRef.current = setInterval(async () => {
+          try {
+            const st = await systemApi.getBatchStatus(batchId)
+            useGenericSimStore.getState().pollStatus({
+              completedCycles: st.cyclesCompleted ?? 0,
+              cyclesRequested: st.cyclesRequested ?? 0,
+            })
+
+            if (st.status === 'completed') {
+              if (pollRef.current) {
+                clearInterval(pollRef.current)
+                pollRef.current = null
+              }
+              // 加载预览行
+              const rowsResp = await systemApi.getBatchRows(batchId, 0, PREVIEW_LIMIT)
+              const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
+              useGenericSimStore.getState().succeed({
+                projectId,
+                runId,
+                epoch,
+                columns: st.columns ?? [],
+                previewRows: (rowsResp.rows ?? []) as Array<Record<string, unknown>>,
+                completedCycles: st.cyclesCompleted ?? 0,
+                currentYamlHash,
+                displayColumns: st.displayColumns ?? [],
+                plotScales: st.plotScales ?? {},
+              })
+              resolve()
+            } else if (st.status === 'failed' || st.status === 'cancelled' || st.status === 'interrupted') {
+              if (pollRef.current) {
+                clearInterval(pollRef.current)
+                pollRef.current = null
+              }
+              useGenericSimStore.getState().fail({
+                projectId,
+                runId,
+                epoch,
+                error: st.error || `任务${st.status}`,
+              })
+              resolve()
+            }
+          } catch (pollErr: any) {
+            // 轮询失败不立即终止，下次重试
+          }
+        }, POLL_INTERVAL_MS)
       })
     } catch (err: any) {
       fail({ projectId, runId, epoch, error: err?.message || String(err) })
     } finally {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
       await cleanupTempYAML(tempPath)
       useGenericSimStore.getState().endGlobalBatch(runId)
       refreshStatus()
     }
   }
 
-  // 打开导出窗口：先确认当前结果可导出（属于本工程、成功、未过期），
-  // 再冻结当前结果身份与数据为不可变会话快照。
-  // stale 结果禁止打开（仍可查看趋势）；工程身份一律读取实时 Store 值。
   const openExport = () => {
     setExportError(null)
     const sim = useGenericSimStore.getState()
@@ -243,9 +288,10 @@ export function GenericSimPanel() {
       projectId: currentProjectId,
       boundRunId: sim.boundRunId,
       boundYamlHash: sim.boundYamlHash,
+      batchId: sim.batchId,
       columns: sim.columns,
       selectedColumns: sim.selectedColumns,
-      rows: sim.rows,
+      previewRows: sim.previewRows,
     })
     if (!session) return
     setExportSession(session)
@@ -259,8 +305,6 @@ export function GenericSimPanel() {
       setExportError('导出会话已失效，请重新打开导出窗口')
       return
     }
-    // 调用后端前复查身份：projectId/runId/yamlHash/stale/归属，任一不匹配即取消、不创建文件。
-    // projectId 读取实时 Store 值（不用闭包旧值），保存窗口前后各检查一次。
     const check = () => {
       const sim = useGenericSimStore.getState()
       const currentProjectId = useDslProjectStore.getState().projectId
@@ -277,7 +321,7 @@ export function GenericSimPanel() {
       setExportError(invalidBefore)
       return
     }
-    const metadataError = validateExportRowMetadata(session.rows)
+    const metadataError = validateExportRowMetadata(session.previewRows)
     if (metadataError) {
       setExportError(metadataError)
       return
@@ -296,14 +340,10 @@ export function GenericSimPanel() {
         setExportError(invalidAfter)
         return
       }
-      const metadataErrorAfter = validateExportRowMetadata(session.rows)
-      if (metadataErrorAfter) {
-        setExportError(metadataErrorAfter)
-        return
-      }
-      await systemApi.exportRowsFormatted(
+      // 从 SQLite 流式导出，只传 batchId
+      await systemApi.exportBatchResult(
+        session.batchId,
         exportColumns,
-        session.rows as Array<Record<string, any>>,
         path,
         opts.format,
         opts.sheetName,
@@ -464,7 +504,7 @@ export function GenericSimPanel() {
       {owned && hasDisplay ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground" data-testid="generic-sim-stats">
           <span>
-            {rows.length} 行 · {columns.length} 列
+            {completedCycles} 行 · {columns.length} 列（预览 {previewRows.length} 行）
           </span>
           {stats.map(({ col, stat }) => (
             <span key={col} title={col}>

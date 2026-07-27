@@ -23,7 +23,8 @@ describe('lib/api', () => {
     expect(typeof systemApi.openYAMLFile).toBe('function')
     expect(typeof systemApi.saveYAMLFile).toBe('function')
     expect(typeof systemApi.runBatch).toBe('function')
-    expect(typeof systemApi.exportBatch).toBe('function')
+    expect(typeof systemApi.getBatchStatus).toBe('function')
+    expect(typeof systemApi.exportBatchResult).toBe('function')
   })
 
   it('wrappers do not maintain internal business state', () => {

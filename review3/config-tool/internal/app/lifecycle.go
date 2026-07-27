@@ -5,6 +5,8 @@ import (
 	"log"
 
 	"config-tool/internal/bindings"
+
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type ContextReceiver interface {
@@ -49,9 +51,20 @@ func (l *Lifecycle) Startup(ctx context.Context) {
 	for _, r := range l.receivers {
 		r.SetContext(rootCtx)
 	}
-	// 注意：工作目录初始化已在 NewContainerWithDevMode 中完成（todo.md §4.2）。
-	// 此处不再重复调用 EnsureAppWorkspaceDirs。
 	log.Println("DataFactory 组态工具启动")
+
+	// 异步启动常驻服务，UI 不阻塞。frontend 先显示加载画面，等
+	// df:service-ready 事件后切换主 UI。
+	if l.container != nil && !l.container.wailsGenMode {
+		wailsRuntime.EventsEmit(ctx, "df:service-starting", map[string]any{
+			"message": "正在初始化...",
+		})
+		l.container.StartServiceAsync(ctx)
+	} else {
+		wailsRuntime.EventsEmit(ctx, "df:service-ready", map[string]any{
+			"skipped": true,
+		})
+	}
 }
 
 func (l *Lifecycle) Shutdown(ctx context.Context) {

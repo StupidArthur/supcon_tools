@@ -1,5 +1,8 @@
 /**
- * Generic offline simulation state — bound to DSL project/session identity.
+ * Generic offline simulation state - bound to DSL project/session identity.
+ *
+ * 批量仿真结果本地化改造：不再在 Zustand 中保存完整 rows。
+ * 只保存 batchId + 状态 + 列信息 + 预览行（最多几百行）。
  */
 import { create } from 'zustand'
 
@@ -12,13 +15,14 @@ interface GenericSimState {
   cycles: number
   completedCycles: number
   error: string | null
+  /** batch 任务 ID（异步 batch 启动后由后端返回） */
+  batchId: string | null
   columns: string[]
-  rows: Array<Record<string, unknown>>
+  /** 预览行（最多几百行，不包含全部 20000 行） */
+  previewRows: Array<Record<string, unknown>>
   selectedColumns: string[]
   /**
    * 绘图缩放 (display_args 中的 [ref])：plotValue = raw × 100 / ref。
-   * 仅当 ref 有限且 > 0 时保留；与 projectId/runId/yamlHash 一起作为结果身份被快照切换/清空。
-   * 不直接修改 rows / session.rows / 导出数据——只在构造 chartData 时按列应用。
    */
   plotScales: Record<string, number>
   /** Project/session that owns the current (or in-flight) result. */
@@ -33,8 +37,6 @@ interface GenericSimState {
   epoch: number
   /**
    * 全局 DataFactory 批量任务占用状态（与「当前工程结果状态」分离）。
-   * 工程切换 / 返回首页 / 清空结果都不会清除；只有发起任务在自己 finally 里、
-   * 且 runId 仍匹配时才释放（lease 语义），避免旧任务清掉后来任务的状态。
    */
   globalBatchRunning: boolean
   globalBatchRunId: string | null
@@ -44,18 +46,22 @@ interface GenericSimState {
   beginGlobalBatch: (runId: string) => void
   endGlobalBatch: (runId: string) => void
   beginRun: (opts: { projectId: string; yamlHash: string; cycles: number; epoch: number }) => string
+  /** batch 启动成功后保存 batchId */
+  setBatchId: (batchId: string) => void
+  /** 轮询状态更新 */
+  pollStatus: (payload: {
+    completedCycles: number
+    cyclesRequested: number
+  }) => void
   succeed: (payload: {
     projectId: string
     runId: string
     epoch: number
     columns: string[]
-    rows: Array<Record<string, unknown>>
+    previewRows: Array<Record<string, unknown>>
     completedCycles: number
-    /** Hash of current project yamlText at completion time (compared to boundYamlHash). */
     currentYamlHash: string
-    /** DSL display_args 声明的默认绘图列（来自引擎），作为默认选中；YAML 未声明时为空。 */
     displayColumns?: string[]
-    /** 绘图缩放（[ref]）：plotValue = raw × 100 / ref；缺失时使用空对象。 */
     plotScales?: Record<string, number>
   }) => boolean
   fail: (payload: { projectId: string; runId: string; epoch: number; error: string }) => boolean
@@ -85,8 +91,9 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
   cycles: DEFAULT_OFFLINE_SIM_CYCLES,
   completedCycles: 0,
   error: null,
+  batchId: null,
   columns: [],
-  rows: [],
+  previewRows: [],
   selectedColumns: [],
   plotScales: {},
   boundProjectId: null,
@@ -108,7 +115,6 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
 
   beginGlobalBatch: (runId) => set({ globalBatchRunning: true, globalBatchRunId: runId }),
   endGlobalBatch: (runId) => {
-    // lease 语义：只释放自己发起的任务，不能清掉后来任务的状态。
     if (get().globalBatchRunId === runId) {
       set({ globalBatchRunning: false, globalBatchRunId: null })
     }
@@ -121,8 +127,9 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       cycles,
       completedCycles: 0,
       error: null,
+      batchId: null,
       columns: [],
-      rows: [],
+      previewRows: [],
       selectedColumns: [],
       plotScales: {},
       boundProjectId: projectId,
@@ -134,18 +141,22 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     return runId
   },
 
-  succeed: ({ projectId, runId, epoch, columns, rows, completedCycles, currentYamlHash, displayColumns, plotScales }) => {
+  setBatchId: (batchId) => set({ batchId }),
+
+  pollStatus: ({ completedCycles, cyclesRequested }) => {
+    const s = get()
+    if (s.status !== 'running') return
+    set({ completedCycles })
+  },
+
+  succeed: ({ projectId, runId, epoch, columns, previewRows, completedCycles, currentYamlHash, displayColumns, plotScales }) => {
     const s = get()
     if (s.epoch !== epoch || s.boundProjectId !== projectId || s.boundRunId !== runId) {
       return false
     }
-    // Completion hash compare is authoritative (not unconditional stale=false).
     const stale = currentYamlHash !== s.boundYamlHash
-    // 默认绘图列完全由 YAML 的 display_args 驱动（引擎 get_display_variables）；
-    // 仅保留 CSV 实际存在的列，YAML 未声明则为空（由用户手动勾选）。
     const columnSet = new Set(columns)
     const selectedColumns = (displayColumns ?? []).filter((c) => columnSet.has(c))
-    // 绘图缩放：保留 CSV 中真实存在、有限且 > 0 的 ref；其他列被忽略，保证除零安全。
     const plotScalesFiltered: Record<string, number> = {}
     if (plotScales) {
       for (const c of columns) {
@@ -158,7 +169,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     set({
       status: 'success',
       columns,
-      rows,
+      previewRows,
       completedCycles,
       error: null,
       selectedColumns,
@@ -183,9 +194,7 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
 
   markStale: () => {
     const s = get()
-    // Running: record that this run is already outdated when it finishes.
-    // Success: mark display/export as expired after post-run edits.
-    if (s.status === 'running' || (s.status === 'success' && s.rows.length > 0)) {
+    if (s.status === 'running' || (s.status === 'success' && s.previewRows.length > 0)) {
       set({ stale: true })
     }
   },
@@ -194,8 +203,9 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
     set((s) => ({
       status: 'idle',
       error: null,
+      batchId: null,
       columns: [],
-      rows: [],
+      previewRows: [],
       selectedColumns: [],
       plotScales: {},
       completedCycles: 0,
@@ -220,12 +230,12 @@ export const useGenericSimStore = create<GenericSimState>((set, get) => ({
       s.status === 'success' &&
       !s.stale &&
       s.boundProjectId === projectId &&
-      s.rows.length > 0
+      s.previewRows.length > 0
     )
   },
 
   hasDisplayResult: (projectId) => {
     const s = get()
-    return s.boundProjectId === projectId && s.rows.length > 0 && s.status === 'success'
+    return s.boundProjectId === projectId && s.previewRows.length > 0 && s.status === 'success'
   },
 }))

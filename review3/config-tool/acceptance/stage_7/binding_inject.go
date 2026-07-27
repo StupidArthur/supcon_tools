@@ -108,12 +108,13 @@ func wireFakeDataFactory(t *testing.T, b *bindings.SystemBinding, workDir string
 
 // wireMockService 创建 mock DataFactoryService 并注入 SystemBinding。
 // 返回 cleanup 函数。
-// mock 服务支持 /api/health, /api/batch/run, /api/export/convert，
-// batch 互斥（同时只允许一个 batch）。
+// mock 服务支持新异步 batch API：/api/batch/run, /api/batch/runs/{id},
+// /api/batch/runs/{id}/rows, /api/batch/runs/{id}/cancel, /api/export/convert。
 func wireMockService(t *testing.T, b *bindings.SystemBinding) func() {
 	t.Helper()
 	var batchMu sync.Mutex
 	var batchRunning bool
+	var currentBatchId string
 
 	mux := http.NewServeMux()
 
@@ -135,71 +136,118 @@ func wireMockService(t *testing.T, b *bindings.SystemBinding) func() {
 			json.NewEncoder(w).Encode(map[string]any{"detail": "已有批量任务正在运行"})
 			return
 		}
-		batchRunning = true
-		batchMu.Unlock()
-		defer func() {
-			batchMu.Lock()
-			batchRunning = false
-			batchMu.Unlock()
-		}()
-
-		// 模拟 batch 处理耗时，确保并发请求能触发互斥
-		time.Sleep(50 * time.Millisecond)
-
 		var req struct {
 			ConfigPath string `json:"configPath"`
 			Cycles     int    `json:"cycles"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		if req.Cycles <= 0 {
+			batchMu.Unlock()
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]any{"detail": "cycles 必须大于 0"})
 			return
 		}
-		// 返回简单结果
-		baseName := strings.TrimSuffix(filepath.Base(req.ConfigPath), ".yaml")
+		batchRunning = true
+		currentBatchId = fmt.Sprintf("mock-batch-%d", time.Now().UnixNano())
+		batchMu.Unlock()
+
+		// 模拟 batch 处理耗时，确保并发请求能触发互斥
+		time.Sleep(50 * time.Millisecond)
+
+		batchMu.Lock()
+		batchRunning = false
+		batchMu.Unlock()
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"ok":      true,
-			"columns": []string{"_cycle", "value"},
-			"rows": []map[string]any{
-				{"_cycle": 0, "value": float64(req.Cycles)},
-				{"_cycle": 1, "value": float64(req.Cycles) + 1},
-			},
-			"displayColumns": []string{"_cycle", "value"},
-			"plotScales":     map[string]float64{},
-			"cycles":         req.Cycles,
-			"_marker":        baseName,
+			"batchId": currentBatchId,
+			"status":  "running",
 		})
+	})
+
+	// 状态查询：mock 立即返回 completed
+	mux.HandleFunc("/api/batch/runs/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		// /api/batch/runs/{batchId}
+		// /api/batch/runs/{batchId}/rows
+		// /api/batch/runs/{batchId}/cancel
+		parts := strings.Split(strings.TrimPrefix(path, "/api/batch/runs/"), "/")
+		bid := parts[0]
+		if bid == "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if r.Method == "GET" && len(parts) == 1 {
+			// 状态查询
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":               true,
+				"batchId":          bid,
+				"status":           "completed",
+				"cyclesRequested":  10,
+				"cyclesCompleted":  10,
+				"columns":          []string{"value"},
+				"displayColumns":   []string{"value"},
+				"plotScales":       map[string]float64{},
+				"error":            nil,
+			})
+			return
+		}
+
+		if r.Method == "GET" && len(parts) == 2 && parts[1] == "rows" {
+			// 预览行
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":      true,
+				"batchId": bid,
+				"rows": []map[string]any{
+					{"_cycle": 0, "_sim_time": 0.0, "_need_sample": true, "value": 1.0},
+					{"_cycle": 1, "_sim_time": 1.0, "_need_sample": true, "value": 2.0},
+				},
+				"offset": 0,
+				"limit":  200,
+				"total":  2,
+			})
+			return
+		}
+
+		if r.Method == "POST" && len(parts) == 2 && parts[1] == "cancel" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "batchId": bid, "status": "cancelled"})
+			return
+		}
+
+		if r.Method == "DELETE" && len(parts) == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "batchId": bid})
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
 	})
 
 	mux.HandleFunc("/api/export/convert", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Columns   []string        `json:"columns"`
-			Rows      []map[string]any `json:"rows"`
-			ExportPath string         `json:"exportPath"`
-			Format    string          `json:"format"`
+			BatchId    string   `json:"batchId"`
+			Columns    []string `json:"columns"`
+			ExportPath string   `json:"exportPath"`
+			Format     string   `json:"format"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
-		// 写入 CSV 文件（模拟服务端行为）
-		if req.ExportPath != "" && len(req.Columns) > 0 {
+		// 写入简单文件（模拟服务端行为）
+		if req.ExportPath != "" {
 			os.MkdirAll(filepath.Dir(req.ExportPath), 0o755)
-			var sb strings.Builder
-			sb.WriteString(strings.Join(req.Columns, ","))
-			sb.WriteString("\n")
-			for _, row := range req.Rows {
-				var vals []string
-				for _, col := range req.Columns {
-					if v, ok := row[col]; ok {
-						vals = append(vals, fmt.Sprintf("%v", v))
-					} else {
-						vals = append(vals, "")
-					}
-				}
-				sb.WriteString(strings.Join(vals, ","))
-				sb.WriteString("\n")
+			cols := req.Columns
+			if len(cols) == 0 {
+				cols = []string{"value"}
 			}
+			var sb strings.Builder
+			sb.WriteString(strings.Join(cols, ","))
+			sb.WriteString("\n")
+			sb.WriteString("1.0\n2.0\n")
 			os.WriteFile(req.ExportPath, []byte(sb.String()), 0o644)
 		}
 
@@ -207,7 +255,7 @@ func wireMockService(t *testing.T, b *bindings.SystemBinding) func() {
 		json.NewEncoder(w).Encode(map[string]any{
 			"ok":     true,
 			"path":   req.ExportPath,
-			"rows":   len(req.Rows),
+			"rows":   2,
 			"format": req.Format,
 		})
 	})

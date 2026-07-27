@@ -64,19 +64,15 @@ export function SimControlPanel() {
 
       tempPath = await materializeYamlTextToTemp(yamlSnapshot)
       const result = await systemApi.runBatch(tempPath, n)
-      const columns = (result as any).columns || []
-      const rows = ((result as any).rows || []) as Array<Record<string, unknown>>
-      const displayColumns = ((result as any).displayColumns || []) as string[]
       const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
       succeed({
         projectId,
         runId,
         epoch,
-        columns,
-        rows,
-        completedCycles: rows.length,
+        columns: [],
+        previewRows: [],
+        completedCycles: 0,
         currentYamlHash,
-        displayColumns,
       })
     } catch (err: any) {
       fail({

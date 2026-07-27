@@ -1193,57 +1193,38 @@ def api_runtime_stop() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# todo.md §11：batch 进程内（不创建子进程）
+# batch 异步仿真 + SQLite 存储（批量仿真结果本地化改造）
 # ---------------------------------------------------------------------------
 
-# batch 状态锁（todo.md §11.4）
-_batch_lock = threading.Lock()
-_batch_running = False
+from datacenter.batch_manager import (
+    BatchManager,
+    BatchConflictError,
+    BatchNotFoundError,
+    BatchValidationError,
+)
 
 
-def _run_batch_in_process(config_path: str, cycles: int, cycle_time: Optional[float] = None) -> Dict[str, Any]:
-    """进程内执行 batch 仿真（todo.md §11.2）。"""
-    from controller.engine import UnifiedEngine
-    from controller.parser import DSLParser
-    from controller.clock import ClockMode
+def _batch_http_status(exc: Exception) -> int:
+    if isinstance(exc, BatchConflictError):
+        return 409
+    if isinstance(exc, BatchNotFoundError):
+        return 404
+    if isinstance(exc, BatchValidationError):
+        return 400
+    return 500
 
-    parser = DSLParser()
-    config = parser.parse_file(config_path)
-    engine = UnifiedEngine.from_program_config(config)
-    engine.clock.config.mode = ClockMode.GENERATOR
-    if cycle_time is not None and cycle_time > 0:
-        engine.clock.config.cycle_time = cycle_time
 
-    engine.clock.start()
-    results = []
-    try:
-        for i in range(cycles):
-            snapshot = engine.step()
-            results.append(snapshot)
-    finally:
-        engine.clock.stop()
+def _init_batch_manager() -> None:
+    """注入实时运行状态检查函数 + 启动扫描。"""
+    mgr = BatchManager.instance()
 
-    excluded_snapshot_fields = {
-        "cycle_count", "need_sample", "sim_time", "time_str", "exec_ratio",
-        "_consecutive_failures", "_safe_state",
-    }
-    if results:
-        signal_keys = sorted(key for key in results[0].keys() if key not in excluded_snapshot_fields)
-    else:
-        signal_keys = []
+    def _is_realtime_running() -> bool:
+        b = get_binding()
+        with b._state_lock:
+            return b.runtime_state in (RUNTIME_STATE_RUNNING, RUNTIME_STATE_STARTING, RUNTIME_STATE_STOPPING)
 
-    rows = []
-    for snapshot in results:
-        row = {"_sim_time": snapshot.get("sim_time"), "_need_sample": bool(snapshot.get("need_sample", False))}
-        for key in signal_keys:
-            row[key] = snapshot.get(key)
-        rows.append(row)
-
-    display_columns = engine.get_display_variables()
-    all_plot_scales = engine.get_plot_scales()
-    plot_scales = {col: all_plot_scales[col] for col in display_columns if col in all_plot_scales}
-
-    return {"columns": signal_keys, "rows": rows, "displayColumns": display_columns, "plotScales": plot_scales, "cycles": cycles}
+    mgr.set_runtime_check(_is_realtime_running)
+    mgr.startup_scan()
 
 
 class BatchRunRequest(BaseModel):
@@ -1254,39 +1235,69 @@ class BatchRunRequest(BaseModel):
 
 @app.post("/api/batch/run")
 def api_batch_run(req: BatchRunRequest) -> Dict[str, Any]:
-    """进程内 batch 仿真（todo.md §11）。不再返回 501。"""
-    global _batch_running
-    b = get_binding()
-
-    with b._state_lock:
-        if b.runtime_state in (RUNTIME_STATE_RUNNING, RUNTIME_STATE_STARTING, RUNTIME_STATE_STOPPING):
-            raise HTTPException(status_code=409, detail="实时运行中，禁止批量任务")
-
-    with _batch_lock:
-        if _batch_running:
-            raise HTTPException(status_code=409, detail="已有批量任务正在运行")
-        _batch_running = True
-
+    """异步启动 batch 仿真，立即返回 batchId。不再返回 rows。"""
     try:
-        if not os.path.isfile(req.configPath):
-            raise HTTPException(status_code=404, detail=f"config 文件不存在: {req.configPath}")
-        if req.cycles <= 0:
-            raise HTTPException(status_code=400, detail="cycles 必须大于 0")
-        result = _run_batch_in_process(req.configPath, req.cycles, req.cycleTime)
-        return {"ok": True, **result}
-    except HTTPException:
-        raise
+        mgr = BatchManager.instance()
+        batch_id = mgr.start_batch(req.configPath, req.cycles, req.cycleTime)
+        return {"ok": True, "batchId": batch_id, "status": "running"}
+    except (BatchConflictError, BatchValidationError, BatchNotFoundError) as e:
+        raise HTTPException(status_code=_batch_http_status(e), detail=str(e))
     except Exception as e:
-        logger.exception("batch run failed")
-        raise HTTPException(status_code=500, detail=f"批量仿真失败: {e}")
-    finally:
-        with _batch_lock:
-            _batch_running = False
+        logger.exception("batch start failed")
+        raise HTTPException(status_code=500, detail=f"启动批量仿真失败: {e}")
+
+
+@app.get("/api/batch/runs/{batchId}")
+def api_batch_status(batchId: str) -> Dict[str, Any]:
+    """查询 batch 任务状态。"""
+    try:
+        return BatchManager.instance().get_status(batchId)
+    except BatchNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("batch status failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/batch/runs/{batchId}/cancel")
+def api_batch_cancel(batchId: str) -> Dict[str, Any]:
+    """取消正在运行的 batch 任务。"""
+    try:
+        return BatchManager.instance().cancel(batchId)
+    except (BatchConflictError, BatchNotFoundError) as e:
+        raise HTTPException(status_code=_batch_http_status(e), detail=str(e))
+    except Exception as e:
+        logger.exception("batch cancel failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/batch/runs/{batchId}/rows")
+def api_batch_rows(batchId: str, offset: int = 0, limit: int = 200) -> Dict[str, Any]:
+    """分页读取 batch 预览行。默认 limit=200，最大 1000。"""
+    try:
+        return BatchManager.instance().get_rows(batchId, offset, limit)
+    except BatchNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("batch rows failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/batch/runs/{batchId}")
+def api_batch_delete(batchId: str) -> Dict[str, Any]:
+    """删除 batch 结果。不得删除正在运行的任务。"""
+    try:
+        return BatchManager.instance().delete(batchId)
+    except (BatchConflictError, BatchNotFoundError) as e:
+        raise HTTPException(status_code=_batch_http_status(e), detail=str(e))
+    except Exception as e:
+        logger.exception("batch delete failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class ExportConvertRequest(BaseModel):
-    columns: List[str] = Field(..., description="列名列表")
-    rows: List[Dict[str, Any]] = Field(..., description="行数据")
+    batchId: str = Field(..., description="batch 任务 ID")
+    columns: List[str] = Field(default_factory=list, description="列名列表，空则用全部")
     exportPath: str = Field(..., description="输出文件路径")
     format: str = Field(default="csv", description="csv / xlsx")
     sheetName: Optional[str] = Field(default="控制器")
@@ -1294,37 +1305,19 @@ class ExportConvertRequest(BaseModel):
 
 @app.post("/api/export/convert")
 def api_export_convert(req: ExportConvertRequest) -> Dict[str, Any]:
-    """todo.md §5.4：格式化导出进程内函数化。"""
+    """从 SQLite 流式导出 batch 结果。不再接收 rows。"""
     if req.format not in ("csv", "xlsx"):
         raise HTTPException(status_code=400, detail=f"不支持的格式: {req.format}")
     try:
-        # 与 standalone_main._write_rows_export 行为一致：
-        # 1) 先 _rows_to_export_snapshots 把 _need_sample 转 need_sample
-        # 2) 再用 TemplateManager + Exporter 写文件
-        # 否则 exporter 的 _filter_snapshots 会把所有 _need_sample=True 的行都过滤掉。
-        from standalone_main import _rows_to_export_snapshots
-        snapshots, clean_columns = _rows_to_export_snapshots(req.rows, req.columns)
-        from components.export_templates import CSVExporter, ExcelExporter, TemplateManager
-
-        template = TemplateManager().load_template("prediction")
-        if req.format == "csv":
-            exporter = CSVExporter(template)
-            exporter.export(snapshots, req.exportPath, column_keys=clean_columns)
-        else:
-            exporter = ExcelExporter(
-                template,
-                file_format="xlsx",
-                sheet_name=req.sheet_name or template.sheet_name,
-            )
-            exporter.export(snapshots, req.exportPath, column_keys=clean_columns)
-        return {
-            "ok": True,
-            "path": req.exportPath,
-            "rows": len(snapshots),
-            "format": req.format,
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return BatchManager.instance().export(
+            batch_id=req.batchId,
+            columns=req.columns,
+            export_path=req.exportPath,
+            fmt=req.format,
+            sheet_name=req.sheetName or "",
+        )
+    except (BatchConflictError, BatchValidationError, BatchNotFoundError) as e:
+        raise HTTPException(status_code=_batch_http_status(e), detail=str(e))
     except Exception as e:
         logger.exception("export convert failed")
         raise HTTPException(status_code=500, detail=f"export 失败: {e}")

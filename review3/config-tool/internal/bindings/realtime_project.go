@@ -34,6 +34,11 @@ func (b *RealtimeProjectBinding) SetServiceClient(client *DataFactoryServiceClie
 	b.serviceClient = client
 }
 
+// SetCompiler 替换实时编译器（容器异步启动 service 后调用）。
+func (b *RealtimeProjectBinding) SetCompiler(compiler realtime.RealtimeCompiler) {
+	b.manager.SetCompiler(compiler)
+}
+
 func (b *RealtimeProjectBinding) SetContext(ctx context.Context) {
 	b.ctx = ctx
 }

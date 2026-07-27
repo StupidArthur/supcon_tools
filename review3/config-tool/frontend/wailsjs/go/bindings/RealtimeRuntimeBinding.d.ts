@@ -28,6 +28,8 @@ export function ServiceEndpoint():Promise<string>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 
+export function SetServiceClient(arg1:bindings.DataFactoryServiceClient):Promise<void>;
+
 export function SetServiceEndpoint(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function StartProject(arg1:string,arg2:realtime.RealtimeStartOptions):Promise<realtime.RealtimeRunSession>;

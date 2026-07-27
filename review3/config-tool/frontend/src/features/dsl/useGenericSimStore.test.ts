@@ -25,7 +25,7 @@ describe('useGenericSimStore', () => {
       runId,
       epoch,
       columns: ['_cycle', 'level'],
-      rows: [{ _cycle: 0, level: 1.2 }],
+      previewRows: [{ _cycle: 0, level: 1.2 }],
       completedCycles: 1,
       currentYamlHash: 'h1',
     })
@@ -49,12 +49,12 @@ describe('useGenericSimStore', () => {
       runId,
       epoch,
       columns: ['_cycle'],
-      rows: [{ _cycle: 0 }],
+      previewRows: [{ _cycle: 0 }],
       completedCycles: 1,
       currentYamlHash: 'h1',
     })
     expect(ok).toBe(false)
-    expect(useGenericSimStore.getState().rows).toEqual([])
+    expect(useGenericSimStore.getState().previewRows).toEqual([])
   })
 
   it('marks success stale when completion hash differs', () => {
@@ -70,7 +70,7 @@ describe('useGenericSimStore', () => {
       runId,
       epoch,
       columns: ['_cycle', 'x'],
-      rows: [{ _cycle: 0, x: 1 }],
+      previewRows: [{ _cycle: 0, x: 1 }],
       completedCycles: 1,
       currentYamlHash: 'h-changed',
     })
@@ -103,7 +103,7 @@ describe('useGenericSimStore', () => {
       runId,
       epoch,
       columns,
-      rows,
+      previewRows: rows,
       completedCycles: rows.length,
       currentYamlHash: 'h1',
       // 引擎 get_display_variables 的顺序；not_a_column 应被过滤
@@ -128,7 +128,7 @@ describe('useGenericSimStore', () => {
       runId,
       epoch,
       columns: ['_cycle', 'x', 'y'],
-      rows: [{ _cycle: 0, x: 1, y: 2 }],
+      previewRows: [{ _cycle: 0, x: 1, y: 2 }],
       completedCycles: 1,
       currentYamlHash: 'h1',
       displayColumns: [],
@@ -150,7 +150,7 @@ describe('useGenericSimStore', () => {
       runId,
       epoch,
       columns: ['_cycle', 'x'],
-      rows: [{ _cycle: 0, x: 1 }],
+      previewRows: [{ _cycle: 0, x: 1 }],
       completedCycles: 1,
       currentYamlHash: 'h1',
     })
@@ -174,7 +174,7 @@ describe('useGenericSimStore plotScales lifecycle', () => {
     })
     useGenericSimStore.getState().succeed({
       projectId: 'p1', runId: r1, epoch,
-      columns: ['_cycle', 'pid.PV'], rows: [{ _cycle: 0, 'pid.PV': 0.8 }],
+      columns: ['_cycle', 'pid.PV'], previewRows: [{ _cycle: 0, 'pid.PV': 0.8 }],
       completedCycles: 1, currentYamlHash: 'h1',
       plotScales: { 'pid.PV': 1.2 },
     })
@@ -196,7 +196,7 @@ describe('useGenericSimStore plotScales lifecycle', () => {
     useGenericSimStore.getState().succeed({
       projectId: 'p1', runId, epoch,
       columns: ['_cycle', 'pid.PV', 'pid.MV'],
-      rows: [
+      previewRows: [
         { _cycle: 0, 'pid.PV': 0.8, 'pid.MV': 66 },
         { _cycle: 1, 'pid.PV': 0.9, 'pid.MV': 70 },
       ],
@@ -224,7 +224,7 @@ describe('useGenericSimStore plotScales lifecycle', () => {
     })
     useGenericSimStore.getState().succeed({
       projectId: 'p1', runId, epoch,
-      columns: ['_cycle', 'pid.PV'], rows: [{ _cycle: 0, 'pid.PV': 0.8 }],
+      columns: ['_cycle', 'pid.PV'], previewRows: [{ _cycle: 0, 'pid.PV': 0.8 }],
       completedCycles: 1, currentYamlHash: 'h1',
       plotScales: { 'pid.PV': 1.2 },
     })

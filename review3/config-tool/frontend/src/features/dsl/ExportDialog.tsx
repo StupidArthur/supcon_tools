@@ -130,7 +130,7 @@ export function ExportDialog(props: ExportDialogProps) {
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-border px-4 py-3 text-xs">
-          <span className="mr-auto text-muted-foreground">导出采样数据：{countSampledRows(session.rows)} 行 · 仿真周期：{session.rowCount}</span>
+          <span className="mr-auto text-muted-foreground">导出采样数据：{countSampledRows(session.previewRows)} 行 · 仿真周期：{session.rowCount}</span>
           <button
             type="button"
             onClick={onClose}

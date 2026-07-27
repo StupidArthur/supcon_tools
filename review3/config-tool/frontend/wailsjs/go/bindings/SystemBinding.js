@@ -10,12 +10,20 @@ export function BrowseExe() {
   return window['go']['bindings']['SystemBinding']['BrowseExe']();
 }
 
+export function CancelBatch(arg1) {
+  return window['go']['bindings']['SystemBinding']['CancelBatch'](arg1);
+}
+
 export function Cleanup() {
   return window['go']['bindings']['SystemBinding']['Cleanup']();
 }
 
 export function CleanupTempYAML(arg1) {
   return window['go']['bindings']['SystemBinding']['CleanupTempYAML'](arg1);
+}
+
+export function DeleteBatch(arg1) {
+  return window['go']['bindings']['SystemBinding']['DeleteBatch'](arg1);
 }
 
 export function ExportBatch(arg1, arg2, arg3) {
@@ -26,12 +34,24 @@ export function ExportBatchFormatted(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['bindings']['SystemBinding']['ExportBatchFormatted'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function ExportBatchResult(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['bindings']['SystemBinding']['ExportBatchResult'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function ExportCSVRows(arg1, arg2, arg3) {
   return window['go']['bindings']['SystemBinding']['ExportCSVRows'](arg1, arg2, arg3);
 }
 
 export function ExportRowsFormatted(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['bindings']['SystemBinding']['ExportRowsFormatted'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function GetBatchRows(arg1, arg2, arg3) {
+  return window['go']['bindings']['SystemBinding']['GetBatchRows'](arg1, arg2, arg3);
+}
+
+export function GetBatchStatus(arg1) {
+  return window['go']['bindings']['SystemBinding']['GetBatchStatus'](arg1);
 }
 
 export function GetDataFactoryPath() {
@@ -72,6 +92,10 @@ export function SaveYAMLFile() {
 
 export function SetContext(arg1) {
   return window['go']['bindings']['SystemBinding']['SetContext'](arg1);
+}
+
+export function SetServiceClient(arg1) {
+  return window['go']['bindings']['SystemBinding']['SetServiceClient'](arg1);
 }
 
 export function Start(arg1) {

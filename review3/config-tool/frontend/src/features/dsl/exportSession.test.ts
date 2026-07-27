@@ -17,9 +17,10 @@ function makeSource(overrides: Record<string, unknown> = {}) {
     projectId: 'p1',
     boundRunId: 'r1',
     boundYamlHash: 'h1',
+    batchId: 'test-batch',
     columns: ['_cycle', 'a', 'b'],
     selectedColumns: ['a'],
-    rows: [
+    previewRows: [
       { _cycle: 0, a: 1, b: 2 },
       { _cycle: 1, a: 3, b: 4 },
     ] as Array<Record<string, unknown>>,
@@ -40,10 +41,10 @@ describe('createExportSession', () => {
     const src = makeSource()
     const session = createExportSession(src)!
     // 改动原始 rows 不影响会话快照
-    src.rows[0].a = 999
-    src.rows.push({ _cycle: 2, a: 5, b: 6 })
-    expect(session.rows[0].a).toBe(1)
-    expect(session.rows.length).toBe(2)
+    src.previewRows[0].a = 999
+    src.previewRows.push({ _cycle: 2, a: 5, b: 6 })
+    expect(session.previewRows[0].a).toBe(1)
+    expect(session.previewRows.length).toBe(2)
     expect(session.rowCount).toBe(2)
   })
 
@@ -65,7 +66,7 @@ describe('createExportSession', () => {
 describe('validateExportSession', () => {
   const session = createExportSession(makeSource())!
 
-  it('passes when identity is unchanged (uses session.rows)', () => {
+  it('passes when identity is unchanged (uses session.previewRows)', () => {
     expect(validateExportSession(session, okCurrent)).toBeNull()
   })
 
@@ -93,11 +94,12 @@ describe('validateExportSession', () => {
 })
 
 describe('sessionNumericColumns', () => {
-  it('derives from session.rows, excluding _cycle and _-prefixed internals', () => {
+  it('derives from session.previewRows, excluding _cycle and _-prefixed internals', () => {
     const session = createExportSession(
       makeSource({
         columns: ['_cycle', '_internal', 'a', 'txt'],
-        rows: [{ _cycle: 0, _internal: 0, a: 1, txt: 'x' }],
+        batchId: 'test-batch',
+      previewRows: [{ _cycle: 0, _internal: 0, a: 1, txt: 'x' }],
       }),
     )!
     expect(sessionNumericColumns(session)).toEqual(['a'])

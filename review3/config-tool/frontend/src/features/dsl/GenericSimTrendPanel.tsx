@@ -30,7 +30,7 @@ export function GenericSimTrendPanel() {
   const projectId = useDslProjectStore((s) => s.projectId)
   const status = useGenericSimStore((s) => s.status)
   const columns = useGenericSimStore((s) => s.columns)
-  const rows = useGenericSimStore((s) => s.rows)
+  const rows = useGenericSimStore((s) => s.previewRows)
   const selectedColumns = useGenericSimStore((s) => s.selectedColumns)
   const stale = useGenericSimStore((s) => s.stale)
   const boundProjectId = useGenericSimStore((s) => s.boundProjectId)
