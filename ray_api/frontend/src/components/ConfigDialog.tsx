@@ -72,6 +72,12 @@ export function ConfigDialog({
             <input type="number" className="input" value={cfg.sampleEvery}
               onChange={(e) => setCfg({ ...cfg, sampleEvery: Number(e.target.value) })} />
           </Field>
+          <div className="mt-3">
+            <Field label="单集群节点并发数（1~200）">
+              <input type="number" min={1} max={200} className="input" value={cfg.detailNodeConcurrency ?? 50}
+                onChange={(e) => setCfg({ ...cfg, detailNodeConcurrency: Number(e.target.value) })} />
+            </Field>
+          </div>
         </div>
 
         {/* 全局报警阈值 */}

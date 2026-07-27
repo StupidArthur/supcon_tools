@@ -89,6 +89,7 @@ export namespace config {
 	    sampleEvery: number;
 	    thresholds: Thresholds;
 	    webhookUrl?: string;
+	    detailNodeConcurrency?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -103,6 +104,7 @@ export namespace config {
 	        this.sampleEvery = source["sampleEvery"];
 	        this.thresholds = this.convertValues(source["thresholds"], Thresholds);
 	        this.webhookUrl = source["webhookUrl"];
+	        this.detailNodeConcurrency = source["detailNodeConcurrency"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -249,11 +249,16 @@ func (c *Collector) Perf() model.PerfMetrics {
 	return c.perf
 }
 
-func (c *Collector) concurrency() int {
+func (c *Collector) nodeConcurrency() int {
 	if c.opts.Concurrency <= 0 {
-		return 10
+		return DefaultDetailNodeConcurrency
 	}
 	return c.opts.Concurrency
+}
+
+// concurrency 保留旧名供向后兼容，内部委托 nodeConcurrency。
+func (c *Collector) concurrency() int {
+	return c.nodeConcurrency()
 }
 
 func assessRisk(p model.PerfMetrics, summaryEvery, detailEvery int) string {
@@ -465,7 +470,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 	var memStart runtime.MemStats
 	runtime.ReadMemStats(&memStart)
 	logx.L().Info("detail starting", "cluster", c.opts.ClusterID,
-		"nodes", len(nodes), "nodeConcurrency", DetailNodeConcurrency,
+		"nodes", len(nodes), "nodeConcurrency", c.nodeConcurrency(),
 		"goroutines", runtime.NumGoroutine(),
 		"heapMB", memStart.HeapAlloc/1024/1024)
 
@@ -519,7 +524,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		ms      int64
 	}
 	results := make([]nodeResult, len(nodes))
-	sem := make(chan struct{}, DetailNodeConcurrency)
+	sem := make(chan struct{}, c.nodeConcurrency())
 	var wg sync.WaitGroup
 
 	for i, nid := range nodes {
@@ -895,7 +900,7 @@ func (c *Collector) collectDetail(ctx context.Context) {
 		DetailReqs:      len(nodes) + 2,
 		ProcMemBytes:    memStats.HeapAlloc,
 		ProcGoroutine:   runtime.NumGoroutine(),
-		Concurrency:     DetailNodeConcurrency,
+		Concurrency:     c.nodeConcurrency(),
 		SlowNodeID:      slowNodeID,
 		SlowNodeMs:      maxNodeMs,
 	}

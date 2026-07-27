@@ -55,6 +55,7 @@ export interface Config {
   sampleEvery: number
   thresholds: Thresholds
   webhookUrl?: string
+  detailNodeConcurrency?: number
 }
 
 export const api = {

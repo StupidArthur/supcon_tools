@@ -10,9 +10,6 @@ import (
 	"raymonitor/model"
 )
 
-// DefaultConcurrency 是单集群节点详情 fan-out 的并发上限。未对用户暴露，需要调整时改这里。
-const DefaultConcurrency = 50
-
 // DefaultGlobalConcurrency 是所有集群 HTTP 请求共享的并发上限。未对用户暴露，需要调整时改这里。
 const DefaultGlobalConcurrency = 100
 
@@ -90,7 +87,7 @@ func (m *CollectorManager) optsForCluster(cl config.ClusterConfig) CollectorOpts
 		SummaryEvery: interval,
 		DetailEvery:  interval,
 		TimeoutSec:   DefaultTimeoutSec,
-		Concurrency:  DefaultConcurrency,
+		Concurrency:  m.cfg.DetailNodeConcurrency,
 	}
 }
 

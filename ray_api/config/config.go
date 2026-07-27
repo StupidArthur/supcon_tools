@@ -40,25 +40,29 @@ type Thresholds struct {
 }
 
 type Config struct {
-	Clusters    []ClusterConfig `json:"clusters"`
-	DBPath      string          `json:"dbPath"`
-	LogDir      string          `json:"logDir"`
-	SortBy      string          `json:"sortBy"`
-	SampleEvery int             `json:"sampleEvery"`
-	Thresholds  Thresholds      `json:"thresholds"`
-	WebhookURL  string          `json:"webhookUrl,omitempty"`
+	Clusters             []ClusterConfig `json:"clusters"`
+	DBPath               string          `json:"dbPath"`
+	LogDir               string          `json:"logDir"`
+	SortBy               string          `json:"sortBy"`
+	SampleEvery          int             `json:"sampleEvery"`
+	Thresholds           Thresholds      `json:"thresholds"`
+	WebhookURL           string          `json:"webhookUrl,omitempty"`
+	DetailNodeConcurrency int            `json:"detailNodeConcurrency,omitempty"`
 }
+
+const defaultDetailNodeConcurrency = 50
 
 func Default() Config {
 	return Config{
 		Clusters: []ClusterConfig{
 			{ID: "default", PlatformURL: "http://10.30.144.41:32549"},
 		},
-		DBPath:      "ray_monitor.db",
-		LogDir:      "logs",
-		SortBy:      "cpu",
-		SampleEvery: 10,
-		Thresholds:  DefaultThresholds(),
+		DBPath:                "ray_monitor.db",
+		LogDir:                "logs",
+		SortBy:                "cpu",
+		SampleEvery:           10,
+		Thresholds:            DefaultThresholds(),
+		DetailNodeConcurrency: defaultDetailNodeConcurrency,
 	}
 }
 
@@ -153,6 +157,9 @@ func Load() (Config, error) {
 	if cfg.SortBy == "" {
 		cfg.SortBy = "cpu"
 	}
+	if cfg.DetailNodeConcurrency <= 0 {
+		cfg.DetailNodeConcurrency = defaultDetailNodeConcurrency
+	}
 	return cfg, nil
 }
 
@@ -242,6 +249,9 @@ func SaveClusters(clusters []ClusterConfig) error {
 func Validate(cfg Config) error {
 	if cfg.SampleEvery < 1 || cfg.SampleEvery > 3600 {
 		return fmt.Errorf("sampleEvery must be 1~3600")
+	}
+	if cfg.DetailNodeConcurrency < 1 || cfg.DetailNodeConcurrency > 200 {
+		return fmt.Errorf("detailNodeConcurrency must be 1~200")
 	}
 	if cfg.WebhookURL != "" {
 		u, err := url.Parse(cfg.WebhookURL)

@@ -22,9 +22,10 @@ const maxResponseBytes = 64 * 1024 * 1024
 // DefaultTimeoutSec 是 HTTP 请求的默认秒级超时。未对用户暴露，需要调整时改这里。
 const DefaultTimeoutSec = 10
 
-// DetailNodeConcurrency 是单集群内同时发起的 /nodes/{id} 请求数上限。
+// DefaultDetailNodeConcurrency 是单集群内同时发起的 /nodes/{id} 请求数默认上限。
+// 运行时从 Config.DetailNodeConcurrency 读，opts 未设置时兜底用此值。
 // 同时作为 HTTP Transport 的 MaxConnsPerHost，即使 semaphore 被误删也不会无界并发。
-const DetailNodeConcurrency = 4
+const DefaultDetailNodeConcurrency = 50
 
 type Client struct {
 	clusterID string
@@ -42,11 +43,15 @@ func NewClient(opts CollectorOpts) *Client {
 	if timeout <= 0 {
 		timeout = DefaultTimeoutSec
 	}
+	nodeConcurrency := opts.Concurrency
+	if nodeConcurrency <= 0 {
+		nodeConcurrency = DefaultDetailNodeConcurrency
+	}
 	transport := &http.Transport{
 		DisableCompression:  true,
-		MaxConnsPerHost:     DetailNodeConcurrency,
-		MaxIdleConnsPerHost: DetailNodeConcurrency,
-		MaxIdleConns:        DetailNodeConcurrency,
+		MaxConnsPerHost:     nodeConcurrency,
+		MaxIdleConnsPerHost: nodeConcurrency,
+		MaxIdleConns:        nodeConcurrency,
 		IdleConnTimeout:     30 * time.Second,
 	}
 	return &Client{
