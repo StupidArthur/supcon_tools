@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -27,13 +28,29 @@ type DataFactoryServiceClient struct {
 	httpClient *http.Client
 }
 
+// directProxy 直连，不走任何环境变量代理。
+//
+// http.Transport.Proxy 字段是 func(*http.Request) (*url.URL, error)：
+//   - nil 会让 Transport 调用 ProxyFromEnvironment，读取 HTTP_PROXY /
+//     HTTPS_PROXY / NO_PROXY，仍然可能把 127.0.0.1 路由到外部代理。
+//   - 返回 (nil, nil) 是 Go 标准库明确约定的"直连"信号，所有请求
+//     走 DialContext，不会触达任何代理。
+func directProxy(*http.Request) (*url.URL, error) { return nil, nil }
+
 // NewDataFactoryServiceClient 创建服务客户端。
 func NewDataFactoryServiceClient(host string, port int, token string) *DataFactoryServiceClient {
 	return &DataFactoryServiceClient{
 		baseURL: fmt.Sprintf("http://%s:%d", host, port),
 		token:   token,
+		// 禁用代理：127.0.0.1 上的 service 不应被环境变量 HTTP_PROXY / HTTPS_PROXY
+		// / NO_PROXY 路由到外部代理。在配置了系统代理的生产机上，之前用
+		// Proxy: nil 仍会触发 ProxyFromEnvironment，CheckHealth 1s 内
+		// 全部超时；这里改用返回 (nil, nil) 的闭包强制直连。
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				Proxy: directProxy,
+			},
 		},
 	}
 }
