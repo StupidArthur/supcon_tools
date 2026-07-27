@@ -1879,6 +1879,10 @@ def run_api_server(binding: EngineBinding, host: str, port: int, api_token: Opti
 
     import uvicorn
 
+    # PyInstaller console=False → sys.stderr=None → uvicorn DefaultFormatter
+    # 初始化时会调 sys.stderr.isatty() 抛 AttributeError，最终导致
+    # dictConfig 报 "Unable to configure formatter 'default'"。禁用 uvicorn
+    # 自带 logging 配置，走 Python 标准 logging（已在 main 中初始化）。
     config = uvicorn.Config(
         app,
         host=host,
@@ -1886,6 +1890,7 @@ def run_api_server(binding: EngineBinding, host: str, port: int, api_token: Opti
         log_level="info",
         loop="asyncio",
         access_log=False,
+        log_config=None,
     )
     server = uvicorn.Server(config)
 

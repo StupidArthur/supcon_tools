@@ -20,6 +20,52 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Tuple, List, Optional, Callable
 
+
+def _ensure_standard_streams() -> None:
+    """
+    PyInstaller console=False（noconsole）模式下，sys.stdout/sys.stderr
+    会被设为 None，依赖标准流做日志/格式化的库（uvicorn DefaultFormatter、
+    traceback.print_exc 等）会在 None 上调 .isatty() / .write() 崩溃。
+    在导入任何 logging / uvicorn 之前把标准流补上：
+      - 优先复用已有流；
+      - 若为 None（noconsole），重定向到 service-stderr.log / service-stdout.log，
+        便于事后排查；日志目录与 EXE 同级。
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    try:
+        log_dir = Path(sys.argv[0]).resolve().parent if sys.argv else Path.cwd()
+    except Exception:
+        log_dir = Path.cwd()
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    if sys.stdout is None:
+        try:
+            sys.stdout = open(
+                log_dir / "service-stdout.log",
+                "a",
+                encoding="utf-8",
+                buffering=1,
+            )
+        except Exception:
+            sys.stdout = open(os.devnull, "w", encoding="utf-8")
+
+    if sys.stderr is None:
+        try:
+            sys.stderr = open(
+                log_dir / "service-stderr.log",
+                "a",
+                encoding="utf-8",
+                buffering=1,
+            )
+        except Exception:
+            sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+
+_ensure_standard_streams()
+
+
 # 获取脚本所在目录（打包后指向exe所在目录）
 _script_dir = Path(sys.argv[0] if sys.argv else __file__).resolve().parent
 if str(_script_dir) not in sys.path:

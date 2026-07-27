@@ -46,6 +46,9 @@ a = Analysis(
         'uvicorn',
         'uvicorn.config',
         'uvicorn.server',
+        'uvicorn.logging',
+        'logging.config',
+        'logging.handlers',
         'pydantic',
         'pydantic.fields',
         # 项目内部模块（确保它们被打进 exe）
