@@ -10,6 +10,10 @@ export function AddCluster(arg1) {
   return window['go']['main']['App']['AddCluster'](arg1);
 }
 
+export function ClusterDataAge(arg1) {
+  return window['go']['main']['App']['ClusterDataAge'](arg1);
+}
+
 export function CountAlerts(arg1) {
   return window['go']['main']['App']['CountAlerts'](arg1);
 }

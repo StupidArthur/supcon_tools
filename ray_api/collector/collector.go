@@ -42,6 +42,7 @@ type Snapshot struct {
 
 type CollectorOpts struct {
 	ClusterID    string
+	ClusterName  string // 用户可编辑的集群名，用于日志显示
 	PlatformURL  string
 	Cookie       string
 	TimeoutSec   int
@@ -69,6 +70,7 @@ type Collector struct {
 
 	detailLock RequestLimiter // capacity=1，集群间 detail 排队
 	apiLog     *APILog         // 共享 ring buffer，生命周期事件记这里
+	onCycleEnd func()         // 通知 Manager 标记本轮数据已更新
 
 	mu     sync.RWMutex
 	status model.CollectorStatus
@@ -123,10 +125,19 @@ func (c *Collector) SetAPILog(l *APILog) {
 	c.apiLog = l
 }
 
+// SetOnCycleEnd 设置每轮采集结束后的回调（manager 用来标记数据更新时间）。
+func (c *Collector) SetOnCycleEnd(fn func()) {
+	c.onCycleEnd = fn
+}
+
 // logEvent 便捷方法：nil buffer 时静默忽略。
 func (c *Collector) logEvent(phase, message string) {
 	if c.apiLog != nil {
-		c.apiLog.Append("backend", c.opts.ClusterID, phase, message)
+		name := c.opts.ClusterName
+		if name == "" {
+			name = c.opts.ClusterID
+		}
+		c.apiLog.Append("backend", name, phase, message)
 	}
 }
 
@@ -309,6 +320,10 @@ func (c *Collector) Start(ctx context.Context) {
 		c.collectSummary(ctx)
 		c.collectDetail(ctx)
 		c.logEvent("周期", "结束")
+		// 通知 Manager 记录数据更新时间，供前端显示"数据来自 Xs 前"
+		if c.onCycleEnd != nil {
+			c.onCycleEnd()
+		}
 		return true
 	}
 

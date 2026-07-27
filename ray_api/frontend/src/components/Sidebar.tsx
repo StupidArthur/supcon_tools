@@ -7,8 +7,9 @@ export type Selection =
   | { kind: 'api-log' }
   | { kind: 'cluster'; id: string }
 
-// displayName 从 URL 提取 host:port 作为集群名。
+// displayName 优先用用户填的 name，其次从 URL 提取 host:port。
 function displayName(cl: ClusterConfig): string {
+  if (cl.name) return cl.name
   const url = cl.platformUrl || ''
   if (!url) return cl.id
   return url.replace(/^https?:\/\//, '')

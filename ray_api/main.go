@@ -33,8 +33,8 @@ func main() {
 	app := NewApp()
 	err := wails.Run(&options.App{
 		Title:     "Ray 集群监控",
-		Width:     1180,
-		Height:    780,
+		Width:     1600,
+		Height:    900,
 		MinWidth:  920,
 		MinHeight: 620,
 		AssetServer: &assetserver.Options{

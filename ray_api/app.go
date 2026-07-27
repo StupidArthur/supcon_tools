@@ -328,14 +328,34 @@ func (a *App) GetNodes(clusterID string) []model.NodeMetric {
 	if a.manager == nil {
 		return nil
 	}
-	return a.manager.Nodes(clusterID)
+	if !a.manager.HasCluster(clusterID) {
+		a.manager.LogQuery(clusterID, "节点", "集群不存在")
+		return nil
+	}
+	ns := a.manager.Nodes(clusterID)
+	if ns == nil {
+		a.manager.LogQuery(clusterID, "节点", "无数据（采集未完成）")
+	} else {
+		a.manager.LogQuery(clusterID, "节点", fmt.Sprintf("%d 节点", len(ns)))
+	}
+	return ns
 }
 
 func (a *App) GetWorkers(clusterID string) []model.WorkerSnapshot {
 	if a.manager == nil {
 		return nil
 	}
-	return a.manager.Workers(clusterID)
+	if !a.manager.HasCluster(clusterID) {
+		a.manager.LogQuery(clusterID, "Worker", "集群不存在")
+		return nil
+	}
+	ws := a.manager.Workers(clusterID)
+	if ws == nil {
+		a.manager.LogQuery(clusterID, "Worker", "无数据（采集未完成）")
+	} else {
+		a.manager.LogQuery(clusterID, "Worker", fmt.Sprintf("%d 个", len(ws)))
+	}
+	return ws
 }
 
 func (a *App) GetActors(clusterID string) []model.ActorSnapshot {
@@ -349,21 +369,51 @@ func (a *App) GetJobs(clusterID string) []model.JobSnapshot {
 	if a.manager == nil {
 		return nil
 	}
-	return a.manager.Jobs(clusterID)
+	if !a.manager.HasCluster(clusterID) {
+		a.manager.LogQuery(clusterID, "作业", "集群不存在")
+		return nil
+	}
+	js := a.manager.Jobs(clusterID)
+	if js == nil {
+		a.manager.LogQuery(clusterID, "作业", "无数据（采集未完成）")
+	} else {
+		a.manager.LogQuery(clusterID, "作业", fmt.Sprintf("%d 个", len(js)))
+	}
+	return js
 }
 
 func (a *App) GetOverview(clusterID string) model.Overview {
 	if a.manager == nil {
 		return model.Overview{}
 	}
-	return a.manager.Overview(clusterID)
+	if !a.manager.HasCluster(clusterID) {
+		a.manager.LogQuery(clusterID, "概览", "集群不存在")
+		return model.Overview{}
+	}
+	ov := a.manager.Overview(clusterID)
+	if len(ov.Nodes) == 0 {
+		a.manager.LogQuery(clusterID, "概览", "无数据（采集未完成）")
+	} else {
+		a.manager.LogQuery(clusterID, "概览", fmt.Sprintf("%d 节点", ov.NodeCount))
+	}
+	return ov
 }
 
 func (a *App) GetHealth(clusterID string) model.CollectionHealth {
 	if a.manager == nil {
 		return model.CollectionHealth{}
 	}
-	return a.manager.Health(clusterID)
+	if !a.manager.HasCluster(clusterID) {
+		a.manager.LogQuery(clusterID, "健康", "集群不存在")
+		return model.CollectionHealth{}
+	}
+	h := a.manager.Health(clusterID)
+	if h.TotalNodeCount == 0 {
+		a.manager.LogQuery(clusterID, "健康", "无数据（采集未完成）")
+	} else {
+		a.manager.LogQuery(clusterID, "健康", fmt.Sprintf("%d 节点", h.TotalNodeCount))
+	}
+	return h
 }
 
 // ---- 历史查询 ----
@@ -584,6 +634,15 @@ func (a *App) LogFrontendEvent(cluster, phase, message string) {
 		return
 	}
 	a.manager.LogFrontendEvent(cluster, phase, message)
+}
+
+// ClusterDataAge 返回指定集群数据最近一次更新的时间戳（毫秒）。
+// 前端用此值计算"数据来自 Xs 前"。
+func (a *App) ClusterDataAge(clusterID string) int64 {
+	if a.manager == nil {
+		return 0
+	}
+	return a.manager.ClusterDataAge(clusterID)
 }
 
 // ---- Webhook 推送 ----

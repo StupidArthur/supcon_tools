@@ -13,10 +13,14 @@ import (
 
 type ClusterConfig struct {
 	ID          string `json:"id"`
+	Name        string `json:"name"` // 用户可编辑的集群名，用于日志和侧栏显示
 	PlatformURL string `json:"platformUrl"`
 }
 
 func (c ClusterConfig) DisplayName() string {
+	if c.Name != "" {
+		return c.Name
+	}
 	if c.PlatformURL == "" {
 		return c.ID
 	}
@@ -57,9 +61,7 @@ const (
 
 func Default() Config {
 	return Config{
-		Clusters: []ClusterConfig{
-			{ID: "default", PlatformURL: "http://10.30.144.41:32549"},
-		},
+		Clusters:              []ClusterConfig{},
 		DBPath:                "ray_monitor.db",
 		LogDir:                "logs",
 		SortBy:                "cpu",
@@ -148,7 +150,7 @@ func Load() (Config, error) {
 	_ = p
 
 	if len(cfg.Clusters) == 0 {
-		cfg.Clusters = Default().Clusters
+		// 不再回退到硬编码默认集群；用户通过 UI 添加集群。
 	}
 	if cfg.SortBy == "" {
 		cfg.SortBy = "cpu"
@@ -169,7 +171,7 @@ func migrateFromLegacy(b []byte) Config {
 	_ = json.Unmarshal(b, &cfg)
 
 	if len(cfg.Clusters) == 0 && leg.PlatformURL != "" {
-		cfg.Clusters = []ClusterConfig{{ID: "default", PlatformURL: leg.PlatformURL}}
+		cfg.Clusters = []ClusterConfig{{ID: "cluster-0", PlatformURL: leg.PlatformURL}}
 	} else {
 		for i, cl := range cfg.Clusters {
 			cfg.Clusters[i] = ClusterConfig{ID: cl.ID, PlatformURL: cl.PlatformURL}

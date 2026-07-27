@@ -52,6 +52,7 @@ type CollectorManager struct {
 	cfg        config.Config
 	detailLock *semaphoreLimiter // capacity=1，集群间 detail 排队
 	apiLog     *APILog           // 共享 ring buffer
+	lastCycleEnd map[string]int64 // 每个集群最后一次成功完成采集周期的时间戳
 	alerts     AlertChecker
 }
 
@@ -65,11 +66,12 @@ type collectorEntry struct {
 func NewManager(store Store, cfg config.Config) *CollectorManager {
 	apiLog := NewAPILog()
 	m := &CollectorManager{
-		collectors: map[string]*collectorEntry{},
-		store:      store,
-		cfg:        cfg,
-		detailLock: newSemaphoreLimiter(1), // 同一时间只有一个集群做 detail
-		apiLog:     apiLog,
+		collectors:   map[string]*collectorEntry{},
+		store:        store,
+		cfg:          cfg,
+		detailLock:   newSemaphoreLimiter(1), // 同一时间只有一个集群做 detail
+		apiLog:       apiLog,
+		lastCycleEnd: map[string]int64{},
 	}
 	for _, cl := range cfg.Clusters {
 		if cl.ID == "" || cl.PlatformURL == "" {
@@ -88,10 +90,11 @@ func (m *CollectorManager) optsForCluster(cl config.ClusterConfig) CollectorOpts
 		timeoutSec = DefaultTimeoutSec
 	}
 	return CollectorOpts{
-		ClusterID:   cl.ID,
-		PlatformURL: cl.PlatformURL,
-		TimeoutSec:  timeoutSec,
-		Concurrency: m.cfg.DetailNodeConcurrency,
+		ClusterID:    cl.ID,
+		ClusterName:  cl.DisplayName(),
+		PlatformURL:  cl.PlatformURL,
+		TimeoutSec:   timeoutSec,
+		Concurrency:  m.cfg.DetailNodeConcurrency,
 	}
 }
 
@@ -101,6 +104,8 @@ func (m *CollectorManager) newCollectorFor(cl config.ClusterConfig) *Collector {
 	coll := NewCollector(client, m.store, opts)
 	coll.SetDetailLock(m.detailLock)
 	coll.SetAPILog(m.apiLog)
+	collID := cl.ID
+	coll.SetOnCycleEnd(func() { m.MarkCycleEnd(collID) })
 	coll.SetOnAlert(m.dispatchAlert)
 	return coll
 }
@@ -269,12 +274,13 @@ func (m *CollectorManager) ApplyConfig(cfg config.Config) {
 	// SampleEvery 已删除。配置变更（集群增减、URL 变、并发/超时变）触发重建。
 	clusterChanged := len(old.Clusters) != len(cfg.Clusters)
 	if !clusterChanged {
-		oldByID := map[string]string{}
+		oldByID := map[string]config.ClusterConfig{}
 		for _, cl := range old.Clusters {
-			oldByID[cl.ID] = cl.PlatformURL
+			oldByID[cl.ID] = cl
 		}
 		for _, cl := range cfg.Clusters {
-			if oldByID[cl.ID] != cl.PlatformURL {
+			oc, ok := oldByID[cl.ID]
+			if !ok || oc.PlatformURL != cl.PlatformURL || oc.Name != cl.Name {
 				clusterChanged = true
 				break
 			}
@@ -477,12 +483,54 @@ func (m *CollectorManager) RecentAPILogs(limit int) []APILogEntry {
 	return m.apiLog.Recent(limit)
 }
 
+// ClusterDataAge 返回指定集群最后一次成功完成采集周期（summary+detail）的时间戳。
+// 前端用这个来显示"数据来自 Xs 前"——反映后端数据新旧度，不是前端 fetch 时刻。
+func (m *CollectorManager) ClusterDataAge(clusterID string) int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastCycleEnd[clusterID]
+}
+
+// MarkCycleEnd 由 Collector 在一轮采集结束时调用，记录数据更新时间。
+func (m *CollectorManager) MarkCycleEnd(clusterID string) {
+	m.mu.Lock()
+	m.lastCycleEnd[clusterID] = model.NowMs()
+	m.mu.Unlock()
+}
+
 // LogFrontendEvent 由前端调用，记录用户操作/页面刷新等事件。
 func (m *CollectorManager) LogFrontendEvent(cluster, phase, message string) {
 	if m.apiLog == nil {
 		return
 	}
 	m.apiLog.Append("frontend", cluster, phase, message)
+}
+
+// HasCluster 返回指定集群是否存在（配置已加载且有对应 collector）。
+func (m *CollectorManager) HasCluster(clusterID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.collectors[clusterID]
+	return ok
+}
+
+// ClusterDisplayName 返回集群的显示名（用户可编辑的 Name），找不到时返回 clusterID。
+func (m *CollectorManager) ClusterDisplayName(clusterID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if e, ok := m.collectors[clusterID]; ok {
+		return e.coll.opts.ClusterName
+	}
+	return clusterID
+}
+
+// LogQuery 记录一次前端数据查询的结果（成功/失败），用于接口日志页排查"页面无数据"问题。
+func (m *CollectorManager) LogQuery(clusterID, action, result string) {
+	if m.apiLog == nil {
+		return
+	}
+	name := m.ClusterDisplayName(clusterID)
+	m.apiLog.Append("frontend", name, "查询", action+": "+result)
 }
 
 func (m *CollectorManager) GlobalPerf() model.GlobalPerf {

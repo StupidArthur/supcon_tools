@@ -43,7 +43,8 @@ export default function App() {
   const [showControl, setShowControl] = useState(false)
   const [running, setRunning] = useState(false)
   const [globalAlertCount, setGlobalAlertCount] = useState(0)
-  const [lastRefreshed, setLastRefreshed] = useState<number>(0)
+  // 后端数据最新更新时间（毫秒），用于"数据来自 Xs 前"显示
+  const [dataUpdatedAt, setDataUpdatedAt] = useState<number>(0)
   const [now, setNow] = useState<number>(Date.now())
 
   // 按页数据（不再拉完整 Snapshot）
@@ -101,8 +102,12 @@ export default function App() {
         // alerts 页自己拉数据（AlertsView 内部有 5s 轮询）
       }
 
-      setLastRefreshed(Date.now())
-      api.logFrontendEvent(clusterID, '刷新', `页面刷新（当前页 ${tab}）`).catch(() => {})
+      // 拉后端真实的数据更新时间（不是前端 fetch 时间）
+      if (clusterID) {
+        api.getClusterDataAge(clusterID).then((age) => {
+          if (age > 0) setDataUpdatedAt(age)
+        }).catch(() => {})
+      }
     } catch {
       // Wails 未就绪
     }
@@ -137,23 +142,20 @@ export default function App() {
       Promise.all([api.getOverview(clusterID), api.getPerf(clusterID)]).then(([ov, pf]) => {
         setOverview(ov)
         setPerf(pf)
-        setLastRefreshed(Date.now())
-        api.logFrontendEvent(clusterID, '切页', `切换到 ${tab} 页`).catch(() => {})
+        api.getClusterDataAge(clusterID).then((age) => { if (age > 0) setDataUpdatedAt(age) }).catch(() => {})
       }).catch(() => {})
     } else if (tab === 'nodes') {
       Promise.all([api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ns, h]) => {
         setNodes(ns ?? [])
         setHealth(h)
-        setLastRefreshed(Date.now())
-        api.logFrontendEvent(clusterID, '切页', `切换到 ${tab} 页`).catch(() => {})
+        api.getClusterDataAge(clusterID).then((age) => { if (age > 0) setDataUpdatedAt(age) }).catch(() => {})
       }).catch(() => {})
     } else if (tab === 'workers') {
       Promise.all([api.getWorkers(clusterID), api.getNodes(clusterID), api.getHealth(clusterID)]).then(([ws, ns, h]) => {
         setWorkers(ws ?? [])
         setNodes(ns ?? [])
         setHealth(h)
-        setLastRefreshed(Date.now())
-        api.logFrontendEvent(clusterID, '切页', `切换到 ${tab} 页`).catch(() => {})
+        api.getClusterDataAge(clusterID).then((age) => { if (age > 0) setDataUpdatedAt(age) }).catch(() => {})
       }).catch(() => {})
     }
   }, [clusterID, tab])
@@ -165,8 +167,8 @@ export default function App() {
         ? '接口日志'
         : clusters.find((c) => c.id === clusterID)?.platformUrl?.replace(/^https?:\/\//, '') || clusterID
 
-  // "最后刷新 Xs 前" 文案
-  const elapsedSec = lastRefreshed > 0 ? Math.max(0, Math.floor((now - lastRefreshed) / 1000)) : null
+  // "数据来自 Xs 前" 文案——基于后端真实更新时间，不是前端 fetch 时刻
+  const dataAgeSec = dataUpdatedAt > 0 ? Math.max(0, Math.floor((now - dataUpdatedAt) / 1000)) : null
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
@@ -178,13 +180,6 @@ export default function App() {
         onSelect={(s) => {
           setSelection(s)
           setTab('overview')
-          if (s.kind === 'cluster') {
-            api.logFrontendEvent(s.id, '切集群', `切换到集群 ${s.id}`).catch(() => {})
-          } else if (s.kind === 'api-log') {
-            api.logFrontendEvent('', '页面', '打开接口日志页').catch(() => {})
-          } else if (s.kind === 'global-alerts') {
-            api.logFrontendEvent('', '页面', '打开全局报警页').catch(() => {})
-          }
         }}
       />
       <main className="flex flex-1 flex-col min-w-0">
@@ -215,8 +210,8 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              {elapsedSec !== null && (
-                <span className="py-2.5 text-xs text-muted-foreground">最后刷新 {elapsedSec}s 前</span>
+              {dataAgeSec !== null && (
+                <span className="py-2.5 text-xs text-muted-foreground">数据来自 {dataAgeSec}s 前</span>
               )}
             </div>
             <CollectionHealthNotice health={health} />

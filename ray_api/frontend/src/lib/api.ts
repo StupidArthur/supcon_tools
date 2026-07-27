@@ -11,7 +11,7 @@ import {
   ListAlerts, AckAlert, CountAlerts,
   OpenInFolder, GetLogPath, GetDBPath,
   ExportSnapshot, ExportSnapshotAndPush, TestWebhook,
-  GetRecentAPILogs, LogFrontendEvent,
+  GetRecentAPILogs, ClusterDataAge,
 } from '../../wailsjs/go/main/App'
 import type { model, config, collector, main } from '../../wailsjs/go/models'
 
@@ -47,6 +47,7 @@ export interface Thresholds {
 }
 export interface ClusterConfig {
   id: string
+  name: string
   platformUrl: string
 }
 export interface Config {
@@ -94,5 +95,5 @@ export const api = {
   exportSnapshotAndPush: ExportSnapshotAndPush as (nameBase: string, headers: string[], rows: string[][]) => Promise<PushSnapshotResult>,
   testWebhook: TestWebhook as (url: string) => Promise<TestWebhookResult>,
   getRecentAPILogs: GetRecentAPILogs as (limit: number) => Promise<APILogEntry[]>,
-  logFrontendEvent: LogFrontendEvent as (cluster: string, phase: string, message: string) => Promise<void>,
+  getClusterDataAge: ClusterDataAge as (clusterID: string) => Promise<number>,
 }

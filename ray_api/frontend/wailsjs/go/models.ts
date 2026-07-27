@@ -67,6 +67,7 @@ export namespace config {
 	
 	export class ClusterConfig {
 	    id: string;
+	    name: string;
 	    platformUrl: string;
 	
 	    static createFrom(source: any = {}) {
@@ -76,6 +77,7 @@ export namespace config {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.name = source["name"];
 	        this.platformUrl = source["platformUrl"];
 	    }
 	}
