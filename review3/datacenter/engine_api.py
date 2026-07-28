@@ -897,9 +897,11 @@ def _start_runtime_internal(req: RuntimeStartRequest) -> Dict[str, Any]:
             )
         b.runtime_state = RUNTIME_STATE_STARTING
 
-    # 检查 batch 互斥
-    with _batch_lock:
-        if _batch_running:
+    # 检查 batch 互斥（通过 BatchManager）
+    from datacenter.batch_manager import BatchManager
+    mgr = BatchManager.instance()
+    with mgr._lock:
+        if mgr._current_batch_id is not None:
             with b._state_lock:
                 b.runtime_state = RUNTIME_STATE_STOPPED
             raise HTTPException(status_code=409, detail="批量任务正在运行，禁止启动实时运行")
