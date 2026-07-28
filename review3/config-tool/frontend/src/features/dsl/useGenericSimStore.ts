@@ -8,7 +8,7 @@ import { create } from 'zustand'
 
 export type GenericSimStatus = 'idle' | 'running' | 'success' | 'failed'
 
-export const DEFAULT_OFFLINE_SIM_CYCLES = 2000
+export const DEFAULT_OFFLINE_SIM_CYCLES = 6000
 
 interface GenericSimState {
   status: GenericSimStatus

@@ -106,11 +106,12 @@ export function GenericSimPanel() {
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportSession, setExportSession] = useState<ExportSession | null>(null)
   const [cycleTime, setCycleTime] = useState(0.5)
-  const [sampleInterval, setSampleInterval] = useState(0)
+  const [sampleInterval, setSampleInterval] = useState(5)
   const [startTime, setStartTime] = useState(() => {
-    const now = new Date()
-    now.setSeconds(0, 0)
-    return now.toISOString().slice(0, 16)
+    const d = new Date()
+    d.setMonth(d.getMonth() - 1)
+    d.setSeconds(0, 0)
+    return d.toISOString().slice(0, 16)
   })
 
   // 轮询控制
