@@ -143,21 +143,21 @@ class BatchStore:
     # ------------------------------------------------------------------ #
 
     def read_rows(self, offset: int = 0, limit: int = 200) -> List[Dict[str, Any]]:
-        """读取行（用于预览）。当总数超过 limit 时自动均匀采样，覆盖全量范围。"""
+        """读取采样行（need_sample=1）。当总数超过 limit 时自动均匀采样，覆盖全量范围。"""
         conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         try:
             base_cols = "cycle_index, sim_time, need_sample"
             dyn_cols = ", ".join(_quote_ident(k) for k in self._columns) if self._columns else ""
             select_cols = f"{base_cols}{', ' + dyn_cols if dyn_cols else ''}"
 
-            total = conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0]
+            total = conn.execute("SELECT COUNT(*) FROM samples WHERE need_sample=1").fetchone()[0]
             if total > limit and offset == 0:
-                # 均匀采样：每隔 stride 行取一行，覆盖全量范围
                 stride = total // limit
-                sql = f"SELECT {select_cols} FROM samples WHERE cycle_index % ? = 0 ORDER BY cycle_index LIMIT ?"
-                rows = conn.execute(sql, (stride, limit)).fetchall()
+                sql = f"SELECT {select_cols} FROM samples WHERE need_sample=1 ORDER BY cycle_index"
+                all_rows = conn.execute(sql).fetchall()
+                rows = all_rows[::stride][:limit]
             else:
-                sql = f"SELECT {select_cols} FROM samples ORDER BY cycle_index LIMIT ? OFFSET ?"
+                sql = f"SELECT {select_cols} FROM samples WHERE need_sample=1 ORDER BY cycle_index LIMIT ? OFFSET ?"
                 rows = conn.execute(sql, (limit, offset)).fetchall()
 
             result = []

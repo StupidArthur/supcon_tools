@@ -54,8 +54,8 @@ export const systemApi = {
   status: () => SystemBinding.Status() as any,
   openYAMLFile: () => SystemBinding.OpenYAMLFile(),
   saveYAMLFile: () => SystemBinding.SaveYAMLFile(),
-  runBatch: (configPath: string, cycles: number) =>
-    SystemBinding.RunBatch(configPath, cycles),
+  runBatch: (configPath: string, cycles: number, cycleTime: number, sampleInterval: number, startTime: number) =>
+    SystemBinding.RunBatch(configPath, cycles, cycleTime, sampleInterval, startTime),
   getBatchStatus: (batchId: string) =>
     SystemBinding.GetBatchStatus(batchId),
   getBatchRows: (batchId: string, offset: number, limit: number) =>

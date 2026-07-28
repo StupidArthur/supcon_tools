@@ -1230,7 +1230,9 @@ def _init_batch_manager() -> None:
 class BatchRunRequest(BaseModel):
     configPath: str = Field(..., description="config YAML 绝对路径")
     cycles: int = Field(..., description="运行周期数")
-    cycleTime: Optional[float] = Field(default=None, description="覆盖周期时间")
+    cycleTime: Optional[float] = Field(default=None, description="控制周期（秒），覆盖 YAML clock.cycle_time")
+    sampleInterval: Optional[float] = Field(default=None, description="采样周期（秒），覆盖 YAML clock.sample_interval")
+    startTime: Optional[float] = Field(default=None, description="起始时间戳（秒），覆盖 YAML clock.start_time")
 
 
 @app.post("/api/batch/run")
@@ -1238,7 +1240,10 @@ def api_batch_run(req: BatchRunRequest) -> Dict[str, Any]:
     """异步启动 batch 仿真，立即返回 batchId。不再返回 rows。"""
     try:
         mgr = BatchManager.instance()
-        batch_id = mgr.start_batch(req.configPath, req.cycles, req.cycleTime)
+        batch_id = mgr.start_batch(
+            req.configPath, req.cycles, req.cycleTime,
+            req.sampleInterval, req.startTime,
+        )
         return {"ok": True, "batchId": batch_id, "status": "running"}
     except (BatchConflictError, BatchValidationError, BatchNotFoundError) as e:
         raise HTTPException(status_code=_batch_http_status(e), detail=str(e))

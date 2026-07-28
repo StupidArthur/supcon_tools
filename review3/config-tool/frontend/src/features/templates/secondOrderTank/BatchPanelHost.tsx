@@ -79,7 +79,7 @@ export function BatchPanelHost() {
 
     try {
       setProgress(0.1)
-      const result = await systemApi.runBatch(sourcePath, cycles)
+      const result = await systemApi.runBatch(sourcePath, cycles, 0, 0, 0)
       const bid = result.batchId
       if (!bid) throw new Error('后端未返回 batchId')
       setBatchId(bid)

@@ -1295,7 +1295,7 @@ func (b *SystemBinding) SaveExportFile(format string) (string, error) {
 
 // RunBatch 异步启动批量仿真，立即返回 batchId。
 // 不再等待全部仿真完成，不再接收完整 rows。
-func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, error) {
+func (b *SystemBinding) RunBatch(configPath string, cycles int, cycleTime float64, sampleInterval float64, startTime float64) (BatchResult, error) {
 	if cycles <= 0 {
 		return BatchResult{}, fmt.Errorf("周期数必须大于 0")
 	}
@@ -1311,6 +1311,15 @@ func (b *SystemBinding) RunBatch(configPath string, cycles int) (BatchResult, er
 	req := map[string]any{
 		"configPath": configPath,
 		"cycles":     cycles,
+	}
+	if cycleTime > 0 {
+		req["cycleTime"] = cycleTime
+	}
+	if sampleInterval > 0 {
+		req["sampleInterval"] = sampleInterval
+	}
+	if startTime > 0 {
+		req["startTime"] = startTime
 	}
 	ctx, cancel := context.WithTimeout(b.ctx, 15*time.Second)
 	defer cancel()

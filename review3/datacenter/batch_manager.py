@@ -96,6 +96,8 @@ class BatchManager:
         config_path: str,
         cycles: int,
         cycle_time: Optional[float] = None,
+        sample_interval: Optional[float] = None,
+        start_time: Optional[float] = None,
     ) -> str:
         """异步启动 batch，返回 batchId。
 
@@ -150,7 +152,7 @@ class BatchManager:
 
         self._thread = threading.Thread(
             target=self._run_batch_thread,
-            args=(batch_id, config_path, cycles, cycle_time),
+            args=(batch_id, config_path, cycles, cycle_time, sample_interval, start_time),
             daemon=True,
         )
         self._thread.start()
@@ -166,6 +168,8 @@ class BatchManager:
         config_path: str,
         cycles: int,
         cycle_time: Optional[float],
+        sample_interval: Optional[float],
+        start_time: Optional[float],
     ) -> None:
         """batch 执行线程。"""
         store = BatchStore(batch_id)
@@ -179,10 +183,14 @@ class BatchManager:
 
             parser = DSLParser()
             config = parser.parse_file(config_path)
-            engine = UnifiedEngine.from_program_config(config)
-            engine.clock.config.mode = ClockMode.GENERATOR
+            config.clock.mode = ClockMode.GENERATOR
             if cycle_time is not None and cycle_time > 0:
-                engine.clock.config.cycle_time = cycle_time
+                config.clock.cycle_time = cycle_time
+            if sample_interval is not None and sample_interval > 0:
+                config.clock.sample_interval = sample_interval
+            if start_time is not None and start_time > 0:
+                config.clock.start_time = start_time
+            engine = UnifiedEngine.from_program_config(config)
 
             # Engine 创建成功 → 状态改为 running → 删除旧 batch
             meta = store.load_meta() or {}

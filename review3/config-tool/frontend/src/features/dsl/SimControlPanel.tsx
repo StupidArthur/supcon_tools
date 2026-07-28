@@ -63,7 +63,7 @@ export function SimControlPanel() {
       }
 
       tempPath = await materializeYamlTextToTemp(yamlSnapshot)
-      const result = await systemApi.runBatch(tempPath, n)
+      const result = await systemApi.runBatch(tempPath, n, 0, 0, 0)
       const currentYamlHash = hashYamlText(useDslProjectStore.getState().yamlText)
       succeed({
         projectId,

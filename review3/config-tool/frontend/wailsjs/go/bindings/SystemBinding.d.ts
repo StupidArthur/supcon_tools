@@ -39,7 +39,7 @@ export function OpenYAMLFile():Promise<string>;
 
 export function ReadTextFile(arg1:string):Promise<string>;
 
-export function RunBatch(arg1:string,arg2:number):Promise<bindings.BatchResult>;
+export function RunBatch(arg1:string,arg2:number,arg3:number,arg4:number,arg5:number):Promise<bindings.BatchResult>;
 
 export function SaveCSVFile():Promise<string>;
 

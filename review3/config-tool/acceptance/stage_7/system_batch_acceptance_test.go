@@ -46,7 +46,7 @@ func TestAcceptanceRunBatchRejectsNonPositiveCycles(t *testing.T) {
 	b := bindings.NewSystemBinding()
 	work := t.TempDir()
 	wireFakeDataFactory(t, b, work)
-	_, err := b.RunBatch("x.yaml", 0)
+	_, err := b.RunBatch("x.yaml", 0, 0, 0, 0)
 	if err == nil {
 		t.Fatal("STAGE7-BATCH-001: cycles<=0 must error")
 	}
@@ -73,7 +73,7 @@ func TestAcceptanceUnicodePathsSupportedInAPI(t *testing.T) {
 	yamlPath := filepath.Join(unicodeDir, "方案.yaml")
 	csvPath := filepath.Join(unicodeDir, "结果.csv")
 	copyBuiltinYAML(t, yamlPath)
-	res, err := b.RunBatch(yamlPath, 5)
+	res, err := b.RunBatch(yamlPath, 5, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-BATCH-002: RunBatch with Unicode path failed: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestAcceptanceRunBatchViaService(t *testing.T) {
 	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
 	copyBuiltinYAML(t, yamlPath)
 
-	res, err := b.RunBatch(yamlPath, 10)
+	res, err := b.RunBatch(yamlPath, 10, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-BATCH-003: RunBatch via service failed: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestAcceptanceRunBatchViaService(t *testing.T) {
 func TestAcceptanceRunBatchFailsWithoutService(t *testing.T) {
 	// §六：无 service client 时返回明确错误
 	b := bindings.NewSystemBinding()
-	_, err := b.RunBatch("test.yaml", 10)
+	_, err := b.RunBatch("test.yaml", 10, 0, 0, 0)
 	if err == nil {
 		t.Fatal("STAGE7-BATCH-003: RunBatch without service must error")
 	}
@@ -133,11 +133,11 @@ func TestAcceptanceConcurrentRunBatchIsolation(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, errA = b.RunBatch(yamlA, 8)
+		_, errA = b.RunBatch(yamlA, 8, 0, 0, 0)
 	}()
 	go func() {
 		defer wg.Done()
-		_, errB = b.RunBatch(yamlB, 8)
+		_, errB = b.RunBatch(yamlB, 8, 0, 0, 0)
 	}()
 	wg.Wait()
 
@@ -170,11 +170,11 @@ func TestAcceptanceConcurrentExportBatchIsolation(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, errA = b.RunBatch(yamlA, 6)
+		_, errA = b.RunBatch(yamlA, 6, 0, 0, 0)
 	}()
 	go func() {
 		defer wg.Done()
-		_, errB = b.RunBatch(yamlB, 6)
+		_, errB = b.RunBatch(yamlB, 6, 0, 0, 0)
 	}()
 	wg.Wait()
 
@@ -197,7 +197,7 @@ func TestAcceptanceBatchResultHasColumnsAndRows(t *testing.T) {
 	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
 	copyBuiltinYAML(t, yamlPath)
 
-	res, err := b.RunBatch(yamlPath, 5)
+	res, err := b.RunBatch(yamlPath, 5, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-CSV-001: RunBatch failed: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestAcceptanceBatchCSVWritten(t *testing.T) {
 	csvPath := filepath.Join(t.TempDir(), "out.csv")
 	copyBuiltinYAML(t, yamlPath)
 
-	res, err := b.RunBatch(yamlPath, 5)
+	res, err := b.RunBatch(yamlPath, 5, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-CSV-003: RunBatch failed: %v", err)
 	}
@@ -255,12 +255,12 @@ func TestAcceptanceBatchRetryAfterFailure(t *testing.T) {
 	copyBuiltinYAML(t, yamlPath)
 
 	// 第一次执行成功
-	_, err := b.RunBatch(yamlPath, 5)
+	_, err := b.RunBatch(yamlPath, 5, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-BATCH-005: first RunBatch failed: %v", err)
 	}
 	// 第二次执行也应成功（batch 锁已释放）
-	_, err = b.RunBatch(yamlPath, 5)
+	_, err = b.RunBatch(yamlPath, 5, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-BATCH-005: second RunBatch after success failed: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestAcceptanceBatchDoesNotCreateSubprocess(t *testing.T) {
 	yamlPath := filepath.Join(t.TempDir(), "test.yaml")
 	copyBuiltinYAML(t, yamlPath)
 
-	_, err := b.RunBatch(yamlPath, 5)
+	_, err := b.RunBatch(yamlPath, 5, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("STAGE7-BATCH-006: RunBatch failed: %v", err)
 	}

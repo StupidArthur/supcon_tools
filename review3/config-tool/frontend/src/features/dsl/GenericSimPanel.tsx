@@ -105,6 +105,13 @@ export function GenericSimPanel() {
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportSession, setExportSession] = useState<ExportSession | null>(null)
+  const [cycleTime, setCycleTime] = useState(0.5)
+  const [sampleInterval, setSampleInterval] = useState(0)
+  const [startTime, setStartTime] = useState(() => {
+    const now = new Date()
+    now.setSeconds(0, 0)
+    return now.toISOString().slice(0, 16)
+  })
 
   // 轮询控制
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -208,7 +215,8 @@ export function GenericSimPanel() {
         useCanvasStore.getState().setDfPath(exe)
       }
       tempPath = await materializeYamlTextToTemp(yamlSnapshot)
-      const result = await systemApi.runBatch(tempPath, n)
+      const startTs = startTime ? new Date(startTime).getTime() / 1000 : 0
+      const result = await systemApi.runBatch(tempPath, n, cycleTime, sampleInterval, startTs)
       const batchId = result.batchId
       if (!batchId) {
         throw new Error('后端未返回 batchId')
@@ -372,6 +380,44 @@ export function GenericSimPanel() {
             onChange={(e) => setCycles(Number(e.target.value))}
             className="w-24 rounded-md border border-border bg-card px-2 py-1"
             data-testid="sim-cycles"
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">控制周期(s)</span>
+          <input
+            type="number"
+            min={0.001}
+            step={0.1}
+            value={cycleTime}
+            disabled={running}
+            onChange={(e) => setCycleTime(Number(e.target.value))}
+            className="w-20 rounded-md border border-border bg-card px-2 py-1"
+            data-testid="sim-cycle-time"
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">采样周期(s)</span>
+          <input
+            type="number"
+            min={0}
+            step={0.1}
+            value={sampleInterval}
+            disabled={running}
+            onChange={(e) => setSampleInterval(Number(e.target.value))}
+            className="w-20 rounded-md border border-border bg-card px-2 py-1"
+            placeholder="=控制周期"
+            data-testid="sim-sample-interval"
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">起始时间</span>
+          <input
+            type="datetime-local"
+            value={startTime}
+            disabled={running}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="rounded-md border border-border bg-card px-2 py-1"
+            data-testid="sim-start-time"
           />
         </label>
         <button

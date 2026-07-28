@@ -74,8 +74,8 @@ export function ReadTextFile(arg1) {
   return window['go']['bindings']['SystemBinding']['ReadTextFile'](arg1);
 }
 
-export function RunBatch(arg1, arg2) {
-  return window['go']['bindings']['SystemBinding']['RunBatch'](arg1, arg2);
+export function RunBatch(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['bindings']['SystemBinding']['RunBatch'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SaveCSVFile() {
