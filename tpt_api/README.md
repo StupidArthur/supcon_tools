@@ -19,6 +19,7 @@ Supcon SaaS / TPT 后台域的统一 HTTP 客户端（Go + Python）。**一份�
 | `users` | `/xpt-system/api/system-manager/umsAdmin/*` | TPT admin 用户管理 | `USER_MANAGER/internal/api/` + `USER_MANAGER/_preserve/api.py` |
 | `algorithms` | `/alg-manager-web-v2.2-tpt/api/algorithm/*` | 算法管理 | `alg_update/common/api.py` + `alg_update/alg_toolbox/algapi.go` |
 | `datahub` | `/ibd-data-hub-web-v2.2/api/{tag-info,tag-value,ds-info}/*` | tag + 历史值 + 数据源 | `data-hub-tool/common_api.py` |
+| `cubdata` | `/cubapi/cub-data/tag/*` | SupCon Cup 位号历史值查询 | SupCon Cup 评分页 |
 
 三家共享登录端点 `POST /tpt-admin/system-manager/umsAdmin/login`、Bearer token、HTTPS 多租户 cookie（`TptSaasUserTenantryId` / `tenant-id`）、鉴权码 `{A0230, A0201, A0202, A0203}` + 关键词表。
 
@@ -50,6 +51,7 @@ tpt_api/
     │   ├── users.py
     │   ├── algorithms.py
     │   ├── datahub.py   ← 含 ds-info 段（add/page/get_by_id/...）
+    │   ├── cubdata.py   ← SupCon Cup 位号历史值查询
     │   └── examples/    ← python -m tpt_api.examples.*
     └── tests/           ← pytest + httpx.MockTransport
 ```
@@ -137,6 +139,11 @@ matched = alg_mod.match_local_files(api, "resource")
 from tpt_api import datahub as dh_mod
 tags = dh_mod.get_all_tags_all_types(api)
 resp = dh_mod.import_tag_value_history(api, "demo.xlsx", ds_id=2)
+
+# cub-data（SupCon Cup）
+from tpt_api import cubdata as cub_mod
+data = cub_mod.read_history_data(api, ["FICQ_60402.PV", "LIC_60501.MV"],
+                                 "2026-08-03 18:54:27", "2026-08-03 20:54:27")
 ```
 
 ### 4.2 安装与测试
@@ -158,6 +165,7 @@ pytest tests/ -q
 - 方法名（tag）`add_tag` / `list_tags` / `get_all_tags` / `get_all_tags_all_types` / `delete_tags` / `delete_tags_by_name` / `delete_tags_physical` / `get_tag_by_name`
 - 方法名（历史值）`import_tag_value` / `import_tag_value_history` / `import_csv_tag_value_history` / `get_history_value` / `get_all_history`
 - 方法名（位号值）`collect_tag_value` / `get_rt_value` / `query_history_value` / `write_tag_values`
+- 方法名（cub-data）`read_history_data`
 
 **迁移路径**：把 `from common.api import AlgAPI` 改为 `from tpt_api import AlgAPI` 即可，业务代码不需要改。
 
@@ -268,7 +276,28 @@ dh_mod.add_tag(
 
 ---
 
-## 7. 与现有客户端的关系
+## 7. cub-data 端点全集
+
+SupCon Cup 评分页数据接口，GET + query params 风格（与 data-hub 的 POST + JSON body 不同）。
+
+| 方法 | HTTP | 端点 | 说明 |
+|---|---|---|---|
+| `read_history_data` | GET | `/cubapi/cub-data/tag/readHisData` | 批量读位号历史值（tagNames 逗号分隔） |
+
+```python
+from tpt_api import cubdata as cub_mod
+
+data = cub_mod.read_history_data(
+    api,
+    tag_names=["FICQ_60402.PV", "LIC_60501.MV", "TE60402.PV"],
+    start_time="2026-08-03 18:54:27",
+    end_time="2026-08-03 20:54:27",
+)
+```
+
+---
+
+## 8. 与现有客户端的关系
 
 | 现有位置 | 状态 | 迁移目标 |
 |---|---|---|
@@ -284,7 +313,7 @@ dh_mod.add_tag(
 
 ---
 
-## 8. 已知限制
+## 9. 已知限制
 
 - **HTTP 超时**：Go 默认 30s，Python 默认 30s（data-hub 场景建议显式 `AlgAPI(url, timeout=60.0)`，与父级 `common_api.py:25` 一致）。
 - **`doRequest` 不直接支持 query params**：Go 版 `ListAlgorithms` 把 `extend` 拼到 URL 上；Python 版用 `params=` 参数。
@@ -295,18 +324,18 @@ dh_mod.add_tag(
 
 ---
 
-## 9. 验证状态
+## 10. 验证状态
 
 | 语言 | 单元测试 | examples |
 |---|---|---|
 | Go | `cd tpt_api/go && go test -count=1 ./...` 全部通过 | `go run ./examples/{users,algorithms,datahub}/main.go` |
-| Python | `cd tpt_api/python && pytest tests/ -q` → **43 passed**（含 ds-info 5 + 算法 9 + tag/history 13 + 位号值 4 新增） | `python -m tpt_api.examples.{users,algorithms,datahub,verify_tag_value}` |
+| Python | `cd tpt_api/python && pytest tests/ -q` → **47 passed**（含 ds-info 5 + 算法 9 + tag/history 13 + 位号值 4 + cub-data 4 新增） | `python -m tpt_api.examples.{users,algorithms,datahub,verify_tag_value}` |
 
 > 位号值 4 接口（collect/getRT/query_history/write）已真实环境验证：get_rt_value 取真实值（写后 ~1s 反映）、query_history_value 7 天 4718 条、write_tag_values 回写经读回确认（`examples/verify_tag_value.py` `WRITE=1` 启用回写+读回）。
 
 ---
 
-## 10. 迁移示例
+## 11. 迁移示例
 
 ### Go: USER_MANAGER 的 client 调用
 
