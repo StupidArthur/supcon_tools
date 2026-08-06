@@ -13,6 +13,7 @@ from typing import Any
 
 from .client import AlgAPI
 from .types import (
+    AdminInfo,
     OperationStatus,
     PageResponse,
     User,
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 UserListByOrgPath = "/xpt-system/api/system-manager/umsAdmin/listByOrgId"
 UserCreatePath = "/xpt-system/api/system-manager/umsAdmin"
 UserResetPwdPath = "/xpt-system/api/system-manager/umsAdmin/resetPwd"
+AdminInfoPath = "/tpt-admin/system-manager/umsAdmin/info"
 
 # 默认模糊搜索字段。
 DEFAULT_SEARCH_FIELDS: tuple[str, ...] = ("nickName", "username", "phone", "email")
@@ -152,3 +154,12 @@ def reset_password(api: AlgAPI, user_id: int, new_password: str) -> OperationSta
     if isinstance(raw, dict):
         return OperationStatus(code=raw.get("code", ""), msg=raw.get("msg", ""))
     return OperationStatus()
+
+
+def get_admin_info(api: AlgAPI) -> AdminInfo:
+    """获取当前登录用户的详细信息（用户ID、昵称、菜单权限树、角色、组织等）。
+
+    GET /tpt-admin/system-manager/umsAdmin/info
+    """
+    raw = api._request("GET", AdminInfoPath, wrap=False)
+    return AdminInfo.from_dict(raw if isinstance(raw, dict) else {})

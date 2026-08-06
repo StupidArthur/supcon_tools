@@ -86,3 +86,11 @@ func (a *TptClientAdapter) ListGroupTagsRaw(groupID, tagName string, tagType, pa
 	}
 	return c.ListGroupTags(groupID, tagName, tagType, page, pageSize, "-createTime")
 }
+
+func (a *TptClientAdapter) ListTagsByDS(dsID int, page, pageSize int) (json.RawMessage, error) {
+	c := a.client()
+	if c == nil {
+		return nil, &PublicError{Message: "未登录", Kind: "auth"}
+	}
+	return c.ListTags(page, pageSize, map[string]any{"dsId": dsID})
+}

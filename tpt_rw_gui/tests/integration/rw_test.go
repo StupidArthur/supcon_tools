@@ -37,6 +37,8 @@ func fakeServer(t *testing.T) *httptest.Server {
 			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"records":[{"id":9,"dsName":"opcua-sim","dsTarUrl":"opc.tcp://h:18950","dsType":1,"dsSubType":4,"alive":true,"dsStatus":1}]},"isSuccess":true}`))
 		case strings.HasSuffix(r.URL.Path, "/tag-group/queryWithQuality"):
 			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"records":[{"id":1,"tagName":"demo.t_double","tagBaseName":"1_demo.t_double","dataType":11,"tagType":1,"dsId":9,"tagValue":3.14,"tagTime":"2026-07-13 12:00:00","quality":0,"groupName":"Root"}]},"isSuccess":true}`))
+		case strings.HasSuffix(r.URL.Path, "/tag-info/page"):
+			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":{"records":[{"id":1,"tagName":"demo.t_double","tagBaseName":"1_demo.t_double","dataType":11,"tagType":1,"dsId":9,"groupName":"Root"}],"total":1},"isSuccess":true}`))
 		case strings.HasSuffix(r.URL.Path, "/tag-value/getRTValue"):
 			_, _ = w.Write([]byte(`{"code":"00000","msg":"ok","content":[{"tagName":"demo.t_double","tagValue":7.5,"tagTime":"2026-07-13 12:00:01","appTime":"2026-07-13 12:00:01","quality":0,"dataType":11,"dsId":9,"isSuccess":true}],"isSuccess":true}`))
 		case strings.HasSuffix(r.URL.Path, "/tag-value/writeTagValues"):

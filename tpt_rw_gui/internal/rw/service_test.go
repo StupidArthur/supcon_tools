@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -91,6 +92,13 @@ func (f *fakeClient) ListGroupTagsRaw(_, _ string, _, _, _ int) (json.RawMessage
 	defer f.mu.Unlock()
 	f.calls++
 	return f.rawHist, nil
+}
+
+func (f *fakeClient) ListTagsByDS(_ int, _, _ int) (json.RawMessage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return json.RawMessage(`{"records":[]}`), nil
 }
 
 func TestListDataSources_MapsFields(t *testing.T) {
@@ -236,9 +244,10 @@ func TestListTags_NonEmptyKeyword_RoutesToQuery(t *testing.T) {
 // rawClient 让测试精度控制响应。
 type rawClient struct {
 	resp json.RawMessage
-	// 区分调用了哪个端点(空关键字→groupTags,非空→queryWithQuality)
+	// 区分调用了哪个端点(空关键字→groupTags,非空→queryWithQuality,DSID→ListTagsByDS)
 	groupTagsCalls int
 	queryCalls     int
+	pageCalls      int
 }
 
 func (c *rawClient) GetAllDsInfo() ([]tptapi.DsInfo, error) { return nil, nil }
@@ -261,6 +270,10 @@ func (c *rawClient) GetHistoryValueFromDB(_ []string, _ string, _ string,
 }
 func (c *rawClient) ListGroupTagsRaw(_, _ string, _, _, _ int) (json.RawMessage, error) {
 	c.groupTagsCalls++
+	return c.resp, nil
+}
+func (c *rawClient) ListTagsByDS(_ int, _, _ int) (json.RawMessage, error) {
+	c.pageCalls++
 	return c.resp, nil
 }
 
@@ -477,10 +490,11 @@ func TestMapError_OtherCode_NotData(t *testing.T) {
 	}
 }
 
-// 空关键字 + DSID 非 nil:应在客户端按 DSID 过滤,/tag-group/get 返回的 dsId 不匹配的位号丢弃。
+// 空关键字 + DSID 非 nil:走 /tag-info/page 按 dsId 平台侧过滤(不限 tagType),不再走 /tag-group/get。
+// 平台侧已按 dsId 过滤,响应里只放 dsId=9 的位号;无跨 DS 客户端过滤。
 func TestListTags_EmptyKeyword_FiltersByDSID(t *testing.T) {
 	fc := &rawClient{
-		resp: json.RawMessage(`{"tagInfoList":{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":1,"dsId":9,"dataTypeName":"","groupName":"Root"},{"id":11,"tagName":"b.y","tagBaseName":"1_b.y","dataType":11,"tagType":1,"dsId":20,"dataTypeName":"","groupName":"Root"}]}}`),
+		resp: json.RawMessage(`{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":1,"dsId":9,"dataTypeName":"","groupName":"Root"}],"total":1}`),
 	}
 	s := NewService(fc)
 	dsID := 9
@@ -488,14 +502,14 @@ func TestListTags_EmptyKeyword_FiltersByDSID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("empty-keyword DSID filter: %v", err)
 	}
-	if fc.groupTagsCalls != 1 {
-		t.Fatalf("want 1 groupTags call, got %d (queryCalls=%d)", fc.groupTagsCalls, fc.queryCalls)
+	if fc.pageCalls != 1 {
+		t.Fatalf("want 1 ListTagsByDS call, got %d (groupTags=%d, query=%d)", fc.pageCalls, fc.groupTagsCalls, fc.queryCalls)
 	}
-	if fc.queryCalls != 0 {
-		t.Fatalf("want 0 queryWithQuality calls when keyword empty, got %d", fc.queryCalls)
+	if fc.groupTagsCalls != 0 || fc.queryCalls != 0 {
+		t.Fatalf("want 0 groupTags/query calls when DSID set, got groupTags=%d query=%d", fc.groupTagsCalls, fc.queryCalls)
 	}
 	if len(got) != 1 {
-		t.Fatalf("want 1 tag after DSID filter, got %+v", got)
+		t.Fatalf("want 1 tag after DSID route, got %+v", got)
 	}
 	if got[0].Name != "a.x" {
 		t.Fatalf("want tagName=a.x, got %q", got[0].Name)
@@ -523,10 +537,10 @@ func TestListTags_EmptyKeyword_NilDSID_NoFilter(t *testing.T) {
 	}
 }
 
-// 空关键字 + DSID 命中 0 条:返回空切片,不是 nil,不是错误。
+// 空关键字 + DSID 命中 0 条:平台 /tag-info/page 按 dsId 过滤后返空 records,返回空切片。
 func TestListTags_EmptyKeyword_DSID_NoMatch_Empty(t *testing.T) {
 	fc := &rawClient{
-		resp: json.RawMessage(`{"tagInfoList":{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":1,"dsId":9,"dataTypeName":"","groupName":"Root"},{"id":11,"tagName":"b.y","tagBaseName":"1_b.y","dataType":11,"tagType":1,"dsId":20,"dataTypeName":"","groupName":"Root"}]}}`),
+		resp: json.RawMessage(`{"records":[],"total":0}`),
 	}
 	s := NewService(fc)
 	dsID := 999
@@ -534,8 +548,64 @@ func TestListTags_EmptyKeyword_DSID_NoMatch_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("empty-keyword DSID no-match: %v", err)
 	}
+	if fc.pageCalls != 1 {
+		t.Fatalf("want 1 ListTagsByDS call, got %d", fc.pageCalls)
+	}
 	if len(got) != 0 {
 		t.Fatalf("want 0 tags (no match), got %+v", got)
+	}
+	if got == nil {
+		t.Fatalf("want non-nil empty slice")
+	}
+}
+
+// DSID 非空:走 /tag-info/page(不限 tagType),翻页拉全部,keyword 客户端过滤。
+// 验证不只查"一次位号"(响应里包含 tagType=0 和 tagType=4 两条,模拟实时位号/虚位号)。
+func TestListTags_WithDSID_RoutesToTagPage(t *testing.T) {
+	fc := &rawClient{
+		resp: json.RawMessage(`{"records":[{"id":10,"tagName":"a.x","tagBaseName":"1_a.x","dataType":11,"tagType":0,"dsId":9,"groupName":"Root"},{"id":11,"tagName":"a.y","tagBaseName":"1_a.y","dataType":11,"tagType":4,"dsId":9,"groupName":"Root"}],"total":2}`),
+	}
+	s := NewService(fc)
+	dsID := 9
+	got, err := s.ListTags(context.Background(), TagListQuery{Keyword: "", DSID: &dsID})
+	if err != nil {
+		t.Fatalf("ListTags DSID: %v", err)
+	}
+	if fc.pageCalls != 1 {
+		t.Fatalf("want 1 ListTagsByDS call, got %d (groupTags=%d, query=%d)", fc.pageCalls, fc.groupTagsCalls, fc.queryCalls)
+	}
+	if fc.groupTagsCalls != 0 || fc.queryCalls != 0 {
+		t.Fatalf("want 0 groupTags/query calls when DSID set, got groupTags=%d query=%d", fc.groupTagsCalls, fc.queryCalls)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 tags, got %+v", got)
+	}
+	if got[0].Name != "a.x" || got[1].Name != "a.y" {
+		t.Fatalf("want a.x, a.y, got %+v", got)
+	}
+}
+
+// DSID 非空 + keyword:翻页拉全部后客户端 strings.Contains 过滤。
+func TestListTags_WithDSID_KeywordClientFilter(t *testing.T) {
+	fc := &rawClient{
+		resp: json.RawMessage(`{"records":[{"id":10,"tagName":"LIC8398.PV","tagBaseName":"1_LIC8398.PV","dataType":11,"dsId":9},{"id":11,"tagName":"LIC8399.PV","tagBaseName":"1_LIC8399.PV","dataType":11,"dsId":9},{"id":12,"tagName":"FI1201.PV","tagBaseName":"1_FI1201.PV","dataType":11,"dsId":9}],"total":3}`),
+	}
+	s := NewService(fc)
+	dsID := 9
+	got, err := s.ListTags(context.Background(), TagListQuery{Keyword: "LIC83", DSID: &dsID})
+	if err != nil {
+		t.Fatalf("ListTags DSID+keyword: %v", err)
+	}
+	if fc.pageCalls != 1 {
+		t.Fatalf("want 1 ListTagsByDS call, got %d", fc.pageCalls)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 tags matching LIC83, got %d: %+v", len(got), got)
+	}
+	for _, tg := range got {
+		if !strings.Contains(tg.Name, "LIC83") {
+			t.Fatalf("unexpected tag %q", tg.Name)
+		}
 	}
 }
 

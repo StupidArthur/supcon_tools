@@ -32,8 +32,8 @@ pyinstaller --onefile --console --name ua_mocker main.py
 # 产物 dist/ua_mocker.exe 复制到 gui/build/bin/ 与 GUI exe 并排
 ```
 
-> 注意：仓库现有的 `main.spec` / `ua_mocker.spec` 为 `console=False`（windowed），
-> 该模式下 `sys.stdout=None`，服务启动即因 print 崩溃，**不可用于本 GUI 的服务端打包**。
+> `main.spec` / `ua_mocker.spec` 已配置 `console=True`；GUI 会以 `CREATE_NO_WINDOW`
+> 拉起服务端，因此从 GUI 启动时不会弹出黑色控制台窗口。
 
 交付包 = `ua-types-gui.exe` + `ua_mocker.exe`（同目录），双击 GUI exe 即可。
 终端用户无需安装 Python。

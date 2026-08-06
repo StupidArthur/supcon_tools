@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yzc/tpt_api"
@@ -46,23 +47,37 @@ func (s *Service) ListDataSources(ctx context.Context) ([]DataSource, error) {
 }
 
 // ListTags 经 queryWithQuality 拉位号(含实时值)。
-// 当 Keyword 为空时改走 /tag-group/get(endpoint ListGroupTags),
+//
+// 路由:
+//   - 当 q.DSID != nil 时:走 /tag-info/page(不限 tagType)按 dsId 平台侧过滤,翻页拉全部;
+//     与 cmd/probe list 模式同端点,避免 /tag-group/get 把 tagType 强制改为 1(一次位号)
+//     导致实时位号/虚位号等其它类型查不到。keyword 客户端 strings.Contains 兜底过滤。
+//   - 当 q.DSID == nil 时:保留原双路由 —— Keyword 空走 /tag-group/get (ListGroupTagsRaw),
+//     非空走 queryWithQuality。
+//
+// 当 Keyword 为空且 DSID 为 nil 时改走 /tag-group/get(endpoint ListGroupTags),
 //
 //	响应结构与 queryWithQuality 不同(tagInfoList.records[]),由 parseGroupTagsResponse 单独解。
+//
 // 选这条退路是因为:实平台 queryWithQuality 在 tagName="" 路径上不返 records
 // (或返 pageinfo dict),导致用户不输入任何关键字就显示 "已加载 0 条"。
 //
 // 空关键字路径下,/tag-group/get 端点不接受 DSID 参数,平台会返回所有数据源的位号。
-// 当 q.DSID 非 nil 时,service 层在客户端按 tag.DSID == *q.DSID 过滤,避免用户选到
-// 不属于当前选中数据源的位号。
+// 当 q.DSID 非 nil 时(上面已分支到 listTagsByDS),不再走这条路,也不再有客户端跨 DS 过滤。
 //
-// 注意:空关键字路径下 q.TagType=0 会被底层 tpt_api.ListGroupTags 改写为 TagTypeOnce
+// 注意:DSID==nil 的空关键字路径下 q.TagType=0 会被底层 tpt_api.ListGroupTags 改写为 TagTypeOnce
 // (只查一次位号),与 QueryTagsWithQuality 路径的"0=不过滤"语义不同。这是共享代码层
 // 行为,本任务不修。
 func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
 	if ctx.Err() != nil {
 		return nil, &PublicError{Message: "操作已取消", Kind: "input"}
 	}
+	// DSID 非空:走 /tag-info/page 按 dsId 平台侧过滤(不限 tagType),与 probe list 一致。
+	// 避免空关键字走 /tag-group/get 时 tagType 被强制改为 1(一次位号)导致其它类型位号查不到。
+	if q.DSID != nil {
+		return s.listTagsByDS(ctx, *q.DSID, q.Keyword)
+	}
+	// DSID == nil:保留原 /tag-group/get + queryWithQuality 逻辑(向后兼容)
 	if q.GroupID == "" {
 		q.GroupID = tptapi.GroupRoot
 	}
@@ -85,15 +100,6 @@ func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
 		if err != nil {
 			return nil, err
 		}
-		if q.DSID != nil {
-			filtered := make([]Tag, 0, len(tags))
-			for _, t := range tags {
-				if t.DSID == *q.DSID {
-					filtered = append(filtered, t)
-				}
-			}
-			tags = filtered
-		}
 		return tags, nil
 	}
 	raw, err := s.client.QueryTagsWithQuality(q.DSID, q.GroupID, q.Keyword, "",
@@ -102,6 +108,49 @@ func (s *Service) ListTags(ctx context.Context, q TagListQuery) ([]Tag, error) {
 		return nil, MapError(err)
 	}
 	return parseQueryWithQualityResponse(raw)
+}
+
+// listTagsByDS 走 /tag-info/page 按 dsId 翻页拉全部位号(不限 tagType),keyword 客户端兜底过滤。
+// 与 cmd/probe listTagsInDS 同端点(/tag-info/page),平台侧按 dsId 过滤,不限制 tagType,
+// 避免 /tag-group/get 把 tagType 强制为 1(一次位号)导致实时位号/虚位号等查不到。
+func (s *Service) listTagsByDS(ctx context.Context, dsID int, keyword string) ([]Tag, error) {
+	const pageSize = 500
+	var all []Tag
+	page := 1
+	for {
+		if ctx.Err() != nil {
+			return nil, &PublicError{Message: "操作已取消", Kind: "input"}
+		}
+		raw, err := s.client.ListTagsByDS(dsID, page, pageSize)
+		if err != nil {
+			return nil, MapError(err)
+		}
+		// /tag-info/page 响应 {records:[...], total, ...};复用 parseQueryWithQualityResponse
+		// (它已支持 records/data/list/裸数组四种形态)。
+		tags, err := parseQueryWithQualityResponse(raw)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, tags...)
+		if len(tags) < pageSize {
+			break
+		}
+		page++
+	}
+	// keyword 客户端兜底过滤(平台 /tag-info/page 的 tagName 过滤语义不确定)
+	if keyword != "" {
+		filtered := make([]Tag, 0, len(all))
+		for _, t := range all {
+			if strings.Contains(t.Name, keyword) {
+				filtered = append(filtered, t)
+			}
+		}
+		all = filtered
+	}
+	if all == nil {
+		all = []Tag{}
+	}
+	return all, nil
 }
 
 // parseGroupTagsResponse 解 /tag-group/get 的响应。

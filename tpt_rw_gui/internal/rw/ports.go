@@ -26,8 +26,13 @@ type ClientPort interface {
 	// 走 /tag-group/get (GroupID="0"),响应结构是 tagInfoList.records[],与 queryWithQuality 不同。
 	// GroupID="0"=根分组。可在弹窗 input 不输入任何关键字时拉取整组下所有位号。
 	// 注意:/tag-group/get 不支持 DS 过滤,platform 会返回所有数据源的位号。
-	// service 层在 q.DSID 非 nil 时,在客户端按 tag.DSID 过滤(参见 Service.ListTags)。
+	// 当 q.DSID != nil 时,service 层优先走 ListTagsByDS(平台侧按 dsId 过滤)而不是这条路,
+	// 避免 /tag-group/get 把 tagType 强制改为 1(一次位号)导致其它类型位号查不到。
 	ListGroupTagsRaw(groupID, tagName string, tagType, page, pageSize int) (json.RawMessage, error)
+
+	// ListTagsByDS 走 /tag-info/page 按 dsId 平台侧过滤位号(不限 tagType,与 probe list 同端点)。
+	// 单页请求;响应 {records:[...]} 形态。service 层负责翻页循环。
+	ListTagsByDS(dsID int, page, pageSize int) (json.RawMessage, error)
 }
 
 // TagListQuery 业务层传给 QueryTagsWithQuality 的查询条件。

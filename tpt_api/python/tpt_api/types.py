@@ -91,6 +91,48 @@ class LoginResponse:
 
 
 @dataclass
+class AdminInfo:
+    """umsAdmin/info 返回的当前登录用户信息。"""
+    id: int = 0
+    code: str = ""
+    username: str = ""
+    nickName: str = ""
+    type: int = 0
+    gender: int = 0
+    icon: str = ""
+    menus: list[Any] = field(default_factory=list)
+    roles: list[dict[str, Any]] = field(default_factory=list)
+    umsOrganization: dict[str, Any] = field(default_factory=dict)
+    additional: str = ""
+
+    @property
+    def additional_dict(self) -> dict[str, Any]:
+        import json as _json
+        if not self.additional:
+            return {}
+        try:
+            return _json.loads(self.additional)
+        except Exception:
+            return {}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "AdminInfo":
+        return cls(
+            id=int(d.get("id", 0) or 0),
+            code=d.get("code", "") or "",
+            username=d.get("username", "") or "",
+            nickName=d.get("nickName", "") or "",
+            type=int(d.get("type", 0) or 0),
+            gender=int(d.get("gender", 0) or 0),
+            icon=d.get("icon", "") or "",
+            menus=list(d.get("menus") or []),
+            roles=list(d.get("roles") or []),
+            umsOrganization=dict(d.get("umsOrganization") or {}),
+            additional=d.get("additional", "") or "",
+        )
+
+
+@dataclass
 class OperationStatus:
     """create / resetPwd / deleteTags 等写操作的状态返回（无 content）。"""
     code: str = ""

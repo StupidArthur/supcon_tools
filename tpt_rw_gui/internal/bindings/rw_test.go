@@ -86,6 +86,9 @@ func (f *fakeAdapter) GetHistoryValueFromDB(tagNames []string, begTime, endTime 
 func (f *fakeAdapter) ListGroupTagsRaw(_, _ string, _, _, _ int) (json.RawMessage, error) {
 	return f.p.GetHistoryValueFromDB(nil, "", "", false, false, 0, 0, "") // 占位;binding test 不经此路径
 }
+func (f *fakeAdapter) ListTagsByDS(_ int, _, _ int) (json.RawMessage, error) {
+	return json.RawMessage(`{"records":[]}`), nil // 占位;binding test ListTags 不传 DSID,不经此路径
+}
 
 func newBinding(t *testing.T) (*RWBinding, *stubPort) {
 	t.Helper()
@@ -258,6 +261,9 @@ func (a *nonexistentAdapter) GetHistoryValueFromDB(tagNames []string, begTime, e
 	return a.stub.GetHistoryValueFromDB(tagNames, begTime, endTime, isSource, numberToString, page, pageSize, sort)
 }
 func (a *nonexistentAdapter) ListGroupTagsRaw(_ string, _ string, _, _, _ int) (json.RawMessage, error) {
+	return nil, nil
+}
+func (a *nonexistentAdapter) ListTagsByDS(_ int, _, _ int) (json.RawMessage, error) {
 	return nil, nil
 }
 
