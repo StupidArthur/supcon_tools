@@ -62,6 +62,9 @@ from .cubdata import (
     update_eval_config,
     get_auth_info,
     sync_auth_users,
+    get_ranking_all,
+    get_tenant_detail,
+    cleanup_tenant,
 )
 
 __version__ = "0.1.0"
@@ -108,4 +111,7 @@ __all__ = [
     "update_eval_config",
     "get_auth_info",
     "sync_auth_users",
+    "get_ranking_all",
+    "get_tenant_detail",
+    "cleanup_tenant",
 ]

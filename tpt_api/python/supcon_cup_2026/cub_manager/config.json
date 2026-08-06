@@ -1,0 +1,419 @@
+{
+  "base_url": "https://tpt.supcon.com",
+  "admin": {
+    "username": "admin",
+    "password": "tpt@2026"
+  },
+  "environments": [
+    {
+      "name": "中控杯测试租户一",
+      "tenant_id": "AWSWJ2UW",
+      "username": "13854389823",
+      "password": "AWSWJ2UW",
+      "type": "测试",
+      "zkjs": "zkjs01",
+      "cloud_id": "D0026070423297001",
+      "ipv4": "115.239.223.239"
+    },
+    {
+      "name": "中控杯测试租户二",
+      "tenant_id": "ARQBZM8H",
+      "username": "13854389823",
+      "password": "ARQBZM8H",
+      "type": "测试",
+      "zkjs": "zkjs02",
+      "cloud_id": "D0026080523483808",
+      "ipv4": "125.122.106.80"
+    },
+    {
+      "name": "夜雨生烦",
+      "tenant_id": "AQW7K69J",
+      "username": "15204681242",
+      "password": "AQW7K69J",
+      "type": "选手",
+      "zkjs": "zkjs03",
+      "cloud_id": "D0026080523483810",
+      "ipv4": "125.122.106.154"
+    },
+    {
+      "name": "中控数云",
+      "tenant_id": "A23F7463",
+      "username": "13416246806",
+      "password": "A23F7463",
+      "type": "选手",
+      "zkjs": "zkjs04",
+      "cloud_id": "D0026080523483811",
+      "ipv4": "125.122.106.77"
+    },
+    {
+      "name": "寻优者",
+      "tenant_id": "ALCCT554",
+      "username": "18221076084",
+      "password": "ALCCT554",
+      "type": "选手",
+      "zkjs": "zkjs05",
+      "cloud_id": "D0026080523483805",
+      "ipv4": "125.122.106.85"
+    },
+    {
+      "name": "Digighetto",
+      "tenant_id": "AEUFP7QF",
+      "username": "15531965135",
+      "password": "AEUFP7QF",
+      "type": "选手",
+      "zkjs": "zkjs06",
+      "cloud_id": "D0026080523483814",
+      "ipv4": "125.122.106.67"
+    },
+    {
+      "name": "We are falcons",
+      "tenant_id": "AJBZ6N8G",
+      "username": "13309014643",
+      "password": "AJBZ6N8G",
+      "type": "选手",
+      "zkjs": "zkjs07",
+      "cloud_id": "D0026080523483807",
+      "ipv4": "125.122.106.4"
+    },
+    {
+      "name": "别急我在thinking",
+      "tenant_id": "AKWQKE7M",
+      "username": "13271996355",
+      "password": "AKWQKE7M",
+      "type": "选手",
+      "zkjs": "zkjs08",
+      "cloud_id": "D0026080523483825",
+      "ipv4": "125.122.159.177"
+    },
+    {
+      "name": "中控时序模型队",
+      "tenant_id": "APC4UT9K",
+      "username": "13708069058",
+      "password": "APC4UT9K",
+      "type": "选手",
+      "zkjs": "zkjs09",
+      "cloud_id": "D0026080523483806",
+      "ipv4": "125.122.106.201"
+    },
+    {
+      "name": "石大智控队",
+      "tenant_id": "A3A63ZVH",
+      "username": "15544956350",
+      "password": "A3A63ZVH",
+      "type": "选手",
+      "zkjs": "zkjs10",
+      "cloud_id": "D0026080523483817",
+      "ipv4": "115.239.223.172"
+    },
+    {
+      "name": "IOT小分队",
+      "tenant_id": "AYML4RRX",
+      "username": "17852835835",
+      "password": "AYML4RRX",
+      "type": "选手",
+      "zkjs": "zkjs11",
+      "cloud_id": "D0026080523483836",
+      "ipv4": "125.122.107.114"
+    },
+    {
+      "name": "NTAIRS",
+      "tenant_id": "AXUQ95WB",
+      "username": "15524401187",
+      "password": "AXUQ95WB",
+      "type": "选手",
+      "zkjs": "zkjs12",
+      "cloud_id": "D0026080523483819",
+      "ipv4": "115.239.223.154"
+    },
+    {
+      "name": "潜岳巡天",
+      "tenant_id": "ACVKM7G4",
+      "username": "15726351068",
+      "password": "ACVKM7G4",
+      "type": "选手",
+      "zkjs": "zkjs13",
+      "cloud_id": "D0026080523483816",
+      "ipv4": "115.239.223.163"
+    },
+    {
+      "name": "主旋律",
+      "tenant_id": "AQ5PKWQX",
+      "username": "18836413282",
+      "password": "AQ5PKWQX",
+      "type": "选手",
+      "zkjs": "zkjs14",
+      "cloud_id": "D0026080523483822",
+      "ipv4": "115.239.223.201"
+    },
+    {
+      "name": "HK233",
+      "tenant_id": "ATZWPM46",
+      "username": "15595158878",
+      "password": "ATZWPM46",
+      "type": "选手",
+      "zkjs": "zkjs15",
+      "cloud_id": "D0026080523483827",
+      "ipv4": "125.122.159.246"
+    },
+    {
+      "name": "方寸知遥",
+      "tenant_id": "A8FKJRQE",
+      "username": "15802790704",
+      "password": "A8FKJRQE",
+      "type": "选手",
+      "zkjs": "zkjs16",
+      "cloud_id": "D0026080523483820",
+      "ipv4": "125.122.107.95"
+    },
+    {
+      "name": "长庚队",
+      "tenant_id": "A6FTBZWE",
+      "username": "13865612711",
+      "password": "A6FTBZWE",
+      "type": "选手",
+      "zkjs": "zkjs17",
+      "cloud_id": "D0026080523483839",
+      "ipv4": "125.122.159.243"
+    },
+    {
+      "name": "编译成功队",
+      "tenant_id": "AZVH6RJK",
+      "username": "13690512349",
+      "password": "AZVH6RJK",
+      "type": "选手",
+      "zkjs": "zkjs18",
+      "cloud_id": "D0026080523483818",
+      "ipv4": "125.122.107.124"
+    },
+    {
+      "name": "精工驭控",
+      "tenant_id": "AE52WQ5Z",
+      "username": "15010663256",
+      "password": "AE52WQ5Z",
+      "type": "选手",
+      "zkjs": "zkjs19",
+      "cloud_id": "D0026080523483831",
+      "ipv4": "125.122.106.104"
+    },
+    {
+      "name": "时间长合",
+      "tenant_id": "A4H8JQJX",
+      "username": "15325959466",
+      "password": "A4H8JQJX",
+      "type": "选手",
+      "zkjs": "zkjs20",
+      "cloud_id": "D0026080523483834",
+      "ipv4": "125.122.107.15"
+    },
+    {
+      "name": "德胜队",
+      "tenant_id": "ASMP3H8V",
+      "username": "18502305259",
+      "password": "ASMP3H8V",
+      "type": "选手",
+      "zkjs": "zkjs21",
+      "cloud_id": "D0026080523483840",
+      "ipv4": "115.239.223.144"
+    },
+    {
+      "name": "从容应队",
+      "tenant_id": "A28JXAZS",
+      "username": "19931086195",
+      "password": "A28JXAZS",
+      "type": "选手",
+      "zkjs": "zkjs22",
+      "cloud_id": "D0026080523483812",
+      "ipv4": "125.122.106.125"
+    },
+    {
+      "name": "嗯对对队",
+      "tenant_id": "A7MQKRF6",
+      "username": "18266576985",
+      "password": "A7MQKRF6",
+      "type": "选手",
+      "zkjs": "zkjs23",
+      "cloud_id": "D0026080523483823",
+      "ipv4": "125.122.107.71"
+    },
+    {
+      "name": "小章鱼",
+      "tenant_id": "A3PT2LEM",
+      "username": "13973699837",
+      "password": "A3PT2LEM",
+      "type": "选手",
+      "zkjs": "zkjs24",
+      "cloud_id": "D0026080523483821",
+      "ipv4": "125.122.107.5"
+    },
+    {
+      "name": "scu-zk",
+      "tenant_id": "AK7YVH7U",
+      "username": "15982275510",
+      "password": "AK7YVH7U",
+      "type": "选手",
+      "zkjs": "zkjs25",
+      "cloud_id": "D0026080523483826",
+      "ipv4": "125.122.159.219"
+    },
+    {
+      "name": "哈哈哈哈",
+      "tenant_id": "ABAB58LP",
+      "username": "13862407987",
+      "password": "ABAB58LP",
+      "type": "选手",
+      "zkjs": "zkjs26",
+      "cloud_id": "D0026080523483809",
+      "ipv4": "125.122.106.124"
+    },
+    {
+      "name": "工业智能技术",
+      "tenant_id": "ADGRMW87",
+      "username": "18845638120",
+      "password": "ADGRMW87",
+      "type": "选手",
+      "zkjs": "zkjs27",
+      "cloud_id": "D0026080523483828",
+      "ipv4": "125.122.159.191"
+    },
+    {
+      "name": "济E",
+      "tenant_id": "ATBM5VT7",
+      "username": "17354180464",
+      "password": "ATBM5VT7",
+      "type": "选手",
+      "zkjs": "zkjs28",
+      "cloud_id": "D0026080523483844",
+      "ipv4": "125.122.107.54"
+    },
+    {
+      "name": "时序智控队",
+      "tenant_id": "A7P5KFAH",
+      "username": "18765475392",
+      "password": "A7P5KFAH",
+      "type": "选手",
+      "zkjs": "zkjs29",
+      "cloud_id": "D0026080523483833",
+      "ipv4": "125.122.106.248"
+    },
+    {
+      "name": "深深的",
+      "tenant_id": "AT7XJ56Q",
+      "username": "18201266983",
+      "password": "AT7XJ56Q",
+      "type": "选手",
+      "zkjs": "zkjs30",
+      "cloud_id": "D0026080523483838",
+      "ipv4": "125.122.107.77"
+    },
+    {
+      "name": "中控老爹给我1w",
+      "tenant_id": "AGZE887R",
+      "username": "13235951376",
+      "password": "AGZE887R",
+      "type": "选手",
+      "zkjs": "zkjs31",
+      "cloud_id": "D0026080523483830",
+      "ipv4": "125.122.106.19"
+    },
+    {
+      "name": "交我造",
+      "tenant_id": "A3LQPGC2",
+      "username": "15368493547",
+      "password": "A3LQPGC2",
+      "type": "选手",
+      "zkjs": "zkjs32",
+      "cloud_id": "D0026080523483835",
+      "ipv4": "125.122.159.165"
+    },
+    {
+      "name": "猪是念来过倒",
+      "tenant_id": "ADLB87ER",
+      "username": "18291188642",
+      "password": "ADLB87ER",
+      "type": "选手",
+      "zkjs": "zkjs33",
+      "cloud_id": "D0026080523483824",
+      "ipv4": "125.122.159.146"
+    },
+    {
+      "name": "智世之材",
+      "tenant_id": "AYBRLNX9",
+      "username": "13591399033",
+      "password": "AYBRLNX9",
+      "type": "选手",
+      "zkjs": "zkjs34",
+      "cloud_id": "D0026080523483829",
+      "ipv4": "125.122.106.174"
+    },
+    {
+      "name": "序造者",
+      "tenant_id": "A46XR299",
+      "username": "18750771346",
+      "password": "A46XR299",
+      "type": "选手",
+      "zkjs": "zkjs35",
+      "cloud_id": "D0026080523483832",
+      "ipv4": "125.122.106.148"
+    },
+    {
+      "name": "湖来湖往",
+      "tenant_id": "AX4EFUHZ",
+      "username": "15226112251",
+      "password": "AX4EFUHZ",
+      "type": "选手",
+      "zkjs": "zkjs36",
+      "cloud_id": "D0026080523483837",
+      "ipv4": "115.239.223.228"
+    },
+    {
+      "name": "未来已至",
+      "tenant_id": "AB88BMPL",
+      "username": "13627176345",
+      "password": "AB88BMPL",
+      "type": "选手",
+      "zkjs": "zkjs37",
+      "cloud_id": "D0026080523483813",
+      "ipv4": "125.122.106.183"
+    },
+    {
+      "name": "莫向外求",
+      "tenant_id": "AE7HXT6P",
+      "username": "19700777011",
+      "password": "AE7HXT6P",
+      "type": "选手",
+      "zkjs": "zkjs38",
+      "cloud_id": "D0026080523483841",
+      "ipv4": "125.122.159.205"
+    },
+    {
+      "name": "汪汪大队",
+      "tenant_id": "AS8435JQ",
+      "username": "19565824721",
+      "password": "AS8435JQ",
+      "type": "选手",
+      "zkjs": "zkjs39",
+      "cloud_id": "D0026080523483842",
+      "ipv4": "125.122.159.214"
+    },
+    {
+      "name": "铃音",
+      "tenant_id": "A26K9MPP",
+      "username": "18028986804",
+      "password": "A26K9MPP",
+      "type": "选手",
+      "zkjs": "zkjs40",
+      "cloud_id": "D0026080523483815",
+      "ipv4": "115.239.223.149"
+    },
+    {
+      "name": "数据脉搏",
+      "tenant_id": "AKXME87U",
+      "username": "18526778313",
+      "password": "AKXME87U",
+      "type": "选手",
+      "zkjs": "zkjs41",
+      "cloud_id": "D0026080523483843",
+      "ipv4": "115.239.223.155"
+    }
+  ]
+}

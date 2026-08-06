@@ -19,14 +19,21 @@
    - GET  /cub-data/file/template           下载模板文件
    - POST /cub-data/file/upload             上传软测量预测数据文件
 
-4. 评估配置 (Eval Config Controller)
+4. 成绩排行榜 (Ranking Controller)
+   - GET  /cub-data/ranking/all             查询所有租户成绩排名
+
+5. 评估配置 (Eval Config Controller)
    - GET  /cub-data/eval-config             查询评估配置
    - POST /cub-data/eval-config             更新评估配置
 
-5. 鉴权调试 (Auth Controller)
+6. 鉴权调试 (Auth Controller)
    - GET  /cub-data/auth/info               解析 token 返回用户信息
 
-6. 用户同步 (Auth User Sync Controller)
+7. 开发维护 (Dev Controller)
+   - GET    /cub-data/dev/tenant-detail     查询指定租户得分详情
+   - DELETE /cub-data/dev/cleanup-tenant    清空指定租户评分数据
+
+8. 用户同步 (Auth User Sync Controller)
    - POST /cub-data/auth-user-sync/sync     手动触发同步 TPT 系统用户
 
 鉴权与 tpt-admin / alg-manager / ibd-data-hub 共用同一套 Bearer token + tenant cookie，
@@ -65,13 +72,20 @@ CubDataFileSoftSensorScorePath = "/cubapi/cub-data/file/softSensorScore"
 CubDataFileTemplatePath = "/cubapi/cub-data/file/template"
 CubDataFileUploadPath = "/cubapi/cub-data/file/upload"
 
-# 4. 评估配置 (Eval Config Controller)
+# 4. 成绩排行榜 (Ranking Controller)
+CubDataRankingAllPath = "/cubapi/cub-data/ranking/all"
+
+# 5. 评估配置 (Eval Config Controller)
 CubDataEvalConfigPath = "/cubapi/cub-data/eval-config"
 
-# 5. 鉴权调试 (Auth Controller)
+# 6. 鉴权调试 (Auth Controller)
 CubDataAuthInfoPath = "/cubapi/cub-data/auth/info"
 
-# 6. 用户同步 (Auth User Sync Controller)
+# 7. 开发维护 (Dev Controller)
+CubDataDevTenantDetailPath = "/cubapi/cub-data/dev/tenant-detail"
+CubDataDevCleanupTenantPath = "/cubapi/cub-data/dev/cleanup-tenant"
+
+# 8. 用户同步 (Auth User Sync Controller)
 CubDataAuthUserSyncPath = "/cubapi/cub-data/auth-user-sync/sync"
 
 
@@ -352,3 +366,58 @@ def sync_auth_users(
     if update_time_begin:
         params["updateTimeBegin"] = update_time_begin
     return api._request("POST", CubDataAuthUserSyncPath, params=params)
+
+
+# === 4. 成绩排行榜 (Ranking Controller) ===
+
+
+def get_ranking_all(api: AlgAPI) -> Any:
+    """查询所有租户成绩排名（GET /cub-data/ranking/all）。
+
+    返回所有租户的控制最优成绩、软测量成绩、总分和排名。
+
+    返回: 统一响应体 dict，data 为租户成绩排名列表，每项含：
+          tenantId / controlScore / softSensorScore / totalScore / rank。
+          - controlScore: 控制最优成绩（is_best=true 的最高分），无成绩时 null
+          - softSensorScore: 软测量成绩（user_file 最高分），无成绩时 null
+          - totalScore: 总分 = 控制最优×0.8 + 软测量×0.2，缺失项按 0，保留 5 位小数
+          - rank: 排名（按总分降序，同分同排名）
+    """
+    return api._request("GET", CubDataRankingAllPath)
+
+
+# === 7. 开发维护 (Dev Controller) ===
+
+
+def get_tenant_detail(
+    api: AlgAPI,
+    tenant_id: str,
+) -> Any:
+    """查询指定租户的得分详情（GET /cub-data/dev/tenant-detail）。
+
+    需要管理员权限。返回指定租户的控制成绩记录和软测量评分记录。
+
+    参数:
+      tenant_id: 租户 ID
+
+    返回: 统一响应体 dict，data 为 Map，包含控制成绩记录和软测量评分记录。
+    """
+    params = {"tenantId": tenant_id}
+    return api._request("GET", CubDataDevTenantDetailPath, params=params)
+
+
+def cleanup_tenant(
+    api: AlgAPI,
+    tenant_id: str,
+) -> Any:
+    """清空指定租户的评分相关数据（DELETE /cub-data/dev/cleanup-tenant）。
+
+    需要管理员权限。删除指定租户的成绩记录、上传文件记录及磁盘文件。
+
+    参数:
+      tenant_id: 租户 ID
+
+    返回: 统一响应体 dict，data 为清理数量统计（Map<string,int>）。
+    """
+    params = {"tenantId": tenant_id}
+    return api._request("DELETE", CubDataDevCleanupTenantPath, params=params)

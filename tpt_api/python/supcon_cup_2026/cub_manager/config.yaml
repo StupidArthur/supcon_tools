@@ -1,0 +1,12 @@
+environments:
+  - name: 中控杯测试租户一
+    url: https://tpt.supcon.com
+    tenant_id: AWSWJ2UW
+    username: "13854389823"
+    password: AWSWJ2UW
+
+  - name: 中控杯测试租户二
+    url: https://tpt.supcon.com
+    tenant_id: ARQBZM8H
+    username: "13854389823"
+    password: ARQBZM8H
