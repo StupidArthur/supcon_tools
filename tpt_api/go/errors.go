@@ -49,6 +49,15 @@ func IsAuthError(err error) bool {
 	return errors.As(err, &ae)
 }
 
+// IsTptAuthError 判断 err 是否为鉴权错误（支持 TptAPIError 形式，datahub 域使用）。
+func IsTptAuthError(err error) bool {
+	var te *TptAPIError
+	if errors.As(err, &te) {
+		return IsAuthResponseCode(te.Code, te.Msg)
+	}
+	return false
+}
+
 // ErrAPI 是平台返回的业务错误（非鉴权类），如 A0400 参数错误等。
 type ErrAPI struct {
 	Code string

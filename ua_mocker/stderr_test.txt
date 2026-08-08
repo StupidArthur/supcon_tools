@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "main.py", line 50, in <module>
+    main()
+  File "main.py", line 38, in main
+    asyncio.run(run_server(config_path))
+  File "asyncio\runners.py", line 190, in run
+  File "asyncio\runners.py", line 118, in run
+  File "asyncio\base_events.py", line 654, in run_until_complete
+  File "server_main.py", line 220, in run_server
+    async with server:
+  File "asyncua\server\server.py", line 235, in __aenter__
+  File "asyncua\server\server.py", line 532, in start
+  File "asyncua\server\server.py", line 528, in start
+  File "asyncua\server\binary_server_asyncio.py", line 209, in start
+  File "asyncio\base_events.py", line 1536, in create_server
+OSError: [Errno 10048] error while attempting to bind on address ('0.0.0.0', 18950): 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。
+[PYI-9772:ERROR] Failed to execute script 'main' due to unhandled exception!

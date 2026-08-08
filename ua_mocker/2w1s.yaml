@@ -1,0 +1,12 @@
+# OPC UA Mock Server 组态：2 万个 Float 节点，1 秒周期锯齿波
+server: "0.0.0.0"
+port: 18950
+cycle: 1000
+namespace_index: 1
+
+nodes:
+  - name: "float_"
+    type: Float
+    count: 20000
+    change: true
+    writable: false

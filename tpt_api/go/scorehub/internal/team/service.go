@@ -31,6 +31,24 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
+// OrderedEnvs 返回与 ListTeams 相同顺序的租户指针切片：
+// 选手按 zkjs 升序在前（序号 1~39），测试租户放最后（序号 40~41）。
+func OrderedEnvs(cfg *Config) []*Env {
+	var players, tests []*Env
+	for i := range cfg.Environments {
+		e := &cfg.Environments[i]
+		if e.Type == "测试" {
+			tests = append(tests, e)
+		} else {
+			players = append(players, e)
+		}
+	}
+	sort.SliceStable(players, func(i, j int) bool {
+		return players[i].Zkjs < players[j].Zkjs
+	})
+	return append(players, tests...)
+}
+
 // ListTeams 返回排序后的租户列表。
 // 选手按 zkjs 升序排在前（序号 1~39），测试租户放最后（序号 40~41）。
 func ListTeams(cfg *Config) []Team {

@@ -24,6 +24,7 @@ type Client struct {
 	baseURL  string
 	hc       *http.Client
 	token    string
+	tokenExp time.Time
 	tenantID string
 
 	// 可选配置
@@ -143,12 +144,24 @@ func (c *Client) TenantID() string { return c.tenantID }
 // IsLoggedIn 是否有可用 token。
 func (c *Client) IsLoggedIn() bool { return c.token != "" }
 
+// Expired 报告 token 是否已过期或即将过期（预留 5 分钟缓冲）。
+func (c *Client) Expired() bool {
+	if c == nil || c.token == "" {
+		return true
+	}
+	if c.tokenExp.IsZero() {
+		return false
+	}
+	return time.Until(c.tokenExp) < 5*time.Minute
+}
+
 // IsHTTPS 判定 baseURL 是否为 https 模式（HTTPS 模式才会带 tenant cookie）。
 func (c *Client) IsHTTPS() bool { return strings.HasPrefix(c.baseURL, "https://") }
 
 // Logout 清空登录态。
 func (c *Client) Logout() {
 	c.token = ""
+	c.tokenExp = time.Time{}
 }
 
 // Login 用账号密码登录 TPT 后台（POST /tpt-admin/system-manager/umsAdmin/login）。
@@ -183,6 +196,7 @@ func (c *Client) Login(ctx context.Context, username, password, tenantID string)
 		return &ErrAPI{Code: "EMPTY", Msg: "login response missing token"}
 	}
 	c.token = resp.Token
+	c.tokenExp = parseTokenExp(resp.Token)
 	return nil
 }
 

@@ -1177,7 +1177,7 @@
   "metadata": {
     "model_name": "ETHANOL_WATER_DISTILLATION",
     "description": "Ethanol-water distillation reference steady state (auto-generated)",
-    "created_at": "2026-07-19 18:59:22",
+    "created_at": "2026-07-26 15:29:22",
     "generation_tool": "tools/generate_ethanol_water_reference_state.py",
     "generation_cycle_time_s": 0.5,
     "generation_internal_step_s": 0.25,
@@ -1224,7 +1224,7 @@
     "drift_passed": true,
     "mode_equivalence_passed": true,
     "convergence_window_cycles": 3600,
-    "generation_time_s": 27.219303607940674,
+    "generation_time_s": 28.18827986717224,
     "final_F_kgmol_per_s": 0.00130716777,
     "final_D_kgmol_per_s": 0.00020933520604545278,
     "final_B_kgmol_per_s": 0.0010978325639545477,

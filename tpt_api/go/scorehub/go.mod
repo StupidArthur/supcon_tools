@@ -2,7 +2,10 @@ module scorehub
 
 go 1.25.0
 
-require github.com/wailsapp/wails/v2 v2.13.0
+require (
+	github.com/wailsapp/wails/v2 v2.12.0
+	github.com/yzc/tpt_api v0.0.0-00010101000000-000000000000
+)
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
