@@ -1,9 +1,10 @@
-"""TPT admin 用户管理 4 端点（与 USER_MANAGER/internal/api/users.go 1:1 对齐）。
+"""TPT admin 用户管理 端点（与 USER_MANAGER/internal/api/users.go 1:1 对齐）。
 
 端点（POST，统一 base URL）：
 - /xpt-system/api/system-manager/umsAdmin/listByOrgId  分页
 - /xpt-system/api/system-manager/umsAdmin              单建
 - /xpt-system/api/system-manager/umsAdmin/resetPwd     重置密码
+- /xpt-system/api/system-manager/umsRole/page          角色分页（创建用户时选角色用）
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ from .types import (
     AdminInfo,
     OperationStatus,
     PageResponse,
+    Role,
+    RolePageResponse,
     User,
     UserDraft,
 )
@@ -23,11 +26,12 @@ from .types import (
 log = logging.getLogger(__name__)
 
 
-# 写操作端点前缀。
+# 写操作副作用前缀。
 UserListByOrgPath = "/xpt-system/api/system-manager/umsAdmin/listByOrgId"
 UserCreatePath = "/xpt-system/api/system-manager/umsAdmin"
 UserResetPwdPath = "/xpt-system/api/system-manager/umsAdmin/resetPwd"
 AdminInfoPath = "/tpt-admin/system-manager/umsAdmin/info"
+RoleListByPagePath = "/xpt-system/api/system-manager/umsRole/page"
 
 # 默认模糊搜索字段。
 DEFAULT_SEARCH_FIELDS: tuple[str, ...] = ("nickName", "username", "phone", "email")
@@ -101,22 +105,23 @@ def get_all_users(
 def create_user(api: AlgAPI, draft: UserDraft) -> OperationStatus:
     """创建一个后台用户。
 
-    内部固定参数（v1 不暴露给前端）：
+    载荷字段全部来自 draft（均有默认值，均可不传）：
+
     - status: 0
-    - orgIds: [1]
-    - orgName: "默认组织"
-    - type: "2" (普通用户)
-    - roleIds: "5"
+    - orgIds / orgName: 组织，默认 [1] / "默认组织"
+    - type: 用户类型，默认 "2" (普通用户)；管理员传 "1"
+    - roleIds: 角色 ID，默认 "5" (普通用户角色)；管理员角色传 "4"
     - gender: "1"
     - code: 沿用 username
     - icon: ""
+    - email / phone: 可选
 
     响应不含 userId，调用方需 get_all_users 反查 username 拿 id。
     """
     body: dict[str, Any] = {
         "data": {
             "status": 0,
-            "orgIds": [1],
+            "orgIds": list(draft.orgIds),
             "username": draft.username,
             "code": draft.username,
             "nickName": draft.nickName,
@@ -124,9 +129,9 @@ def create_user(api: AlgAPI, draft: UserDraft) -> OperationStatus:
             "gender": "1",
             "email": draft.email,
             "phone": draft.phone,
-            "orgName": "默认组织",
-            "type": "2",
-            "roleIds": "5",
+            "orgName": draft.orgName,
+            "type": draft.type,
+            "roleIds": draft.roleIds,
             "icon": "",
         },
     }
@@ -163,3 +168,32 @@ def get_admin_info(api: AlgAPI) -> AdminInfo:
     """
     raw = api._request("GET", AdminInfoPath, wrap=False)
     return AdminInfo.from_dict(raw if isinstance(raw, dict) else {})
+
+
+def list_roles(
+    api: AlgAPI,
+    name: str = "",
+    page: int = 1,
+    page_size: int = 1000,
+    sort: str = "-updateTime",
+) -> RolePageResponse:
+    """分页查角色列表（创建用户时选角色用）。
+
+    - name 非空时按角色名模糊过滤
+    - page / page_size 默认全量 1-1000
+    - sort 默认 -updateTime
+    """
+    if page < 1:
+        page = 1
+    if page_size < 1:
+        page_size = 1000
+
+    body: dict[str, Any] = {
+        "data": {"*name*": name},
+        "requestBase": {
+            "page": f"{page}-{page_size}",
+            "sort": sort,
+        },
+    }
+    raw = api._request("POST", RoleListByPagePath, body=body, wrap=False)
+    return RolePageResponse.from_dict(raw if isinstance(raw, dict) else {})

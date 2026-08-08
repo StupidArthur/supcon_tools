@@ -15,6 +15,8 @@ const (
 	UserCreatePath = "/xpt-system/api/system-manager/umsAdmin"
 	// UserResetPwdPath 重置后台用户密码
 	UserResetPwdPath = "/xpt-system/api/system-manager/umsAdmin/resetPwd"
+	// UserRolePagePath 分页拉角色列表（创建用户选角色用）
+	UserRolePagePath = "/xpt-system/api/system-manager/umsRole/page"
 )
 
 // User 是 listByOrgId 返回的单条记录。
@@ -35,15 +37,45 @@ type User struct {
 	UpdateTime string `json:"updateTime"`
 }
 
+// Role 是 umsRole/page 返回的单条角色记录。
+type Role struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Status      int    `json:"status"`
+	CreateTime  string `json:"createTime"`
+	UpdateTime  string `json:"updateTime"`
+	TenantID    string `json:"tenantId"`
+}
+
+// RolePageResponse 是 umsRole/page 返回的角色分页结构（字段与 PageResponse 对齐）。
+type RolePageResponse struct {
+	Records []Role `json:"records"`
+	Total   int64  `json:"total"`
+	Size    int    `json:"size"`
+	Current int    `json:"current"`
+	Pages   int    `json:"pages"`
+	Orders  []any  `json:"orders"`
+}
+
 // UserDraft 是 create 时的输入载荷。
 //
-// orgIds / roleIds 在 v1 不暴露给前端，写死 [1] / "5"。
+// 类型 / 组织 / 角色均有默认值，可全部不传：
+//   - Type:   用户类型，"2"=普通用户（默认）；"1"=管理员
+//   - OrgIDs:  组织 ID 列表，默认 [1]（默认组织）
+//   - OrgName: 组织名，默认"默认组织"，须与 OrgIDs 配套
+//   - RoleIDs: 角色 ID，"5"=普通用户角色（默认）；"4"=管理员角色
 type UserDraft struct {
 	Username string `json:"username"` // 必填，登录账号
 	Password string `json:"password"` // 必填，明文（平台 UMS 不做 hash）
 	NickName string `json:"nickName"` // 必填，昵称 / 显示名
 	Email    string `json:"email"`    // 可选
 	Phone    string `json:"phone"`    // 可选
+	Type     string `json:"-"`        // 用户类型，默认 "2"；管理员传 "1"
+	OrgIDs   []int  `json:"-"`        // 默认 [1]
+	OrgName  string `json:"-"`        // 默认 "默认组织"
+	RoleIDs  string `json:"-"`        // 默认 "5"；管理员角色传 "4"
 }
 
 // PageResponse 是 list 接口的 MyBatis Page 结构。
@@ -129,23 +161,73 @@ func (c *Client) GetAllUsers(ctx context.Context, keyword, sort string, pageSize
 	return all, nil
 }
 
+// ListRoles 分页查角色列表（创建用户时选角色用）。
+//
+//   - name 非空时按角色名模糊过滤
+//   - page / pageSize 默认全量 1-1000
+//   - sort 默认 -updateTime
+func (c *Client) ListRoles(ctx context.Context, name string, page, pageSize int, sort string) (*RolePageResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 1000
+	}
+	if sort == "" {
+		sort = "-updateTime"
+	}
+
+	body := map[string]any{
+		"data": map[string]any{
+			"*name*": name,
+		},
+		"requestBase": map[string]any{
+			"page": fmt.Sprintf("%d-%d", page, pageSize),
+			"sort": sort,
+		},
+	}
+
+	var out RolePageResponse
+	if err := c.doRequest(ctx, http.MethodPost, UserRolePagePath, body, &out, true); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CreateUser 创建一个后台用户（POST /xpt-system/api/system-manager/umsAdmin）。
 // 响应不含 userId，调用方需 GetAllUsers 反查 username 拿 id。
 //
-// 内部固定参数（v1 不暴露给前端）：
+// 载荷字段全部来自 draft，均有默认值：
 //   - status: 0
-//   - orgIds: [1]
-//   - orgName: "默认组织"
-//   - type: "2" (普通用户)
-//   - roleIds: "5"
+//   - orgIds / orgName: 组织，默认 [1] / "默认组织"
+//   - type: 用户类型，默认 "2" (普通用户)；管理员传 "1"
+//   - roleIds: 角色 ID，默认 "5" (普通用户角色)；管理员角色传 "4"
 //   - gender: "1"
 //   - code: 沿用 username
 //   - icon: ""
+//   - email / phone: 可选
 func (c *Client) CreateUser(ctx context.Context, draft UserDraft) (*OperationStatus, error) {
+	orgIDs := draft.OrgIDs
+	if len(orgIDs) == 0 {
+		orgIDs = []int{1}
+	}
+	orgName := draft.OrgName
+	if orgName == "" {
+		orgName = "默认组织"
+	}
+	userType := draft.Type
+	if userType == "" {
+		userType = "2"
+	}
+	roleIDs := draft.RoleIDs
+	if roleIDs == "" {
+		roleIDs = "5"
+	}
+
 	body := map[string]any{
 		"data": map[string]any{
 			"status":   0,
-			"orgIds":   []int{1},
+			"orgIds":   orgIDs,
 			"username": draft.Username,
 			"code":     draft.Username,
 			"nickName": draft.NickName,
@@ -153,9 +235,9 @@ func (c *Client) CreateUser(ctx context.Context, draft UserDraft) (*OperationSta
 			"gender":   "1",
 			"email":    draft.Email,
 			"phone":    draft.Phone,
-			"orgName":  "默认组织",
-			"type":     "2",
-			"roleIds":  "5",
+			"orgName":  orgName,
+			"type":     userType,
+			"roleIds":  roleIDs,
 			"icon":     "",
 		},
 	}

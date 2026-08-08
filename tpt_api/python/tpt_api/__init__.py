@@ -30,6 +30,8 @@ from .types import (
     # TPT admin
     User,
     UserDraft,
+    Role,
+    RolePageResponse,
     PageResponse,
     LoginResponse,
     OperationStatus,
@@ -82,6 +84,8 @@ __all__ = [
     "is_auth_response_code",
     "User",
     "UserDraft",
+    "Role",
+    "RolePageResponse",
     "PageResponse",
     "LoginResponse",
     "OperationStatus",

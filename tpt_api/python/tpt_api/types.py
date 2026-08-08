@@ -52,13 +52,70 @@ class User:
 @dataclass
 class UserDraft:
     """create 时的输入载荷。
-    orgIds / roleIds 在 v1 不暴露给前端，写死 [1] / "5"。
+
+    类型 / 组织 / 角色均有默认值，可全部不传：
+
+    - type:      用户类型，"2"=普通用户（默认）；"1"=管理员
+    - orgIds:    组织 ID 列表，默认 [1]（默认组织）
+    - orgName:   组织名，默认"默认组织"，须与 orgIds 配套
+    - roleIds:   角色 ID，"5"=普通用户角色（默认）；"4"=管理员角色
     """
     username: str
     password: str
     nickName: str
     email: str = ""
     phone: str = ""
+    type: str = "2"
+    orgIds: list[int] = field(default_factory=lambda: [1])
+    orgName: str = "默认组织"
+    roleIds: str = "5"
+
+
+@dataclass
+class Role:
+    """umsRole/page 返回的单条角色记录。"""
+    id: int = 0
+    name: str = ""
+    code: str = ""
+    description: str = ""
+    status: int = 0
+    createTime: str = ""
+    updateTime: str = ""
+    tenantId: str = ""
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "Role":
+        return cls(
+            id=int(d.get("id", 0)),
+            name=d.get("name", "") or "",
+            code=d.get("code", "") or "",
+            description=d.get("description", "") or "",
+            status=int(d.get("status", 0) or 0),
+            createTime=d.get("createTime", "") or "",
+            updateTime=d.get("updateTime", "") or "",
+            tenantId=d.get("tenantId", "") or "",
+        )
+
+
+@dataclass
+class RolePageResponse:
+    """umsRole/page 返回的角色分页结构（字段与 PageResponse 对齐）。"""
+    records: list[Role] = field(default_factory=list)
+    total: int = 0
+    size: int = 0
+    current: int = 0
+    pages: int = 0
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "RolePageResponse":
+        records = [Role.from_dict(r) for r in (d.get("records") or [])]
+        return cls(
+            records=records,
+            total=int(d.get("total", 0) or 0),
+            size=int(d.get("size", 0) or 0),
+            current=int(d.get("current", 0) or 0),
+            pages=int(d.get("pages", 0) or 0),
+        )
 
 
 @dataclass

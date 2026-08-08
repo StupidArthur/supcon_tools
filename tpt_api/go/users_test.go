@@ -64,6 +64,57 @@ func TestCreateUser_DefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestCreateUser_AdminOverride(t *testing.T) {
+	var sentBody string
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		buf, _ := io_ReadAll(r.Body)
+		sentBody = string(buf)
+		return fakeResp(200, `{"code":"00000","msg":"OK"}`), nil
+	})
+	c := NewClient("http://test", WithHTTPDoer(rt))
+	c.token = "t"
+	_, err := c.CreateUser(context.Background(), UserDraft{
+		Username: "bob", Password: "p", NickName: "B",
+		Type: "1", OrgIDs: []int{7}, OrgName: "研发部", RoleIDs: "4",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	for _, want := range []string{
+		`"orgIds":[7]`, `"orgName":"研发部"`, `"type":"1"`, `"roleIds":"4"`,
+	} {
+		if !strings.Contains(sentBody, want) {
+			t.Errorf("missing %s in body: %s", want, sentBody)
+		}
+	}
+}
+
+func TestListRoles(t *testing.T) {
+	var sentBody string
+	var gotPath string
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotPath = r.URL.Path
+		buf, _ := io_ReadAll(r.Body)
+		sentBody = string(buf)
+		return fakeResp(200, `{"code":"00000","content":{"records":[{"id":5,"name":"普通用户角色","code":"normalRole","status":0},{"id":4,"name":"管理员角色","code":"systemRole","status":0}],"total":2,"size":1000,"current":1,"pages":1}}`), nil
+	})
+	c := NewClient("http://test", WithHTTPDoer(rt))
+	c.token = "t"
+	resp, err := c.ListRoles(context.Background(), "角色", 1, 1000, "")
+	if err != nil {
+		t.Fatalf("ListRoles: %v", err)
+	}
+	if gotPath != UserRolePagePath {
+		t.Errorf("expected path %s, got %s", UserRolePagePath, gotPath)
+	}
+	if !strings.Contains(sentBody, `"*name*":"角色"`) {
+		t.Errorf("missing name filter in body: %s", sentBody)
+	}
+	if len(resp.Records) != 2 || resp.Records[0].Name != "普通用户角色" || resp.Records[1].ID != 4 {
+		t.Errorf("records = %+v", resp.Records)
+	}
+}
+
 func TestResetPassword(t *testing.T) {
 	var sentBody string
 	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {

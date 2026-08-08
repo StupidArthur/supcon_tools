@@ -73,6 +73,57 @@ def test_create_user_defaults(api, mock_transport) -> None:
     assert data["icon"] == ""
 
 
+def test_create_user_admin_override(api, mock_transport) -> None:
+    """CreateUser 传管理员类型+管理员角色时 body 用的是传入值。"""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"code": "00000", "msg": "OK"}, request=request)
+
+    api.client = httpx.Client(base_url=api.base_url, transport=httpx.MockTransport(handler))
+    api.token = "abc"
+
+    users_module.create_user(api, UserDraft(
+        username="bob", password="p", nickName="B",
+        type="1", orgIds=[7], orgName="研发部", roleIds="4",
+    ))
+
+    data = captured["body"]["data"]
+    assert data["orgIds"] == [7]
+    assert data["orgName"] == "研发部"
+    assert data["type"] == "1"
+    assert data["roleIds"] == "4"
+
+
+def test_list_roles(api, mock_transport) -> None:
+    """list_roles 解析 umsRole/page 记录，body 含 *name* 模糊 + 分页。"""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={
+            "code": "00000",
+            "content": {
+                "records": [
+                    {"id": 5, "name": "普通用户角色", "code": "normalRole", "description": "普通用户角色", "status": 0},
+                    {"id": 4, "name": "管理员角色", "code": "systemRole", "description": "管理员角色", "status": 0},
+                ],
+                "total": 2, "size": 1000, "current": 1, "pages": 1,
+            },
+        }, request=request)
+
+    api.client = httpx.Client(base_url=api.base_url, transport=httpx.MockTransport(handler))
+    api.token = "abc"
+
+    resp = users_module.list_roles(api, name="角色")
+    assert captured["body"]["data"]["*name*"] == "角色"
+    assert captured["body"]["requestBase"]["page"] == "1-1000"
+    assert resp.total == 2
+    assert resp.records[0].name == "普通用户角色"
+    assert resp.records[1].id == 4
+
+
 def test_get_all_users_paginates(api) -> None:
     """get_all_users 自动翻页：第一页满，第二页空。"""
     import httpx as _httpx
