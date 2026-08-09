@@ -35,9 +35,13 @@ export interface MonitorCycle {
   skipped: boolean
   reports: MonitorReportLite[]
 }
+export interface MonitorAbnormalEntry {
+  at: string
+  report: MonitorReportLite
+}
 export interface MonitorSnapshot {
   cycle: MonitorCycle
-  abnormalCycles: MonitorCycle[]
+  abnormal: MonitorAbnormalEntry[]
 }
 
 export const teamApi = {

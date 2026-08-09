@@ -75,6 +75,38 @@ export namespace monitor {
 	        this.sampleTime = source["sampleTime"];
 	    }
 	}
+	export class AbnormalEntry {
+	    at: string;
+	    report: Report;
+	
+	    static createFrom(source: any = {}) {
+	        return new AbnormalEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.at = source["at"];
+	        this.report = this.convertValues(source["report"], Report);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Cycle {
 	    at: string;
 	    durMs: number;
@@ -114,7 +146,7 @@ export namespace monitor {
 	
 	export class Snapshot {
 	    cycle: Cycle;
-	    abnormalCycles: Cycle[];
+	    abnormal: AbnormalEntry[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Snapshot(source);
@@ -123,7 +155,7 @@ export namespace monitor {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.cycle = this.convertValues(source["cycle"], Cycle);
-	        this.abnormalCycles = this.convertValues(source["abnormalCycles"], Cycle);
+	        this.abnormal = this.convertValues(source["abnormal"], AbnormalEntry);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

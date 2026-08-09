@@ -81,8 +81,14 @@ func (c *Cycle) AbnormalReports() []Report {
 	return out
 }
 
-// Snapshot 是推送给前端的整体状态：最新一轮 + 最近 2 个异常周期快照（仅含异常租户）。
+// AbnormalEntry 是单个租户最近一次异常的记录（相同租户只保留最新一条）。
+type AbnormalEntry struct {
+	At     string `json:"at"`     // 该次异常所在周期的时间
+	Report Report `json:"report"`
+}
+
+// Snapshot 是推送给前端的整体状态：最新一轮 + 每租户最近一次异常（按租户去重，最新在前）。
 type Snapshot struct {
-	Cycle          Cycle    `json:"cycle"`
-	AbnormalCycles []Cycle  `json:"abnormalCycles"`
+	Cycle    Cycle           `json:"cycle"`
+	Abnormal []AbnormalEntry `json:"abnormal"`
 }

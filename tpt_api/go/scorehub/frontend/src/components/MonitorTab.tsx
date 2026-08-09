@@ -87,7 +87,7 @@ export function MonitorTab() {
         <div className="ml-auto flex items-center gap-3">
           {snap ? (
             <span className="text-[12px] text-muted-foreground">
-              上一轮 {fmtTime(snap.cycle.at)} · {snap.cycle.durMs} ms · {snap.abnormalCycles.length} 个异常周期
+              上一轮 {fmtTime(snap.cycle.at)} · {snap.cycle.durMs} ms · {snap.abnormal.length} 个异常租户
             </span>
           ) : (
             <span className="text-[12px] text-muted-foreground animate-pulse">等待首轮监控结果…</span>
@@ -107,13 +107,13 @@ export function MonitorTab() {
           <span><Dot color={GOOD} />正常</span>
           <span><Dot color={BAD} />异常</span>
           <span><Dot color={WARN} />未读到</span>
-          {snap && (snap.abnormalCycles?.length || 0) > 0 && (
+          {snap && (snap.abnormal?.length || 0) > 0 && (
             <button
               onClick={() => setHistOpen(true)}
               className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-destructive bg-destructive/10 hover:bg-destructive/15 transition-colors duration-150"
             >
               <Dot color={BAD} />
-              最近 {snap.abnormalCycles.length} 个异常周期
+              最近 {snap.abnormal.length} 个异常租户
             </button>
           )}
         </div>
@@ -186,27 +186,33 @@ export function MonitorTab() {
         )}
       </div>
 
-      <Modal open={histOpen} onClose={() => setHistOpen(false)} title="最近异常周期详情" width="w-[720px]">
-        {snap && (snap.abnormalCycles?.length || 0) === 0 ? (
-          <div className="text-center py-10 text-[12.5px] text-muted-foreground">暂无异常周期</div>
+      <Modal open={histOpen} onClose={() => setHistOpen(false)} title="异常租户详情（每租户最近一次）" width="w-[720px]">
+        {snap && (snap.abnormal?.length || 0) === 0 ? (
+          <div className="text-center py-10 text-[12.5px] text-muted-foreground">暂无异常租户</div>
         ) : (
           snap && (
-            <div className="flex flex-col gap-3 max-h-[60vh] overflow-auto">
-              {snap.abnormalCycles.map((cy, i) => (
-                <div key={i} className="border border-border rounded-lg">
-                  <div className="px-3 py-2 border-b border-border text-[11.5px] text-muted-foreground bg-muted/30">
-                    周期 {fmtTime(cy.at)} · {cy.reports.length} 个租户异常
-                  </div>
-                  <div className="p-3 flex flex-col gap-2.5">
-                    {cy.reports.map((r) => (
-                      <div key={r.tenantId} className="flex items-start gap-2">
-                        <span className="text-[12px] font-medium w-44 truncate flex-shrink-0">{r.name}</span>
-                        <div className="flex-1 min-w-0"><BadDetail r={r} /></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="max-h-[60vh] overflow-auto border border-border rounded-lg">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow className="border-b border-border bg-secondary">
+                    <TableHead className="w-44">租户</TableHead>
+                    <TableHead className="w-28 text-center">最近异常时间</TableHead>
+                    <TableHead>详情</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="[&_td]:py-1">
+                  {snap.abnormal.map((e) => (
+                    <TableRow key={e.report.tenantId}>
+                      <TableCell>
+                        <div className="font-medium truncate">{e.report.name}</div>
+                        <div className="font-mono text-[10.5px] text-muted-foreground truncate">{e.report.tenantId}</div>
+                      </TableCell>
+                      <TableCell className="text-center font-mono text-[11px] text-muted-foreground">{fmtTime(e.at)}</TableCell>
+                      <TableCell><BadDetail r={e.report} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )
         )}

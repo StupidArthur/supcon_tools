@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -16,7 +17,6 @@ const (
 	PollConcurrent = 6
 	TenantTimeout  = 5 * time.Second  // 单个租户单请求预算
 	RoundBudget    = 10 * time.Second // 整轮预算
-	MaxAbnormalKpt = 2                // 内存保留的最近异常周期数
 )
 
 // Service 提供数据源监控：数据源存活 + 位号质量检查。
@@ -24,15 +24,15 @@ type Service struct {
 	cfg     *team.Config
 	session *cubauth.Session
 
-	mu       sync.Mutex
-	clients  map[string]*envClient // key=tenantID
-	abnormal []Cycle               // 最近 N 次异常周期快照（FIFO 保 max）
-	last     Snapshot              // 最新一轮快照（供前端切入时立即拉取）
-	hasLast  bool
+	mu          sync.Mutex
+	clients     map[string]*envClient      // key=tenantID
+	abnormalMap map[string]AbnormalEntry   // key=tenantID，每租户最近一次异常（去重）
+	last        Snapshot                   // 最新一轮快照（供前端切入时立即拉取）
+	hasLast     bool
 }
 
 func New(cfg *team.Config, session *cubauth.Session) *Service {
-	return &Service{cfg: cfg, session: session, clients: map[string]*envClient{}}
+	return &Service{cfg: cfg, session: session, clients: map[string]*envClient{}, abnormalMap: map[string]AbnormalEntry{}}
 }
 
 // client 获取（或创建）某租户的客户端池。
@@ -87,29 +87,23 @@ func (s *Service) pollAll(ctx context.Context) *Cycle {
 	}
 }
 
-// abnormalHistory 若本轮存在异常，则追加异常快照并裁剪到 MaxAbnormalKpt。
-func (s *Service) recordAbnormal(cycle *Cycle) []Cycle {
+// recordAbnormal 把本轮异常租户写入去重表（相同租户只保留最新一条），返回当前全部异常记录。
+func (s *Service) recordAbnormal(cycle *Cycle) []AbnormalEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rpt := cycle.AbnormalReports()
-	if len(rpt) == 0 {
-		return s.snapshotAbnormalLocked()
-	}
-	ab := Cycle{
-		At:      cycle.At,
-		DurMs:   cycle.DurMs,
-		Reports: rpt,
-	}
-	s.abnormal = append(s.abnormal, ab)
-	if len(s.abnormal) > MaxAbnormalKpt {
-		s.abnormal = s.abnormal[len(s.abnormal)-MaxAbnormalKpt:]
+	for _, r := range cycle.AbnormalReports() {
+		s.abnormalMap[r.TenantID] = AbnormalEntry{At: cycle.At, Report: r}
 	}
 	return s.snapshotAbnormalLocked()
 }
 
-func (s *Service) snapshotAbnormalLocked() []Cycle {
-	out := make([]Cycle, len(s.abnormal))
-	copy(out, s.abnormal)
+// snapshotAbnormalLocked 返回按时间倒序（最新在前）的异常记录列表。
+func (s *Service) snapshotAbnormalLocked() []AbnormalEntry {
+	out := make([]AbnormalEntry, 0, len(s.abnormalMap))
+	for _, e := range s.abnormalMap {
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At > out[j].At })
 	return out
 }
 
@@ -141,7 +135,7 @@ func (s *Service) RunPolling(ctx context.Context, interval time.Duration, emit f
 				for _, r := range cycle.AbnormalReports() {
 					log.Printf("[monitor] 异常租户 %s(%s): %s", r.Name, r.TenantID, r.Error)
 				}
-				snap := Snapshot{Cycle: *cycle, AbnormalCycles: ab}
+				snap := Snapshot{Cycle: *cycle, Abnormal: ab}
 				s.mu.Lock()
 				s.last = snap
 				s.hasLast = true
