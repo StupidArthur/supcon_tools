@@ -24,7 +24,7 @@ type envClient struct {
 	dh   *tptapi.TptClient // datahub（ds-info）
 }
 
-// scanData 用本租户账号读 33 个位号实时值；鉴权失败静默重登重试一次。
+// scanData 用本租户账号读全部位号实时值；鉴权失败静默重登重试一次。
 func (c *envClient) scanData(ctx context.Context) (map[string]any, error) {
 	return c.dataCall(ctx, func(cl *tptapi.Client) (map[string]any, error) {
 		return cl.ReadRealtimeValues(ctx, TagNames)

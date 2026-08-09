@@ -9,6 +9,7 @@ import { EventsOn } from "../../wailsjs/runtime/runtime"
 const GOOD = "#2f9e6f"
 const BAD = "#d44333"
 const WARN = "#d9730d"
+const TAG_COUNT = 39
 
 function Dot({ color }: { color: string }) {
   return <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ background: color }} />
@@ -35,7 +36,7 @@ function subStatus(r: MonitorReportLite): { color: string; text: string }[] {
 
 function isAbnormal(r: MonitorReportLite): boolean {
   if (r.error || !r.dsFound || !r.dsAlive) return true
-  return r.tagTotal !== 33 || r.tagGood !== 33
+  return r.tagTotal !== TAG_COUNT || r.tagGood !== TAG_COUNT
 }
 
 function fmtTime(t: string): string {
@@ -81,7 +82,7 @@ export function MonitorTab() {
       <div className="flex items-center gap-3 px-7 pt-6 pb-3">
         <h2 className="text-[15px] font-semibold">数据源监控</h2>
         <span className="text-[12.5px] text-muted-foreground">
-          每 5 秒轮询全部租户 · 数据源存活 + 33 位号质量（GOOD=192）
+          每 5 秒轮询全部租户 · 数据源存活 + 39 位号质量（GOOD=192）
         </span>
         <div className="ml-auto flex items-center gap-3">
           {snap ? (

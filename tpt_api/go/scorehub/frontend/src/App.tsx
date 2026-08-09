@@ -88,7 +88,7 @@ function AppContent() {
               <TabsTrigger value="monitor">5. 数据源监控</TabsTrigger>
             </TabsList>
           </div>
-          <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">v0.1 designed by @yuzecha</span>
+          <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">v0.2 designed by @yuzecha</span>
         </header>
 
         <TabsContent value="team" className="flex-1 overflow-hidden mt-0">

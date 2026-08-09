@@ -19,7 +19,7 @@ const (
 	MaxAbnormalKpt = 2                // 内存保留的最近异常周期数
 )
 
-// Service 提供数据源监控：数据源存活 + 33 位号质量检查。
+// Service 提供数据源监控：数据源存活 + 位号质量检查。
 type Service struct {
 	cfg     *team.Config
 	session *cubauth.Session

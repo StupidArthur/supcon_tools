@@ -1,6 +1,7 @@
 package monitor
 
-// TagNames 是中控杯约定的 33 个位号（与 tagmanager/batch_setup.py 的 TAG_DEFS 一致）。
+// TagNames 是中控杯约定的 39 个位号：原 33 个 + 策略新增 6 个
+// （TE60501.PV / TE60411.PV / TE60409.PV / LIC_60402.PV/SV/MV）。
 var TagNames = []string{
 	"PRAC_LOAD.VALUE", "EXAM_LOAD.VALUE", "LOAD_RSP.VALUE",
 	"FICQ_60101.PV", "FICQ_60101.SV", "FICQ_60101.MV",
@@ -12,6 +13,8 @@ var TagNames = []string{
 	"TE60401.PV", "TE60402.PV", "TE60403.PV", "TE60404.PV", "TE60405.PV",
 	"TE60406.PV", "TE60407.PV", "TE60408.PV", "TE60410.PV",
 	"T602D.VALUE", "T602RR.VALUE", "T604D.PV",
+	"TE60501.PV", "TE60411.PV", "TE60409.PV",
+	"LIC_60402.PV", "LIC_60402.SV", "LIC_60402.MV",
 }
 
 // QualityGood 是位号质量码 GOOD（与 OPC UA Good=192 对齐）。
@@ -38,7 +41,7 @@ type Report struct {
 }
 
 // IsAbnormal 报告本周期是否异常：
-// 数据源须找到且在线，位号须 33 个全部 GOOD，且无错误消息。
+// 数据源须找到且在线，位号须全部 GOOD，且无错误消息。
 func (r *Report) IsAbnormal() bool {
 	if r.Error != "" || !r.DsFound || !r.DsAlive {
 		return true

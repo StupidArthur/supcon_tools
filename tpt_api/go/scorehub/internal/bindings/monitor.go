@@ -26,7 +26,7 @@ func (b *MonitorBinding) SetContext(ctx context.Context) {
 	b.startLocked(ctx)
 }
 
-// ScanMonitor 扫描测试租户一（数据源存活 + 33 位号质量）。
+// ScanMonitor 扫描测试租户一（数据源存活 + 位号质量）。
 func (b *MonitorBinding) ScanMonitor() (*monitor.Report, error) {
 	ctx := b.ctx
 	if ctx == nil {
