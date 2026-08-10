@@ -16,6 +16,12 @@ function Dot({ color }: { color: string }) {
 }
 
 function subStatus(r: MonitorReportLite): { color: string; text: string }[] {
+  if (r.timeout) {
+    return [
+      { color: WARN, text: "扫描超时" },
+      { color: WARN, text: "本轮跳过" },
+    ]
+  }
   const out: { color: string; text: string }[] = []
   if (!r.dsFound) {
     out.push({ color: BAD, text: "未找到数据源" })
@@ -168,7 +174,9 @@ export function MonitorTab() {
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      {isAbnormal(r) ? (
+                      {r.timeout ? (
+                        <span className="inline-flex items-center text-[12px] font-medium" style={{ color: WARN }}><Dot color={WARN} />超时</span>
+                      ) : isAbnormal(r) ? (
                         <span className="inline-flex items-center text-destructive text-[12px] font-medium"><Dot color={BAD} />异常</span>
                       ) : (
                         <span className="inline-flex items-center text-[12px] font-medium" style={{ color: GOOD }}><Dot color={GOOD} />正常</span>
@@ -177,7 +185,7 @@ export function MonitorTab() {
                     <TableCell className="text-center font-mono text-[11px] text-muted-foreground">{r.sampleTime || "-"}</TableCell>
                     <TableCell className="text-right font-mono text-[12px]">{r.sampleValue || "-"}</TableCell>
                     <TableCell>
-                      {isAbnormal(r) ? <BadDetail r={r} /> : <span className="text-muted-foreground/60">-</span>}
+                      {r.timeout ? <span className="text-muted-foreground/60">扫描超时，下轮自动重试</span> : isAbnormal(r) ? <BadDetail r={r} /> : <span className="text-muted-foreground/60">-</span>}
                     </TableCell>
                   </TableRow>
                 ))}
