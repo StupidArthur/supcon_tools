@@ -27,12 +27,19 @@ type Service struct {
 	mu          sync.Mutex
 	clients     map[string]*envClient      // key=tenantID
 	abnormalMap map[string]AbnormalEntry   // key=tenantID，每租户最近一次异常（去重）
+	lastLogErr  map[string]string          // key=tenantID，上次记录的错误文本（日志去重）
 	last        Snapshot                   // 最新一轮快照（供前端切入时立即拉取）
 	hasLast     bool
 }
 
 func New(cfg *team.Config, session *cubauth.Session) *Service {
-	return &Service{cfg: cfg, session: session, clients: map[string]*envClient{}, abnormalMap: map[string]AbnormalEntry{}}
+	return &Service{
+		cfg:         cfg,
+		session:     session,
+		clients:     map[string]*envClient{},
+		abnormalMap: map[string]AbnormalEntry{},
+		lastLogErr:  map[string]string{},
+	}
 }
 
 // client 获取（或创建）某租户的客户端池。
@@ -130,9 +137,7 @@ func (s *Service) RunPolling(ctx context.Context, interval time.Duration, emit f
 				defer func() { busy = false }()
 				cycle := s.pollAll(ctx)
 				ab := s.recordAbnormal(cycle)
-				for _, r := range cycle.AbnormalReports() {
-					log.Printf("[monitor] 异常租户 %s(%s): %s", r.Name, r.TenantID, r.Error)
-				}
+				s.logChanges(cycle)
 				snap := Snapshot{Cycle: *cycle, Abnormal: ab}
 				s.mu.Lock()
 				s.last = snap
@@ -140,6 +145,28 @@ func (s *Service) RunPolling(ctx context.Context, interval time.Duration, emit f
 				s.mu.Unlock()
 				emit(snap)
 			}()
+		}
+	}
+}
+
+// logChanges 按"错误文本变化"去重写日志：
+// 同一租户同类错误只记一次；错误变化时记新错误；恢复时记"恢复"。
+func (s *Service) logChanges(cycle *Cycle) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range cycle.Reports {
+		r := &cycle.Reports[i]
+		prev := s.lastLogErr[r.TenantID]
+		cur := r.Error
+		if cur == prev {
+			continue // 同一错误，不重复记
+		}
+		if cur != "" {
+			log.Printf("[monitor] 异常 %s(%s): %s", r.Name, r.TenantID, cur)
+			s.lastLogErr[r.TenantID] = cur
+		} else if prev != "" {
+			log.Printf("[monitor] 恢复 %s(%s)", r.Name, r.TenantID)
+			delete(s.lastLogErr, r.TenantID)
 		}
 	}
 }
