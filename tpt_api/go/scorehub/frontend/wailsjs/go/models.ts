@@ -54,6 +54,7 @@ export namespace monitor {
 	    error: string;
 	    sampleValue: string;
 	    sampleTime: string;
+	    timeout: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Report(source);
@@ -73,6 +74,7 @@ export namespace monitor {
 	        this.error = source["error"];
 	        this.sampleValue = source["sampleValue"];
 	        this.sampleTime = source["sampleTime"];
+	        this.timeout = source["timeout"];
 	    }
 	}
 	export class AbnormalEntry {

@@ -74,9 +74,7 @@ func (s *Service) pollAll(ctx context.Context) *Cycle {
 		go func(i int, env *team.Env) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			tctx, cancel := context.WithTimeout(ctx, TenantTimeout)
-			defer cancel()
-			reports[i] = *s.scanEnv(tctx, env)
+			reports[i] = *s.scanEnv(ctx, env)
 		}(i, env)
 	}
 	wg.Wait()
@@ -147,6 +145,8 @@ func (s *Service) RunPolling(ctx context.Context, interval time.Duration, emit f
 }
 
 // scanEnv 扫描单个租户：数据源 alive + 位号质量，结果尽量部分返回。
+// scanDs 和 scanData 各有独立超时（TenantTimeout），互不挤占；
+// 任一步超时则标记 Timeout=true（不计为异常，避免误报）。
 func (s *Service) scanEnv(ctx context.Context, env *team.Env) *Report {
 	rep := &Report{
 		Name:     env.Name,
@@ -154,10 +154,18 @@ func (s *Service) scanEnv(ctx context.Context, env *team.Env) *Report {
 		BadTags:  []string{},
 	}
 	c := s.client(env)
-	// 数据源
-	found, alive, name, url, err := c.scanDs(ctx, wantURL(env))
+
+	// 1. 数据源（独立超时）
+	dsCtx, dsCancel := context.WithTimeout(ctx, TenantTimeout)
+	defer dsCancel()
+	found, alive, name, url, err := c.scanDs(dsCtx, wantURL(env))
 	if err != nil {
-		rep.Error = appendErr(rep.Error, "查数据源失败: "+err.Error())
+		if dsCtx.Err() != nil {
+			rep.Timeout = true
+			rep.Error = appendErr(rep.Error, "查数据源超时")
+		} else {
+			rep.Error = appendErr(rep.Error, "查数据源失败: "+err.Error())
+		}
 	} else if !found {
 		rep.Error = appendErr(rep.Error, "未找到数据源: "+wantURL(env))
 	} else {
@@ -166,22 +174,28 @@ func (s *Service) scanEnv(ctx context.Context, env *team.Env) *Report {
 		rep.DsName = name
 		rep.DsTarUrl = url
 	}
-	// 2. 位号
-	if ctx.Err() == nil {
-		res, err := c.scanData(ctx)
-		if err != nil {
-			rep.Error = appendErr(rep.Error, "读位号失败: "+err.Error())
+
+	// 2. 位号（独立超时，不被 scanDs 占用的时间挤掉）
+	tagCtx, tagCancel := context.WithTimeout(ctx, TenantTimeout)
+	defer tagCancel()
+	res, err := c.scanData(tagCtx)
+	if err != nil {
+		if tagCtx.Err() != nil {
+			rep.Timeout = true
+			rep.Error = appendErr(rep.Error, "读位号超时")
 		} else {
-			total, good, badTags, perr := ParseQualities(res)
-			if perr != nil {
-				rep.Error = appendErr(rep.Error, perr.Error())
-			} else {
-				rep.TagTotal = total
-				rep.TagGood = good
-				rep.BadTags = badTags
-			}
-			rep.SampleValue, rep.SampleTime = ExtractSample(res)
+			rep.Error = appendErr(rep.Error, "读位号失败: "+err.Error())
 		}
+	} else {
+		total, good, badTags, perr := ParseQualities(res)
+		if perr != nil {
+			rep.Error = appendErr(rep.Error, perr.Error())
+		} else {
+			rep.TagTotal = total
+			rep.TagGood = good
+			rep.BadTags = badTags
+		}
+		rep.SampleValue, rep.SampleTime = ExtractSample(res)
 	}
 	return rep
 }

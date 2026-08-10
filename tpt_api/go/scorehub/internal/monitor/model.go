@@ -38,11 +38,17 @@ type Report struct {
 
 	SampleValue string `json:"sampleValue"` // 采样位号当前值
 	SampleTime  string `json:"sampleTime"`  // 采样位号 timeStamp 转成的时间字符串
+
+	Timeout bool `json:"timeout"` // 本轮因超时未完成扫描（不计为异常）
 }
 
 // IsAbnormal 报告本周期是否异常：
 // 数据源须找到且在线，位号须全部 GOOD，且无错误消息。
+// 因超时未完成扫描的不算异常（Timeout=true 时跳过判定）。
 func (r *Report) IsAbnormal() bool {
+	if r.Timeout {
+		return false
+	}
 	if r.Error != "" || !r.DsFound || !r.DsAlive {
 		return true
 	}

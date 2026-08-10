@@ -28,6 +28,7 @@ export interface MonitorReportLite {
   error: string
   sampleValue: string
   sampleTime: string
+  timeout: boolean
 }
 export interface MonitorCycle {
   at: string

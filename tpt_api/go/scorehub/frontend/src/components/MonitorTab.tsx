@@ -35,6 +35,7 @@ function subStatus(r: MonitorReportLite): { color: string; text: string }[] {
 }
 
 function isAbnormal(r: MonitorReportLite): boolean {
+  if (r.timeout) return false
   if (r.error || !r.dsFound || !r.dsAlive) return true
   return r.tagTotal !== TAG_COUNT || r.tagGood !== TAG_COUNT
 }
