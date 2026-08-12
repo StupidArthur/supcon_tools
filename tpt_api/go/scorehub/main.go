@@ -2,10 +2,12 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -17,14 +19,19 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// initLogging 在 exe 同目录打开 supcon_cup_manager.log（追加），同时输出到 stderr（dev 可见）。
+// initLogging 在 exe 同目录的 log/ 文件夹下按启动时间戳新建日志文件，同时输出到 stderr。
+// log/ 不存在则自动创建；创建失败则仅输出到 stderr，不报错。
 func initLogging() {
 	log.SetFlags(log.LstdFlags)
 	var writers []io.Writer
 	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), "supcon_cup_manager.log")
-		if f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-			writers = append(writers, f)
+		logDir := filepath.Join(filepath.Dir(exe), "log")
+		if err := os.MkdirAll(logDir, 0755); err == nil {
+			filename := fmt.Sprintf("supcon_cup_manager_%s.log", time.Now().Format("20060102_150405"))
+			logPath := filepath.Join(logDir, filename)
+			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+				writers = append(writers, f)
+			}
 		}
 	}
 	writers = append(writers, os.Stderr)

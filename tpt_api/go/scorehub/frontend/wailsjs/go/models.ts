@@ -41,6 +41,22 @@ export namespace batch {
 
 export namespace monitor {
 	
+	export class SubAbnormal {
+	    active: boolean;
+	    since: string;
+	    detail: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SubAbnormal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.since = source["since"];
+	        this.detail = source["detail"];
+	    }
+	}
 	export class Report {
 	    name: string;
 	    tenantId: string;
@@ -54,7 +70,16 @@ export namespace monitor {
 	    error: string;
 	    sampleValue: string;
 	    sampleTime: string;
-	    timeout: boolean;
+	    subAPIFailure: SubAbnormal;
+	    subDsNotFound: SubAbnormal;
+	    subDsOffline: SubAbnormal;
+	    subTagBad: SubAbnormal;
+	    subValueStale: SubAbnormal;
+	    abnormal: boolean;
+	    lastAbnType: number;
+	    lastAbnSince: string;
+	    lastAbnDetail: string;
+	    lastAbnConfirmed: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Report(source);
@@ -74,21 +99,16 @@ export namespace monitor {
 	        this.error = source["error"];
 	        this.sampleValue = source["sampleValue"];
 	        this.sampleTime = source["sampleTime"];
-	        this.timeout = source["timeout"];
-	    }
-	}
-	export class AbnormalEntry {
-	    at: string;
-	    report: Report;
-	
-	    static createFrom(source: any = {}) {
-	        return new AbnormalEntry(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.at = source["at"];
-	        this.report = this.convertValues(source["report"], Report);
+	        this.subAPIFailure = this.convertValues(source["subAPIFailure"], SubAbnormal);
+	        this.subDsNotFound = this.convertValues(source["subDsNotFound"], SubAbnormal);
+	        this.subDsOffline = this.convertValues(source["subDsOffline"], SubAbnormal);
+	        this.subTagBad = this.convertValues(source["subTagBad"], SubAbnormal);
+	        this.subValueStale = this.convertValues(source["subValueStale"], SubAbnormal);
+	        this.abnormal = source["abnormal"];
+	        this.lastAbnType = source["lastAbnType"];
+	        this.lastAbnSince = source["lastAbnSince"];
+	        this.lastAbnDetail = source["lastAbnDetail"];
+	        this.lastAbnConfirmed = source["lastAbnConfirmed"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -148,7 +168,6 @@ export namespace monitor {
 	
 	export class Snapshot {
 	    cycle: Cycle;
-	    abnormal: AbnormalEntry[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Snapshot(source);
@@ -157,7 +176,6 @@ export namespace monitor {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.cycle = this.convertValues(source["cycle"], Cycle);
-	        this.abnormal = this.convertValues(source["abnormal"], AbnormalEntry);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

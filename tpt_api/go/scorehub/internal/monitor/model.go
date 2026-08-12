@@ -1,7 +1,7 @@
 package monitor
 
-// TagNames 是中控杯约定的 39 个位号：原 33 个 + 策略新增 6 个
-// （TE60501.PV / TE60411.PV / TE60409.PV / LIC_60402.PV/SV/MV）。
+// TagNames 是中控杯约定的 42 个位号：原 33 个 + 策略新增 6 个 + 最新新增 3 个
+// （FICQ_60201.PV / LT60402.PV / LT60501.PV）。
 var TagNames = []string{
 	"PRAC_LOAD.VALUE", "EXAM_LOAD.VALUE", "LOAD_RSP.VALUE",
 	"FICQ_60101.PV", "FICQ_60101.SV", "FICQ_60101.MV",
@@ -15,15 +15,42 @@ var TagNames = []string{
 	"T602D.VALUE", "T602RR.VALUE", "T604D.PV",
 	"TE60501.PV", "TE60411.PV", "TE60409.PV",
 	"LIC_60402.PV", "LIC_60402.SV", "LIC_60402.MV",
+	"FICQ_60201.PV", "LT60402.PV", "LT60501.PV",
 }
 
 // QualityGood 是位号质量码 GOOD（与 OPC UA Good=192 对齐）。
 const QualityGood = 192
 
 // SampleTagName 是用于展示"数据在变化"的采样位号：选一个长时间非 0 的流量位号。
-const SampleTagName = "FT60201.PV"
+const SampleTagName = "FICQ_60401.MV"
 
-// Report 是单个租户的数据源监控结果。
+// 异常类型常量（子异常）。
+const (
+	AbnNone       = 0
+	AbnAPIFailure = 1 // API 调用失败（连续 2 轮）
+	AbnDsNotFound = 2 // 未找到数据源
+	AbnDsOffline  = 3 // 数据源离线
+	AbnTagBad     = 4 // 位号质量 BAD
+	AbnValueStale = 5 // 采样位号值停滞（连续 2 轮未变）
+)
+
+// AbnLabels 异常类型中文名。
+var AbnLabels = map[int]string{
+	AbnAPIFailure: "API异常",
+	AbnDsNotFound: "数据源缺失",
+	AbnDsOffline:  "数据源离线",
+	AbnTagBad:     "位号异常",
+	AbnValueStale: "值停滞",
+}
+
+// SubAbnormal 是单个子异常的状态。
+type SubAbnormal struct {
+	Active bool   `json:"active"`
+	Since  string `json:"since"`  // 异常产生时间 RFC3339
+	Detail string `json:"detail"` // 异常详情
+}
+
+// Report 是单个租户的数据源监控结果 + 异常状态。
 type Report struct {
 	Name     string   `json:"name"`
 	TenantID string   `json:"tenantId"`
@@ -36,65 +63,35 @@ type Report struct {
 	BadTags  []string `json:"badTags"`
 	Error    string   `json:"error"`
 
-	SampleValue string `json:"sampleValue"` // 采样位号当前值
-	SampleTime  string `json:"sampleTime"`  // 采样位号 timeStamp 转成的时间字符串
+	SampleValue string `json:"sampleValue"`
+	SampleTime  string `json:"sampleTime"`
 
-	Timeout bool `json:"timeout"` // 本轮因超时未完成扫描（不计为异常）
-}
+	// 5 个子异常状态
+	SubAPIFailure SubAbnormal `json:"subAPIFailure"`
+	SubDsNotFound SubAbnormal `json:"subDsNotFound"`
+	SubDsOffline  SubAbnormal `json:"subDsOffline"`
+	SubTagBad     SubAbnormal `json:"subTagBad"`
+	SubValueStale SubAbnormal `json:"subValueStale"`
 
-// IsAbnormal 报告本周期是否异常：
-// 数据源须找到且在线，位号须全部 GOOD，且无错误消息。
-// 因超时未完成扫描的不算异常（Timeout=true 时跳过判定）。
-func (r *Report) IsAbnormal() bool {
-	if r.Timeout {
-		return false
-	}
-	if r.Error != "" || !r.DsFound || !r.DsAlive {
-		return true
-	}
-	if r.TagTotal != len(TagNames) || r.TagGood != len(TagNames) {
-		return true
-	}
-	return false
+	// 总异常：任一子异常活跃
+	Abnormal bool `json:"abnormal"`
+
+	// 上一次异常（所有子异常消失后保留）
+	LastAbnType      int    `json:"lastAbnType"`
+	LastAbnSince     string `json:"lastAbnSince"`
+	LastAbnDetail    string `json:"lastAbnDetail"`
+	LastAbnConfirmed bool   `json:"lastAbnConfirmed"`
 }
 
 // Cycle 是一整轮轮询的快照（当前所有租户的结果）。
 type Cycle struct {
-	At      string   `json:"at"` // RFC3339 时间
+	At      string   `json:"at"`
 	DurMs   int64    `json:"durMs"`
 	Skipped bool     `json:"skipped"`
 	Reports []Report `json:"reports"`
 }
 
-// HasAbnormal 本轮是否存在任一异常租户。
-func (c *Cycle) HasAbnormal() bool {
-	for i := range c.Reports {
-		if c.Reports[i].IsAbnormal() {
-			return true
-		}
-	}
-	return false
-}
-
-// AbnormalReports 返回本轮全部异常租户的报告。
-func (c *Cycle) AbnormalReports() []Report {
-	var out []Report
-	for i := range c.Reports {
-		if c.Reports[i].IsAbnormal() {
-			out = append(out, c.Reports[i])
-		}
-	}
-	return out
-}
-
-// AbnormalEntry 是单个租户最近一次异常的记录（相同租户只保留最新一条）。
-type AbnormalEntry struct {
-	At     string `json:"at"`     // 该次异常所在周期的时间
-	Report Report `json:"report"`
-}
-
-// Snapshot 是推送给前端的整体状态：最新一轮 + 每租户最近一次异常（按租户去重，最新在前）。
+// Snapshot 是推送给前端的整体状态。
 type Snapshot struct {
-	Cycle    Cycle           `json:"cycle"`
-	Abnormal []AbnormalEntry `json:"abnormal"`
+	Cycle Cycle `json:"cycle"`
 }

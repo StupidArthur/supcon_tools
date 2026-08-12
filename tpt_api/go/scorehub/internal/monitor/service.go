@@ -2,8 +2,8 @@ package monitor
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"sort"
 	"sync"
 	"time"
 
@@ -15,30 +15,51 @@ import (
 const (
 	PollInterval   = 5 * time.Second
 	PollConcurrent = 6
-	TenantTimeout  = 5 * time.Second  // 单个租户单请求预算
-	RoundBudget    = 10 * time.Second // 整轮预算
+	TenantTimeout  = 5 * time.Second // 单个租户单请求预算
 )
 
-// Service 提供数据源监控：数据源存活 + 位号质量检查。
+// tenantState 是单个租户跨周期的异常状态机。
+type tenantState struct {
+	subAPIFailure SubAbnormal
+	subDsNotFound SubAbnormal
+	subDsOffline  SubAbnormal
+	subTagBad     SubAbnormal
+	subValueStale SubAbnormal
+
+	apiFailCount int
+	apiOKCount   int
+	staleCount   int
+	lastValue    string
+
+	lastAbnType      int
+	lastAbnSince     string
+	lastAbnDetail    string
+	lastAbnConfirmed bool
+}
+
+func (st *tenantState) isAbnormal() bool {
+	return st.subAPIFailure.Active || st.subDsNotFound.Active ||
+		st.subDsOffline.Active || st.subTagBad.Active || st.subValueStale.Active
+}
+
+// Service 提供数据源监控：数据源存活 + 位号质量检查 + 异常状态机。
 type Service struct {
 	cfg     *team.Config
 	session *cubauth.Session
 
-	mu          sync.Mutex
-	clients     map[string]*envClient      // key=tenantID
-	abnormalMap map[string]AbnormalEntry   // key=tenantID，每租户最近一次异常（去重）
-	lastLogErr  map[string]string          // key=tenantID，上次记录的错误文本（日志去重）
-	last        Snapshot                   // 最新一轮快照（供前端切入时立即拉取）
-	hasLast     bool
+	mu      sync.Mutex
+	clients map[string]*envClient    // key=tenantID
+	states  map[string]*tenantState  // key=tenantID
+	last    Snapshot                 // 最新一轮快照
+	hasLast bool
 }
 
 func New(cfg *team.Config, session *cubauth.Session) *Service {
 	return &Service{
-		cfg:         cfg,
-		session:     session,
-		clients:     map[string]*envClient{},
-		abnormalMap: map[string]AbnormalEntry{},
-		lastLogErr:  map[string]string{},
+		cfg:     cfg,
+		session: session,
+		clients: map[string]*envClient{},
+		states:  map[string]*tenantState{},
 	}
 }
 
@@ -59,16 +80,17 @@ func (s *Service) client(env *team.Env) *envClient {
 	return c
 }
 
-// Scan 扫描测试租户一：数据源 alive（ds-info）+ 全部位号质量（cub-data readValues）。
+// Scan 扫描测试租户一（一次性，不走状态机）。
 func (s *Service) Scan(ctx context.Context) (*Report, error) {
 	env, err := cubauth.PickAuthEnv(s.cfg)
 	if err != nil {
 		return nil, err
 	}
-	return s.scanEnv(ctx, env), nil
+	rep, _, _ := s.scanEnv(ctx, env)
+	return rep, nil
 }
 
-// pollAll 并发扫描全部租户，返回当前轮结果（按配置顺序）。
+// pollAll 并发扫描全部租户并更新状态机，返回当前轮结果。
 func (s *Service) pollAll(ctx context.Context) *Cycle {
 	envs := sortEnvs(s.cfg)
 	start := time.Now()
@@ -81,7 +103,9 @@ func (s *Service) pollAll(ctx context.Context) *Cycle {
 		go func(i int, env *team.Env) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			reports[i] = *s.scanEnv(ctx, env)
+			rep, dsErr, dataErr := s.scanEnv(ctx, env)
+			s.updateState(env, rep, dsErr, dataErr)
+			reports[i] = *rep
 		}(i, env)
 	}
 	wg.Wait()
@@ -90,26 +114,6 @@ func (s *Service) pollAll(ctx context.Context) *Cycle {
 		DurMs:   time.Since(start).Milliseconds(),
 		Reports: reports,
 	}
-}
-
-// recordAbnormal 把本轮异常租户写入去重表（相同租户只保留最新一条），返回当前全部异常记录。
-func (s *Service) recordAbnormal(cycle *Cycle) []AbnormalEntry {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, r := range cycle.AbnormalReports() {
-		s.abnormalMap[r.TenantID] = AbnormalEntry{At: cycle.At, Report: r}
-	}
-	return s.snapshotAbnormalLocked()
-}
-
-// snapshotAbnormalLocked 返回按时间倒序（最新在前）的异常记录列表。
-func (s *Service) snapshotAbnormalLocked() []AbnormalEntry {
-	out := make([]AbnormalEntry, 0, len(s.abnormalMap))
-	for _, e := range s.abnormalMap {
-		out = append(out, e)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].At > out[j].At })
-	return out
 }
 
 // Latest 返回最新一轮快照（无数据时 ok=false）。
@@ -130,15 +134,13 @@ func (s *Service) RunPolling(ctx context.Context, interval time.Duration, emit f
 			return
 		case <-ticker.C:
 			if busy {
-				continue // 上轮未完，跳过本轮
+				continue
 			}
 			busy = true
 			func() {
 				defer func() { busy = false }()
 				cycle := s.pollAll(ctx)
-				ab := s.recordAbnormal(cycle)
-				s.logChanges(cycle)
-				snap := Snapshot{Cycle: *cycle, Abnormal: ab}
+				snap := Snapshot{Cycle: *cycle}
 				s.mu.Lock()
 				s.last = snap
 				s.hasLast = true
@@ -149,50 +151,147 @@ func (s *Service) RunPolling(ctx context.Context, interval time.Duration, emit f
 	}
 }
 
-// logChanges 按"错误文本变化"去重写日志：
-// 同一租户同类错误只记一次；错误变化时记新错误；恢复时记"恢复"。
-func (s *Service) logChanges(cycle *Cycle) {
+// ConfirmAbnormal 确认某租户的上一次异常（仅当总异常已消失时可调用）。
+func (s *Service) ConfirmAbnormal(tenantID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range cycle.Reports {
-		r := &cycle.Reports[i]
-		prev := s.lastLogErr[r.TenantID]
-		cur := r.Error
-		if cur == prev {
-			continue // 同一错误，不重复记
+	st, ok := s.states[tenantID]
+	if !ok {
+		return fmt.Errorf("租户不存在")
+	}
+	if st.isAbnormal() {
+		return fmt.Errorf("当前仍有异常，无法确认")
+	}
+	if st.lastAbnType == AbnNone {
+		return fmt.Errorf("无历史异常")
+	}
+	st.lastAbnConfirmed = true
+	return nil
+}
+
+// updateState 把本轮扫描结果喂入租户状态机，更新子异常并回填 Report。
+func (s *Service) updateState(env *team.Env, rep *Report, dsErr, dataErr error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	st, ok := s.states[env.TenantID]
+	if !ok {
+		st = &tenantState{}
+		s.states[env.TenantID] = st
+	}
+	now := time.Now().Format(time.RFC3339)
+	apiFailed := dsErr != nil || dataErr != nil
+
+	if apiFailed {
+		st.apiFailCount++
+		st.apiOKCount = 0
+		st.staleCount = 0
+		st.lastValue = ""
+		if st.apiFailCount >= 2 && !st.subAPIFailure.Active {
+			st.subAPIFailure = SubAbnormal{Active: true, Since: now, Detail: fmt.Sprintf("连续%d轮API调用失败", st.apiFailCount)}
+			log.Printf("[monitor] 异常 %s(%s): API异常(连续%d轮调用失败)", env.Name, env.TenantID, st.apiFailCount)
 		}
-		if cur != "" {
-			log.Printf("[monitor] 异常 %s(%s): %s", r.Name, r.TenantID, cur)
-			s.lastLogErr[r.TenantID] = cur
-		} else if prev != "" {
-			log.Printf("[monitor] 恢复 %s(%s)", r.Name, r.TenantID)
-			delete(s.lastLogErr, r.TenantID)
+	} else {
+		st.apiFailCount = 0
+		st.apiOKCount++
+
+		// API异常：连续3轮成功后消失
+		if st.subAPIFailure.Active && st.apiOKCount >= 3 {
+			s.clearSub(env, st, AbnAPIFailure, &st.subAPIFailure)
 		}
+
+		// 数据源缺失 / 离线（需 scanDs 成功）
+		if dsErr == nil {
+			if !rep.DsFound {
+				if !st.subDsNotFound.Active {
+					st.subDsNotFound = SubAbnormal{Active: true, Since: now, Detail: "未找到数据源"}
+					log.Printf("[monitor] 异常 %s(%s): 数据源缺失", env.Name, env.TenantID)
+				}
+			} else {
+				s.clearSub(env, st, AbnDsNotFound, &st.subDsNotFound)
+				if !rep.DsAlive {
+					if !st.subDsOffline.Active {
+						st.subDsOffline = SubAbnormal{Active: true, Since: now, Detail: "数据源离线"}
+						log.Printf("[monitor] 异常 %s(%s): 数据源离线", env.Name, env.TenantID)
+					}
+				} else {
+					s.clearSub(env, st, AbnDsOffline, &st.subDsOffline)
+				}
+			}
+		}
+
+		// 位号异常 / 值停滞（需 scanData 成功）
+		if dataErr == nil {
+			if rep.TagTotal != len(TagNames) || rep.TagGood != len(TagNames) {
+				if !st.subTagBad.Active {
+					st.subTagBad = SubAbnormal{Active: true, Since: now, Detail: fmt.Sprintf("位号%d/%d GOOD", rep.TagGood, rep.TagTotal)}
+					log.Printf("[monitor] 异常 %s(%s): 位号异常(%d/%d GOOD)", env.Name, env.TenantID, rep.TagGood, rep.TagTotal)
+				}
+			} else {
+				s.clearSub(env, st, AbnTagBad, &st.subTagBad)
+			}
+
+			if rep.SampleValue != "" {
+				if st.lastValue != "" && rep.SampleValue == st.lastValue {
+					st.staleCount++
+				} else {
+					st.staleCount = 0
+				}
+				st.lastValue = rep.SampleValue
+				if st.staleCount >= 2 {
+					if !st.subValueStale.Active {
+						st.subValueStale = SubAbnormal{Active: true, Since: now, Detail: fmt.Sprintf("采样值%s连续%d轮未变", rep.SampleValue, st.staleCount)}
+						log.Printf("[monitor] 异常 %s(%s): 值停滞(%s连续%d轮未变)", env.Name, env.TenantID, rep.SampleValue, st.staleCount)
+					}
+				} else {
+					s.clearSub(env, st, AbnValueStale, &st.subValueStale)
+				}
+			}
+		}
+	}
+
+	// 回填 Report 状态字段
+	rep.SubAPIFailure = st.subAPIFailure
+	rep.SubDsNotFound = st.subDsNotFound
+	rep.SubDsOffline = st.subDsOffline
+	rep.SubTagBad = st.subTagBad
+	rep.SubValueStale = st.subValueStale
+	rep.Abnormal = st.isAbnormal()
+	rep.LastAbnType = st.lastAbnType
+	rep.LastAbnSince = st.lastAbnSince
+	rep.LastAbnDetail = st.lastAbnDetail
+	rep.LastAbnConfirmed = st.lastAbnConfirmed
+}
+
+// clearSub 清除一个子异常并记录为上一次异常。
+func (s *Service) clearSub(env *team.Env, st *tenantState, abnType int, sub *SubAbnormal) {
+	if sub.Active {
+		st.lastAbnType = abnType
+		st.lastAbnSince = sub.Since
+		st.lastAbnDetail = sub.Detail
+		st.lastAbnConfirmed = false
+		log.Printf("[monitor] 恢复 %s(%s): %s", env.Name, env.TenantID, AbnLabels[abnType])
+		*sub = SubAbnormal{}
 	}
 }
 
-// scanEnv 扫描单个租户：数据源 alive + 位号质量，结果尽量部分返回。
-// scanDs 和 scanData 各有独立超时（TenantTimeout），互不挤占；
-// 任一步超时则标记 Timeout=true（不计为异常，避免误报）。
-func (s *Service) scanEnv(ctx context.Context, env *team.Env) *Report {
+// scanEnv 扫描单个租户，返回 Report 及 scanDs/scanData 的错误。
+func (s *Service) scanEnv(ctx context.Context, env *team.Env) (*Report, error, error) {
 	rep := &Report{
 		Name:     env.Name,
 		TenantID: env.TenantID,
 		BadTags:  []string{},
 	}
 	c := s.client(env)
+	var dsErr, dataErr error
 
 	// 1. 数据源（独立超时）
 	dsCtx, dsCancel := context.WithTimeout(ctx, TenantTimeout)
 	defer dsCancel()
 	found, alive, name, url, err := c.scanDs(dsCtx, wantURL(env))
 	if err != nil {
-		if dsCtx.Err() != nil {
-			rep.Timeout = true
-			rep.Error = appendErr(rep.Error, "查数据源超时")
-		} else {
-			rep.Error = appendErr(rep.Error, "查数据源失败: "+err.Error())
-		}
+		dsErr = err
+		rep.Error = appendErr(rep.Error, "查数据源失败: "+err.Error())
 	} else if !found {
 		rep.Error = appendErr(rep.Error, "未找到数据源: "+wantURL(env))
 	} else {
@@ -202,20 +301,17 @@ func (s *Service) scanEnv(ctx context.Context, env *team.Env) *Report {
 		rep.DsTarUrl = url
 	}
 
-	// 2. 位号（独立超时，不被 scanDs 占用的时间挤掉）
+	// 2. 位号（独立超时）
 	tagCtx, tagCancel := context.WithTimeout(ctx, TenantTimeout)
 	defer tagCancel()
 	res, err := c.scanData(tagCtx)
 	if err != nil {
-		if tagCtx.Err() != nil {
-			rep.Timeout = true
-			rep.Error = appendErr(rep.Error, "读位号超时")
-		} else {
-			rep.Error = appendErr(rep.Error, "读位号失败: "+err.Error())
-		}
+		dataErr = err
+		rep.Error = appendErr(rep.Error, "读位号失败: "+err.Error())
 	} else {
 		total, good, badTags, perr := ParseQualities(res)
 		if perr != nil {
+			dataErr = perr
 			rep.Error = appendErr(rep.Error, perr.Error())
 		} else {
 			rep.TagTotal = total
@@ -224,10 +320,9 @@ func (s *Service) scanEnv(ctx context.Context, env *team.Env) *Report {
 		}
 		rep.SampleValue, rep.SampleTime = ExtractSample(res)
 	}
-	return rep
+	return rep, dsErr, dataErr
 }
 
-// Convenience: 复用 appendErr。
 func appendErr(cur, msg string) string {
 	if cur == "" {
 		return msg

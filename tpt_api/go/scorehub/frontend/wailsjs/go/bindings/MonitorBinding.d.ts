@@ -3,6 +3,8 @@
 import {monitor} from '../models';
 import {context} from '../models';
 
+export function ConfirmAbnormal(arg1:string):Promise<void>;
+
 export function GetMonitorSnapshot():Promise<monitor.Snapshot>;
 
 export function ScanMonitor():Promise<monitor.Report>;

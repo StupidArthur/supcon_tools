@@ -74,3 +74,8 @@ func (b *MonitorBinding) StopMonitor() {
 		b.stop = nil
 	}
 }
+
+// ConfirmAbnormal 确认某租户的上一次异常（仅当该租户当前总异常已消失时可调用）。
+func (b *MonitorBinding) ConfirmAbnormal(tenantID string) error {
+	return b.svc.ConfirmAbnormal(tenantID)
+}

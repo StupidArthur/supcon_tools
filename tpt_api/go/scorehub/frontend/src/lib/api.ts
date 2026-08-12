@@ -2,7 +2,7 @@ import { GetTeams } from "../../wailsjs/go/bindings/TeamBinding"
 import { GetRanking } from "../../wailsjs/go/bindings/RankingBinding"
 import { GetEvalConfig, UpdateEvalConfig } from "../../wailsjs/go/bindings/BatchBinding"
 import { GetPersonalList, GetTenantDetail, CleanupTenant } from "../../wailsjs/go/bindings/PersonalBinding"
-import { ScanMonitor, GetMonitorSnapshot } from "../../wailsjs/go/bindings/MonitorBinding"
+import { ScanMonitor, GetMonitorSnapshot, ConfirmAbnormal } from "../../wailsjs/go/bindings/MonitorBinding"
 import type { batch, monitor, personal, ranking, team } from "../../wailsjs/go/models"
 
 export type Team = team.Team
@@ -13,6 +13,13 @@ export type PersonalRow = personal.Row
 export type TenantDetail = personal.Detail
 export type CleanupResult = personal.CleanupResult
 export type MonitorReport = monitor.Report
+
+// 子异常状态。
+export interface SubAbnormal {
+  active: boolean
+  since: string
+  detail: string
+}
 
 // 事件快照类型（非 bound 方法签名，Wails 不生成，故本地定义）。
 export interface MonitorReportLite {
@@ -28,7 +35,19 @@ export interface MonitorReportLite {
   error: string
   sampleValue: string
   sampleTime: string
-  timeout: boolean
+
+  subAPIFailure: SubAbnormal
+  subDsNotFound: SubAbnormal
+  subDsOffline: SubAbnormal
+  subTagBad: SubAbnormal
+  subValueStale: SubAbnormal
+
+  abnormal: boolean
+
+  lastAbnType: number
+  lastAbnSince: string
+  lastAbnDetail: string
+  lastAbnConfirmed: boolean
 }
 export interface MonitorCycle {
   at: string
@@ -36,13 +55,8 @@ export interface MonitorCycle {
   skipped: boolean
   reports: MonitorReportLite[]
 }
-export interface MonitorAbnormalEntry {
-  at: string
-  report: MonitorReportLite
-}
 export interface MonitorSnapshot {
   cycle: MonitorCycle
-  abnormal: MonitorAbnormalEntry[]
 }
 
 export const teamApi = {
@@ -68,4 +82,5 @@ export const personalApi = {
 export const monitorApi = {
   scan: (): Promise<MonitorReport> => ScanMonitor(),
   snapshot: (): Promise<MonitorSnapshot | null> => GetMonitorSnapshot(),
+  confirm: (tenantId: string): Promise<void> => ConfirmAbnormal(tenantId),
 }
