@@ -36,14 +36,18 @@ function getActiveSubs(r: MonitorReportLite): { type: number; sub: SubAbnormal }
 
 function fmtTime(t: string): string {
   if (!t) return "-"
-  const d = new Date(t)
+  const ms = Number(t)
+  if (!ms) return "-"
+  const d = new Date(ms)
   const pad = (n: number) => String(n).padStart(2, "0")
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 function fmtDateTime(t: string): string {
   if (!t) return "-"
-  const d = new Date(t)
+  const ms = Number(t)
+  if (!ms) return "-"
+  const d = new Date(ms)
   const pad = (n: number) => String(n).padStart(2, "0")
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
@@ -185,9 +189,9 @@ export function MonitorTab() {
                       </TableCell>
                       <TableCell>
                         {r.subTagBad.active ? (
-                          <span className="text-[12px]" style={{ color: BAD }}>{r.tagGood}/{r.tagTotal}</span>
+                          <span className="text-[12px]" style={{ color: BAD }}>{r.tagGood} Good / {r.tagTotal} Total</span>
                         ) : r.tagTotal > 0 ? (
-                          <span className="text-[12px]" style={{ color: GOOD }}>{r.tagGood}/{r.tagTotal}</span>
+                          <span className="text-[12px]" style={{ color: GOOD }}>{r.tagGood} Good / {r.tagTotal} Total</span>
                         ) : (
                           <span className="text-[12px] text-muted-foreground/60">-</span>
                         )}

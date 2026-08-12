@@ -3,7 +3,6 @@ package monitor
 import (
 	"fmt"
 	"strconv"
-	"time"
 )
 
 // ParseQualities 解析 cub-data readValues 统一响应体，统计质量码。
@@ -37,7 +36,7 @@ func ParseQualities(res map[string]any) (total, good int, badTags []string, err 
 }
 
 // ExtractSample 从 readValues 响应中提取采样位号（SampleTagName）的值与时间戳。
-// 值格式化为字符串；timeStamp（毫秒）转成本地时间字符串 HH:MM:SS。
+// 值格式化为字符串；timeStamp（毫秒）原样返回，由前端按毫秒格式化。
 func ExtractSample(res map[string]any) (value string, sampleTime string) {
 	data, ok := res["data"].([]any)
 	if !ok {
@@ -54,7 +53,7 @@ func ExtractSample(res map[string]any) (value string, sampleTime string) {
 		}
 		value = formatValue(m["value"])
 		if ts, ok := m["timeStamp"].(float64); ok && ts > 0 {
-			sampleTime = time.UnixMilli(int64(ts)).Format("15:04:05")
+			sampleTime = fmt.Sprintf("%d", int64(ts))
 		}
 		return value, sampleTime
 	}
