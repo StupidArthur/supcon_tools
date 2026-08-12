@@ -238,7 +238,7 @@ func (s *Service) updateState(env *team.Env, rep *Report, dsErr, dataErr error) 
 					st.staleCount = 0
 				}
 				st.lastValue = rep.SampleValue
-				if st.staleCount >= 2 {
+				if st.staleCount >= 5 {
 					if !st.subValueStale.Active {
 						st.subValueStale = SubAbnormal{Active: true, Since: now, Detail: fmt.Sprintf("采样值%s连续%d轮未变", rep.SampleValue, st.staleCount)}
 						log.Printf("[monitor] 异常 %s(%s): 值停滞(%s连续%d轮未变)", env.Name, env.TenantID, rep.SampleValue, st.staleCount)
