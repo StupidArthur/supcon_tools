@@ -22,7 +22,7 @@ var TagNames = []string{
 const QualityGood = 192
 
 // SampleTagName 是用于展示"数据在变化"的采样位号：选一个长时间非 0 的流量位号。
-const SampleTagName = "FICQ_60401.MV"
+const SampleTagName = "FT60201.PV"
 
 // 异常类型常量（子异常）。
 const (
