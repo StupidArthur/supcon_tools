@@ -7,4 +7,4 @@ export function GetEvalConfig():Promise<batch.EvalConfig>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 
-export function UpdateEvalConfig(arg1:number,arg2:number,arg3:number):Promise<batch.UpdateResult>;
+export function UpdateEvalConfig(arg1:number,arg2:number,arg3:number,arg4:number):Promise<batch.UpdateResult>;

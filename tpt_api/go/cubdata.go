@@ -416,11 +416,11 @@ func (c *Client) GetEvalConfig(ctx context.Context) (map[string]any, error) {
 
 // UpdateEvalConfig 更新评估配置（POST /cub-data/eval-config）。
 //
-// 仅允许修改 pracLoadEnabled / examLoadEnabled / evalDurationMinutes 三个字段，
-// id 由服务端强制为 1（单行配置表约束）。
+// 可修改 pracLoadEnabled / examLoadEnabled / evalDurationMinutes /
+// startWorktimeDelayMinutes 四个字段，id 由服务端强制为 1（单行配置表约束）。
 //
 // 参数任意一个传 nil 表示不修改该字段。
-func (c *Client) UpdateEvalConfig(ctx context.Context, pracLoadEnabled, examLoadEnabled, evalDurationMinutes *int) (map[string]any, error) {
+func (c *Client) UpdateEvalConfig(ctx context.Context, pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes *int) (map[string]any, error) {
 	body := map[string]any{}
 	if pracLoadEnabled != nil {
 		body["pracLoadEnabled"] = *pracLoadEnabled
@@ -430,6 +430,9 @@ func (c *Client) UpdateEvalConfig(ctx context.Context, pracLoadEnabled, examLoad
 	}
 	if evalDurationMinutes != nil {
 		body["evalDurationMinutes"] = *evalDurationMinutes
+	}
+	if startWorktimeDelayMinutes != nil {
+		body["startWorktimeDelayMinutes"] = *startWorktimeDelayMinutes
 	}
 	return c.cubDataRequest(ctx, http.MethodPost, CubDataEvalConfigPath, body, nil)
 }

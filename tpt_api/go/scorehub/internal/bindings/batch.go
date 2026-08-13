@@ -33,7 +33,7 @@ func (b *BatchBinding) GetEvalConfig() (*batch.EvalConfig, error) {
 	return b.svc.Get(b.background())
 }
 
-// UpdateEvalConfig 全量更新评估配置（练习工况/考试工况开关、评估时长）。
-func (b *BatchBinding) UpdateEvalConfig(pracLoadEnabled, examLoadEnabled, evalDurationMinutes int) batch.UpdateResult {
-	return b.svc.Update(b.background(), pracLoadEnabled, examLoadEnabled, evalDurationMinutes)
+// UpdateEvalConfig 全量更新评估配置（练习/考试工况开关、评估时长、上班时间延迟）。
+func (b *BatchBinding) UpdateEvalConfig(pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes int) batch.UpdateResult {
+	return b.svc.Update(b.background(), pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes)
 }

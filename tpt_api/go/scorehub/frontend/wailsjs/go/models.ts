@@ -5,6 +5,7 @@ export namespace batch {
 	    pracLoadEnabled: number;
 	    examLoadEnabled: number;
 	    evalDurationMinutes: number;
+	    startWorktimeDelayMinutes: number;
 	    addTime: string;
 	    updateTime: string;
 	
@@ -18,6 +19,7 @@ export namespace batch {
 	        this.pracLoadEnabled = source["pracLoadEnabled"];
 	        this.examLoadEnabled = source["examLoadEnabled"];
 	        this.evalDurationMinutes = source["evalDurationMinutes"];
+	        this.startWorktimeDelayMinutes = source["startWorktimeDelayMinutes"];
 	        this.addTime = source["addTime"];
 	        this.updateTime = source["updateTime"];
 	    }

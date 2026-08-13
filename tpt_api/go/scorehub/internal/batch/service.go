@@ -28,10 +28,10 @@ func (s *Service) Get(ctx context.Context) (*EvalConfig, error) {
 	return ParseEvalConfig(res)
 }
 
-// Update 全量更新三个可改字段（练习工况/考试工况开关、评估时长）。
-func (s *Service) Update(ctx context.Context, pracLoadEnabled, examLoadEnabled, evalDurationMinutes int) UpdateResult {
+// Update 全量更新四个可改字段（练习/考试工况开关、评估时长、上班时间延迟）。
+func (s *Service) Update(ctx context.Context, pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes int) UpdateResult {
 	res, err := s.session.Do(ctx, func(c *tptapi.Client) (map[string]any, error) {
-		return c.UpdateEvalConfig(ctx, &pracLoadEnabled, &examLoadEnabled, &evalDurationMinutes)
+		return c.UpdateEvalConfig(ctx, &pracLoadEnabled, &examLoadEnabled, &evalDurationMinutes, &startWorktimeDelayMinutes)
 	})
 	if err != nil {
 		return UpdateResult{Error: err.Error()}

@@ -41,6 +41,7 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
   const [prac, setPrac] = useState(1)
   const [exam, setExam] = useState(0)
   const [duration, setDuration] = useState("")
+  const [delay, setDelay] = useState("")
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
       setPrac(config.pracLoadEnabled)
       setExam(config.examLoadEnabled)
       setDuration(String(config.evalDurationMinutes))
+      setDelay(String(config.startWorktimeDelayMinutes ?? 0))
     }
   }, [config])
 
@@ -57,9 +59,14 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
       toast("评估时长需为正整数（分钟）", "error")
       return
     }
+    const del = Number(delay)
+    if (!Number.isFinite(del) || del < 0) {
+      toast("上班时间延迟需为非负整数（分钟）", "error")
+      return
+    }
     setSaving(true)
     try {
-      const res = await batchApi.updateEvalConfig(prac, exam, Math.round(mins))
+      const res = await batchApi.updateEvalConfig(prac, exam, Math.round(mins), Math.round(del))
       if (res.error) {
         toast(res.error, "error")
       } else {
@@ -114,6 +121,10 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
                     <span className="font-mono">{config.evalDurationMinutes} 分钟</span>
                   </div>
                   <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">上班时间延迟</span>
+                    <span className="font-mono">{config.startWorktimeDelayMinutes ?? 0} 分钟</span>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">最近更新</span>
                     <span className="font-mono text-[11.5px] text-muted-foreground">{config.updateTime || "-"}</span>
                   </div>
@@ -144,6 +155,16 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
                   min={1}
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
+                  className="w-28 h-8 rounded-md border border-input bg-background px-2.5 text-[12.5px] font-mono focus:outline-none focus:ring-2 focus:ring-ring transition-all duration-150"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[12.5px]">
+                <span className="text-muted-foreground">上班时间延迟（分钟）</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={delay}
+                  onChange={(e) => setDelay(e.target.value)}
                   className="w-28 h-8 rounded-md border border-input bg-background px-2.5 text-[12.5px] font-mono focus:outline-none focus:ring-2 focus:ring-ring transition-all duration-150"
                 />
               </div>

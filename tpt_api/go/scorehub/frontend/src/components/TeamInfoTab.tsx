@@ -7,6 +7,7 @@ import type { Team } from "@/lib/api"
 
 type SortKey = "seq" | "name" | "tenantId" | "username" | "zkjs" | "ip"
 type SortDir = "asc" | "desc"
+type FilterKey = "name" | "tenantId" | "username" | "zkjs" | "ip"
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
 
@@ -17,6 +18,16 @@ function sortValue(t: Team, key: SortKey): string {
     case "username": return t.username
     case "zkjs": return t.machine?.zkjs || ""
     default: return ""
+  }
+}
+
+function filterValue(t: Team, key: FilterKey): string {
+  switch (key) {
+    case "name": return t.name
+    case "tenantId": return t.tenantId
+    case "username": return t.username
+    case "zkjs": return t.machine?.zkjs || ""
+    case "ip": return t.ip
   }
 }
 
@@ -61,6 +72,27 @@ function SortableHead({ label, k, sortKey, sortDir, onSort, className, center }:
   )
 }
 
+interface FilterHeadProps {
+  k: FilterKey
+  value: string
+  onChange: (k: FilterKey, v: string) => void
+  className?: string
+}
+
+function FilterHead({ k, value, onChange, className }: FilterHeadProps) {
+  return (
+    <TableHead className={`p-1 ${className || ""}`}>
+      <input
+        type="text"
+        value={value}
+        placeholder="筛选"
+        onChange={(e) => onChange(k, e.target.value)}
+        className="w-full h-6 px-1.5 text-[11px] bg-transparent border-b border-border focus:border-primary focus:outline-none placeholder:text-muted-foreground/40"
+      />
+    </TableHead>
+  )
+}
+
 interface Props {
   teams: Team[]
   loading: boolean
@@ -70,6 +102,9 @@ interface Props {
 export function TeamInfoTab({ teams, loading, error }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("seq")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [filters, setFilters] = useState<Record<FilterKey, string>>({
+    name: "", tenantId: "", username: "", zkjs: "", ip: "",
+  })
 
   const onSort = (k: SortKey) => {
     if (k === sortKey) {
@@ -80,12 +115,26 @@ export function TeamInfoTab({ teams, loading, error }: Props) {
     }
   }
 
+  const onFilter = (k: FilterKey, v: string) => {
+    setFilters((prev) => ({ ...prev, [k]: v }))
+  }
+
   const sortedTeams = useMemo(() => {
     const players = teams.filter((t) => t.type !== "测试")
     const tests = teams.filter((t) => t.type === "测试")
     const cmp = (a: Team, b: Team) => compareTeams(a, b, sortKey) * (sortDir === "asc" ? 1 : -1)
     return [...players.sort(cmp), ...tests.sort(cmp)]
   }, [teams, sortKey, sortDir])
+
+  const filteredTeams = useMemo(() => {
+    return sortedTeams.filter((t) => {
+      return (Object.keys(filters) as FilterKey[]).every((k) => {
+        const q = filters[k].trim().toLowerCase()
+        if (!q) return true
+        return filterValue(t, k).toLowerCase().includes(q)
+      })
+    })
+  }, [sortedTeams, filters])
 
   if (loading) {
     return <div className="text-center py-16 text-[13px] text-muted-foreground">加载中…</div>
@@ -99,13 +148,17 @@ export function TeamInfoTab({ teams, loading, error }: Props) {
 
   const playerCount = teams.filter((t) => t.type !== "测试").length
   const testCount = teams.filter((t) => t.type === "测试").length
+  const filteredOut = sortedTeams.length - filteredTeams.length
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-baseline gap-3 px-7 pt-6 pb-3">
         <h2 className="text-[15px] font-semibold">队伍信息</h2>
         <span className="text-[12.5px] text-muted-foreground">
-          共 {teams.length} 个租户 · <span className="text-primary font-medium">{playerCount} 选手</span> + {testCount} 测试 · 点击表头排序
+          共 {teams.length} 个租户 · <span className="text-primary font-medium">{playerCount} 选手</span> + {testCount} 测试 · 点击表头排序 · 表头输入筛选
+          {filteredOut > 0 && (
+            <span className="ml-2 text-destructive">（已过滤 {filteredOut} 行）</span>
+          )}
         </span>
       </div>
       <div className="flex-1 overflow-auto px-7 pb-7">
@@ -120,28 +173,44 @@ export function TeamInfoTab({ teams, loading, error }: Props) {
                 <SortableHead label="机器" k="zkjs" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-28" />
                 <SortableHead label="IP" k="ip" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-44" />
               </TableRow>
+              <TableRow className="border-b border-border bg-muted/20">
+                <TableHead className="w-16 p-1"></TableHead>
+                <FilterHead k="name" value={filters.name} onChange={onFilter} className="w-56" />
+                <FilterHead k="tenantId" value={filters.tenantId} onChange={onFilter} className="w-44" />
+                <FilterHead k="username" value={filters.username} onChange={onFilter} className="w-40" />
+                <FilterHead k="zkjs" value={filters.zkjs} onChange={onFilter} className="w-28" />
+                <FilterHead k="ip" value={filters.ip} onChange={onFilter} className="w-44" />
+              </TableRow>
             </TableHeader>
             <TableBody className="[&_td]:py-1">
-              {sortedTeams.map((t) => (
-                <TableRow
-                  key={t.tenantId}
-                  className={`transition-colors duration-150 hover:bg-muted/20 ${t.type === "测试" ? "bg-muted/30" : ""}`}
-                >
-                  <TableCell className="text-center text-muted-foreground">{t.seq}</TableCell>
-                  <TableCell className="font-medium truncate">
-                    {t.name}
-                    {t.type === "测试" && (
-                      <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-secondary text-muted-foreground text-[10.5px] font-normal align-middle">
-                        测试
-                      </span>
-                    )}
+              {filteredTeams.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-6 text-[12.5px]">
+                    无匹配行
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.tenantId}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.username}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.machine?.zkjs || "-"}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.ip}</TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredTeams.map((t) => (
+                  <TableRow
+                    key={t.tenantId}
+                    className={`transition-colors duration-150 hover:bg-muted/20 ${t.type === "测试" ? "bg-muted/30" : ""}`}
+                  >
+                    <TableCell className="text-center text-muted-foreground">{t.seq}</TableCell>
+                    <TableCell className="font-medium truncate">
+                      {t.name}
+                      {t.type === "测试" && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-secondary text-muted-foreground text-[10.5px] font-normal align-middle">
+                          测试
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.tenantId}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.username}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.machine?.zkjs || "-"}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground truncate">{t.ip}</TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

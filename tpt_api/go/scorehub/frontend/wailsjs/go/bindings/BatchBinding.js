@@ -10,6 +10,6 @@ export function SetContext(arg1) {
   return window['go']['bindings']['BatchBinding']['SetContext'](arg1);
 }
 
-export function UpdateEvalConfig(arg1, arg2, arg3) {
-  return window['go']['bindings']['BatchBinding']['UpdateEvalConfig'](arg1, arg2, arg3);
+export function UpdateEvalConfig(arg1, arg2, arg3, arg4) {
+  return window['go']['bindings']['BatchBinding']['UpdateEvalConfig'](arg1, arg2, arg3, arg4);
 }

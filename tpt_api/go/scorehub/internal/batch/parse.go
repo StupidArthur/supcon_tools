@@ -19,6 +19,7 @@ func ParseEvalConfig(res map[string]any) (*EvalConfig, error) {
 	cfg.PracLoadEnabled = asInt(data["pracLoadEnabled"])
 	cfg.ExamLoadEnabled = asInt(data["examLoadEnabled"])
 	cfg.EvalDurationMinutes = asInt(data["evalDurationMinutes"])
+	cfg.StartWorktimeDelayMinutes = asInt(data["startWorktimeDelayMinutes"])
 	cfg.AddTime = asString(data["addTime"])
 	cfg.UpdateTime = asString(data["updateTime"])
 	return cfg, nil

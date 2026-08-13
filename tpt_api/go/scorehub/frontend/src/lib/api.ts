@@ -69,8 +69,8 @@ export const rankingApi = {
 
 export const batchApi = {
   getEvalConfig: (): Promise<EvalConfig> => GetEvalConfig(),
-  updateEvalConfig: (pracLoadEnabled: number, examLoadEnabled: number, evalDurationMinutes: number): Promise<UpdateResult> =>
-    UpdateEvalConfig(pracLoadEnabled, examLoadEnabled, evalDurationMinutes),
+  updateEvalConfig: (pracLoadEnabled: number, examLoadEnabled: number, evalDurationMinutes: number, startWorktimeDelayMinutes: number): Promise<UpdateResult> =>
+    UpdateEvalConfig(pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes),
 }
 
 export const personalApi = {
