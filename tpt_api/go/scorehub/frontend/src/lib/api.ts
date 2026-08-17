@@ -1,18 +1,22 @@
 import { GetTeams } from "../../wailsjs/go/bindings/TeamBinding"
 import { GetRanking } from "../../wailsjs/go/bindings/RankingBinding"
-import { GetEvalConfig, UpdateEvalConfig } from "../../wailsjs/go/bindings/BatchBinding"
+import { GetEvalConfig, UpdateEvalConfig, ClearAllScores } from "../../wailsjs/go/bindings/BatchBinding"
 import { GetPersonalList, GetTenantDetail, CleanupTenant } from "../../wailsjs/go/bindings/PersonalBinding"
 import { ScanMonitor, GetMonitorSnapshot, ConfirmAbnormal } from "../../wailsjs/go/bindings/MonitorBinding"
-import type { batch, monitor, personal, ranking, team } from "../../wailsjs/go/models"
+import { GetTeamTaskStats } from "../../wailsjs/go/bindings/TaskBinding"
+import type { batch, monitor, personal, ranking, task, team } from "../../wailsjs/go/models"
 
 export type Team = team.Team
 export type RankingItem = ranking.Item
 export type EvalConfig = batch.EvalConfig
 export type UpdateResult = batch.UpdateResult
+export type TenantClearResult = batch.TenantClearResult
+export type ClearAllResult = batch.ClearAllResult
 export type PersonalRow = personal.Row
 export type TenantDetail = personal.Detail
 export type CleanupResult = personal.CleanupResult
 export type MonitorReport = monitor.Report
+export type TeamTaskStats = task.TeamTaskStats
 
 // 子异常状态。
 export interface SubAbnormal {
@@ -71,6 +75,7 @@ export const batchApi = {
   getEvalConfig: (): Promise<EvalConfig> => GetEvalConfig(),
   updateEvalConfig: (pracLoadEnabled: number, examLoadEnabled: number, evalDurationMinutes: number, startWorktimeDelayMinutes: number): Promise<UpdateResult> =>
     UpdateEvalConfig(pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes),
+  clearAllScores: (): Promise<ClearAllResult> => ClearAllScores(),
 }
 
 export const personalApi = {
@@ -83,4 +88,8 @@ export const monitorApi = {
   scan: (): Promise<MonitorReport> => ScanMonitor(),
   snapshot: (): Promise<MonitorSnapshot | null> => GetMonitorSnapshot(),
   confirm: (tenantId: string): Promise<void> => ConfirmAbnormal(tenantId),
+}
+
+export const taskApi = {
+  stats: (): Promise<TeamTaskStats[]> => GetTeamTaskStats(),
 }

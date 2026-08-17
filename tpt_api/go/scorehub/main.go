@@ -64,6 +64,7 @@ func main() {
 			container.BatchBinding,
 			container.PersonalBinding,
 			container.MonitorBinding,
+			container.TaskBinding,
 		},
 	})
 	if err != nil {

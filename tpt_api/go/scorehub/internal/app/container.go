@@ -7,6 +7,7 @@ import (
 	"scorehub/internal/monitor"
 	"scorehub/internal/personal"
 	"scorehub/internal/ranking"
+	"scorehub/internal/task"
 	"scorehub/internal/team"
 )
 
@@ -18,6 +19,7 @@ type Container struct {
 	BatchBinding    *bindings.BatchBinding
 	PersonalBinding *bindings.PersonalBinding
 	MonitorBinding  *bindings.MonitorBinding
+	TaskBinding     *bindings.TaskBinding
 }
 
 func NewContainer() (*Container, error) {
@@ -36,7 +38,7 @@ func NewContainer() (*Container, error) {
 	rankingService := ranking.New(cfg, session)
 	rankingBinding := bindings.NewRankingBinding(rankingService)
 
-	batchService := batch.New(session)
+	batchService := batch.New(cfg, session)
 	batchBinding := bindings.NewBatchBinding(batchService)
 
 	personalService := personal.New(cfg, session, rankingService)
@@ -45,7 +47,10 @@ func NewContainer() (*Container, error) {
 	monitorService := monitor.New(cfg, session)
 	monitorBinding := bindings.NewMonitorBinding(monitorService)
 
-	lifecycle := NewLifecycle(teamBinding, rankingBinding, batchBinding, personalBinding, monitorBinding)
+	taskService := task.New(cfg)
+	taskBinding := bindings.NewTaskBinding(taskService)
+
+	lifecycle := NewLifecycle(teamBinding, rankingBinding, batchBinding, personalBinding, monitorBinding, taskBinding)
 
 	return &Container{
 		Lifecycle:       lifecycle,
@@ -54,5 +59,6 @@ func NewContainer() (*Container, error) {
 		BatchBinding:    batchBinding,
 		PersonalBinding: personalBinding,
 		MonitorBinding:  monitorBinding,
+		TaskBinding:     taskBinding,
 	}, nil
 }

@@ -3,6 +3,8 @@
 import {batch} from '../models';
 import {context} from '../models';
 
+export function ClearAllScores():Promise<batch.ClearAllResult>;
+
 export function GetEvalConfig():Promise<batch.EvalConfig>;
 
 export function SetContext(arg1:context.Context):Promise<void>;

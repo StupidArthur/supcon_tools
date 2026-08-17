@@ -37,3 +37,8 @@ func (b *BatchBinding) GetEvalConfig() (*batch.EvalConfig, error) {
 func (b *BatchBinding) UpdateEvalConfig(pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes int) batch.UpdateResult {
 	return b.svc.Update(b.background(), pracLoadEnabled, examLoadEnabled, evalDurationMinutes, startWorktimeDelayMinutes)
 }
+
+// ClearAllScores 清空所有选手租户的评分记录（危险操作，前端需二次确认）。
+func (b *BatchBinding) ClearAllScores() batch.ClearAllResult {
+	return b.svc.ClearAllScores(b.background())
+}

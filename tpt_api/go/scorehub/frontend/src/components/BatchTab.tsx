@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { EmptyState } from "@/components/EmptyState"
+import { Modal } from "@/components/ui/modal"
 import { useToast } from "@/components/Toast"
-import { batchApi, type EvalConfig } from "@/lib/api"
+import { batchApi, type EvalConfig, type ClearAllResult } from "@/lib/api"
 
 interface Props {
   config: EvalConfig | null
@@ -44,6 +45,10 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
   const [delay, setDelay] = useState("")
   const [saving, setSaving] = useState(false)
 
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [clearResult, setClearResult] = useState<ClearAllResult | null>(null)
+
   useEffect(() => {
     if (config) {
       setPrac(config.pracLoadEnabled)
@@ -61,7 +66,7 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
     }
     const del = Number(delay)
     if (!Number.isFinite(del) || del < 0) {
-      toast("上班时间延迟需为非负整数（分钟）", "error")
+      toast("评分时间延迟需为非负整数（分钟）", "error")
       return
     }
     setSaving(true)
@@ -77,6 +82,25 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
       toast(err?.message || String(err), "error")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const doClear = async () => {
+    setConfirmOpen(false)
+    setClearing(true)
+    setClearResult(null)
+    try {
+      const res = await batchApi.clearAllScores()
+      setClearResult(res)
+      if (res.failed === 0) {
+        toast(`已清空全部 ${res.success} 个选手租户的评分记录`, "success")
+      } else {
+        toast(`清空完成：成功 ${res.success}，失败 ${res.failed}`, "error")
+      }
+    } catch (err: any) {
+      toast(err?.message || String(err), "error")
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -121,7 +145,7 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
                     <span className="font-mono">{config.evalDurationMinutes} 分钟</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">上班时间延迟</span>
+                    <span className="text-muted-foreground">评分时间延迟</span>
                     <span className="font-mono">{config.startWorktimeDelayMinutes ?? 0} 分钟</span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -159,7 +183,7 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
                 />
               </div>
               <div className="flex items-center justify-between text-[12.5px]">
-                <span className="text-muted-foreground">上班时间延迟（分钟）</span>
+                <span className="text-muted-foreground">评分时间延迟（分钟）</span>
                 <input
                   type="number"
                   min={0}
@@ -179,8 +203,73 @@ export function BatchTab({ config, loading, error, onReload }: Props) {
               </div>
             </div>
           </div>
+
+          <div className="bg-card border border-destructive/40 rounded-lg shadow-sm">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div>
+                <span className="text-[13px] font-medium text-destructive">危险操作</span>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5">清空所有选手租户的评分记录（不可恢复）</p>
+              </div>
+              <button
+                onClick={() => setConfirmOpen(true)}
+                disabled={clearing}
+                className="h-8 px-4 rounded-md bg-destructive text-destructive-foreground text-[12.5px] font-medium shadow-sm hover:opacity-90 transition-all duration-150 disabled:opacity-60"
+              >
+                {clearing ? "清空中…" : "清空所有租户评分记录"}
+              </button>
+            </div>
+            {clearResult && (
+              <div className="px-4 py-3 text-[12px]">
+                <div className="flex gap-4 mb-2">
+                  <span>
+                    成功 <span className="text-primary font-medium">{clearResult.success}</span>
+                  </span>
+                  <span>
+                    失败 <span className="text-destructive font-medium">{clearResult.failed}</span>
+                  </span>
+                </div>
+                {clearResult.failed > 0 && (
+                  <div className="text-muted-foreground flex flex-col gap-0.5">
+                    {clearResult.items.filter((i) => !i.success).map((i) => (
+                      <div key={i.tenantId} className="truncate">
+                        <span className="text-destructive">✕</span> {i.name}（{i.tenantId}）: {i.error}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      <Modal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="确认清空所有评分记录"
+        width="w-[460px]"
+        footer={
+          <>
+            <button
+              onClick={() => setConfirmOpen(false)}
+              className="h-8 px-4 rounded-md bg-secondary text-secondary-foreground text-[12.5px] font-medium hover:opacity-90 transition-all duration-150"
+            >
+              取消
+            </button>
+            <button
+              onClick={doClear}
+              className="h-8 px-4 rounded-md bg-destructive text-destructive-foreground text-[12.5px] font-medium shadow-sm hover:opacity-90 transition-all duration-150"
+            >
+              确认清空
+            </button>
+          </>
+        }
+      >
+        <div className="text-[12.5px] leading-relaxed">
+          <p>此操作将遍历 <span className="font-semibold">全部 {config ? 39 : 39} 个选手租户</span>，逐个清空其评分记录，<span className="text-destructive font-medium">不可恢复</span>。</p>
+          <p className="mt-2 text-muted-foreground">请确认生产环境中不需要保留当前成绩，再进行操作。</p>
+        </div>
+      </Modal>
     </div>
   )
 }

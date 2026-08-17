@@ -5,19 +5,22 @@ import { RankingTab } from "@/components/RankingTab"
 import { BatchTab } from "@/components/BatchTab"
 import { PersonalTab } from "@/components/PersonalTab"
 import { MonitorTab } from "@/components/MonitorTab"
+import { TaskTab } from "@/components/TaskTab"
 import { ToastProvider, useToast } from "@/components/Toast"
-import { teamApi, rankingApi, batchApi, personalApi, type Team, type RankingItem, type EvalConfig, type PersonalRow } from "@/lib/api"
+import { teamApi, rankingApi, batchApi, personalApi, taskApi, type Team, type RankingItem, type EvalConfig, type PersonalRow, type TeamTaskStats } from "@/lib/api"
 
 function AppContent() {
   const [teams, setTeams] = useState<Team[]>([])
   const [rankingItems, setRankingItems] = useState<RankingItem[]>([])
   const [batchConfig, setBatchConfig] = useState<EvalConfig | null>(null)
   const [personalRows, setPersonalRows] = useState<PersonalRow[]>([])
+  const [taskRows, setTaskRows] = useState<TeamTaskStats[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rankingError, setRankingError] = useState<string | null>(null)
   const [batchError, setBatchError] = useState<string | null>(null)
   const [personalError, setPersonalError] = useState<string | null>(null)
+  const [taskError, setTaskError] = useState<string | null>(null)
   const toast = useToast()
 
   const load = useCallback(async () => {
@@ -26,11 +29,13 @@ function AppContent() {
     setRankingError(null)
     setBatchError(null)
     setPersonalError(null)
-    const [teamRes, rankRes, batchRes, personalRes] = await Promise.allSettled([
+    setTaskError(null)
+    const [teamRes, rankRes, batchRes, personalRes, taskRes] = await Promise.allSettled([
       teamApi.list(),
       rankingApi.fetch(),
       batchApi.getEvalConfig(),
       personalApi.list(),
+      taskApi.stats(),
     ])
     if (teamRes.status === "fulfilled") {
       setTeams(teamRes.value || [])
@@ -54,6 +59,11 @@ function AppContent() {
     } else {
       setPersonalError(personalRes.reason?.message || String(personalRes.reason))
     }
+    if (taskRes.status === "fulfilled") {
+      setTaskRows(taskRes.value || [])
+    } else {
+      setTaskError(taskRes.reason?.message || String(taskRes.reason))
+    }
     setLoading(false)
   }, [toast])
 
@@ -61,9 +71,9 @@ function AppContent() {
     load()
   }, [load])
 
-  // 切到排名 / 个性化管理时自动刷新一次。
+  // 切到排名 / 个性化管理 / 任务管理时自动刷新一次。
   const handleTabChange = (value: string) => {
-    if (value === "ranking" || value === "personal") {
+    if (value === "ranking" || value === "personal" || value === "task") {
       load()
     }
   }
@@ -86,9 +96,10 @@ function AppContent() {
               <TabsTrigger value="batch">3. 批量管理</TabsTrigger>
               <TabsTrigger value="personal">4. 个性化管理</TabsTrigger>
               <TabsTrigger value="monitor">5. 数据源监控</TabsTrigger>
+              <TabsTrigger value="task">6. 任务管理</TabsTrigger>
             </TabsList>
           </div>
-          <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">v0.6 designed by @yuzechao</span>
+          <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">v0.8 designed by @yuzechao</span>
         </header>
 
         <TabsContent value="team" className="flex-1 overflow-hidden mt-0">
@@ -105,6 +116,9 @@ function AppContent() {
         </TabsContent>
         <TabsContent value="monitor" className="flex-1 overflow-hidden mt-0">
           <MonitorTab />
+        </TabsContent>
+        <TabsContent value="task" className="flex-1 overflow-hidden mt-0">
+          <TaskTab rows={taskRows} loading={loading} error={taskError} onReload={load} />
         </TabsContent>
       </Tabs>
       <footer className="h-7 border-t border-border bg-muted/30 px-4 text-[11.5px] text-muted-foreground flex items-center gap-2">
